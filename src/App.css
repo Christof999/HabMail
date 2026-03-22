@@ -1,0 +1,225 @@
+.shell {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+}
+
+.shell.narrow {
+  max-width: 420px;
+}
+
+.top {
+  margin-bottom: 1.25rem;
+}
+
+h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.25rem;
+}
+
+h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.35rem;
+}
+
+h3 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 1rem 0 0.5rem;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+.bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.search {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.empty {
+  margin-top: 1rem;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.1rem 1.15rem;
+}
+
+.card.email {
+  padding: 1rem 1.1rem;
+}
+
+form.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+form.card label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+form.card input {
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 1rem;
+  background: var(--accent);
+  color: #fff;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+.email-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.pill {
+  background: var(--pill-bg);
+  color: var(--pill-fg);
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+.pill-prio {
+  background: var(--pre-bg);
+  color: var(--muted);
+}
+
+.status {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.status-unread {
+  color: var(--accent);
+}
+
+.summary {
+  margin: 0.65rem 0 0;
+  line-height: 1.45;
+  font-size: 0.95rem;
+}
+
+.body-block {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+pre.body {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  max-height: 320px;
+  overflow: auto;
+  padding: 0.65rem 0.75rem;
+  background: var(--pre-bg);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.atts ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+}
+
+code {
+  font-size: 0.88em;
+  background: var(--pre-bg);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
