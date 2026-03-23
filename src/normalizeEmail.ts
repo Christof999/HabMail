@@ -23,6 +23,20 @@ function stripDataUrlBase64(s: string): string {
   return m ? m[1].trim() : t.replace(/\s/g, '')
 }
 
+/** n8n Binary-Modus „filesystem“: nur Referenz, keine echten Bytes im JSON */
+const N8N_BINARY_REF = /^(filesystem-v2|filesystem|database)$/i
+
+/**
+ * Echte Base64-Nutzlast (kein n8n-Platzhalter, typische Zeichen).
+ * Sehr kurze Strings gelten als ungültig (kein sinnvoller Anhang).
+ */
+function looksLikeRealBase64Payload(s: string): boolean {
+  const t = s.replace(/\s/g, '')
+  if (t.length < 32) return false
+  if (N8N_BINARY_REF.test(t)) return false
+  return /^[A-Za-z0-9+/]+=*$/.test(t)
+}
+
 function pickBase64Payload(x: Record<string, unknown>): string {
   const candidates = [
     x.dataBase64,
@@ -110,7 +124,10 @@ function coerceToAttachmentRecords(raw: unknown): Record<string, unknown>[] {
 function parseAttachmentsFromRaw(raw: unknown): EmailAttachment[] | undefined {
   const records = coerceToAttachmentRecords(raw)
   const list = records.map((x) => normalizeOneAttachment(x))
-  const withData = list.filter((a) => a.dataBase64.length > 0)
+  const withData = list.filter(
+    (a) =>
+      a.dataBase64.length > 0 && looksLikeRealBase64Payload(a.dataBase64),
+  )
   return withData.length > 0 ? withData : undefined
 }
 

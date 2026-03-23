@@ -548,7 +548,10 @@ function fromLineForRow(row: EmailRow): string {
 
 function attachmentHasPayload(row: EmailRow): boolean {
   return Boolean(
-    row.attachments?.some((a) => (a.dataBase64?.trim?.() ?? '').length > 0),
+    row.attachments?.some((a) => {
+      const d = (a.dataBase64?.trim?.() ?? '').replace(/\s/g, '')
+      return d.length >= 32 && /^[A-Za-z0-9+/]+=*$/.test(d)
+    }),
   )
 }
 
@@ -557,11 +560,12 @@ function AttachmentMissingDataHint({ row }: { row: EmailRow }) {
   if (!row.hasAttachment || attachmentHasPayload(row)) return null
   return (
     <p className="muted small attachment-nodata">
-      <strong>Anhang markiert</strong>, aber es liegen keine Dateidaten in der
-      Datenbank. In n8n beim Schreiben nach Firebase ein Array{' '}
-      <code>anhaenge</code> oder <code>attachments</code> mitschicken: pro Datei
-      z. B. <code>filename</code>/<code>dateiname</code> und Base64 in{' '}
-      <code>dataBase64</code>, <code>data_base64</code> oder <code>data</code>.
+      <strong>Anhang markiert</strong>, aber es fehlen echte Base64-Daten. Wenn
+      in Firebase <code>dataBase64: &quot;filesystem-v2&quot;</code> steht,
+      nutzt n8n den Binary-Modus „Filesystem“: dann in der Code-Node echtes
+      Base64 mit <code>this.helpers.getBinaryDataBuffer(…)</code> erzeugen (siehe
+      n8n-Doku). Alternativ: pro Datei echten Base64-String (nicht die interne
+      Referenz) nach <code>anhaenge[].dataBase64</code> schreiben.
     </p>
   )
 }
