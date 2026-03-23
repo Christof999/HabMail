@@ -42,10 +42,12 @@ export async function requestGeminiSearch(
   })
   const data = (await res.json().catch(() => ({}))) as {
     error?: string
+    hint?: string
     ids?: unknown
   }
   if (!res.ok) {
-    throw new Error(data.error || `HTTP ${res.status}`)
+    const parts = [data.error, data.hint].filter(Boolean)
+    throw new Error(parts.length ? parts.join(': ') : `HTTP ${res.status}`)
   }
   if (!Array.isArray(data.ids)) {
     throw new Error('invalid_response')

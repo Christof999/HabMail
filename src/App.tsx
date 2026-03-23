@@ -127,7 +127,7 @@ export default function App() {
     setGeminiLoading(true)
     setGeminiError(null)
     try {
-      const token = await user.getIdToken()
+      const token = await user.getIdToken(true)
       const items = buildGeminiItems(rows)
       if (items.length === 0) {
         setGeminiOrderedIds([])

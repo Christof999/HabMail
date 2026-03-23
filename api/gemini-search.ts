@@ -64,70 +64,108 @@ function extractJsonObject(text: string): string {
   return t
 }
 
+function resolveProjectId(): string {
+  return (
+    process.env.FIREBASE_PROJECT_ID?.trim() ||
+    process.env.VITE_FIREBASE_PROJECT_ID?.trim() ||
+    ''
+  )
+}
+
+function resolveGeminiKey(): string {
+  return (
+    process.env.GEMINI_API_KEY?.trim() ||
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() ||
+    process.env.GOOGLE_AI_API_KEY?.trim() ||
+    ''
+  )
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse,
 ) {
-  const origin = req.headers.origin
-  if (origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin)
-    res.setHeader('Vary', 'Origin')
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*')
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end()
-  }
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'method_not_allowed' })
-  }
-
-  const projectId = process.env.FIREBASE_PROJECT_ID?.trim()
-  const geminiKey = process.env.GEMINI_API_KEY?.trim()
-  const modelId = process.env.GEMINI_MODEL?.trim() || 'gemini-2.0-flash'
-
-  if (!projectId || !geminiKey) {
-    return res.status(500).json({ error: 'server_misconfigured' })
-  }
-
-  const auth = req.headers.authorization
-  if (!auth?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'missing_token' })
-  }
-  const idToken = auth.slice(7).trim()
   try {
-    await verifyFirebaseIdToken(idToken, projectId)
-  } catch {
-    return res.status(401).json({ error: 'invalid_token' })
-  }
+    const origin = req.headers.origin
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin)
+      res.setHeader('Vary', 'Origin')
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*')
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 
-  let query: string
-  let items: SlimItem[]
-  try {
-    ;({ query, items } = parseBody(req))
-  } catch {
-    return res.status(400).json({ error: 'bad_request' })
-  }
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end()
+    }
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'method_not_allowed' })
+    }
 
-  if (!query) {
-    return res.status(400).json({ error: 'empty_query' })
-  }
-  if (items.length === 0) {
-    return res.status(400).json({ error: 'no_items' })
-  }
+    const projectId = resolveProjectId()
+    const geminiKey = resolveGeminiKey()
+    const modelId =
+      process.env.GEMINI_MODEL?.trim() ||
+      'gemini-3.1-flash-lite-preview'
 
-  const allowed = new Set(items.map((i) => i.id).filter(Boolean))
-  const slim = items.filter((i) => i.id).slice(0, 55)
+    if (!projectId || !geminiKey) {
+      const missing: string[] = []
+      if (!projectId) {
+        missing.push('FIREBASE_PROJECT_ID (oder VITE_FIREBASE_PROJECT_ID)')
+      }
+      if (!geminiKey) {
+        missing.push('GEMINI_API_KEY')
+      }
+      return res.status(500).json({
+        error: 'server_misconfigured',
+        hint: `Für die API fehlen Server-Umgebungsvariablen: ${missing.join(', ')}. In Vercel unter Environment Variables für Production anlegen (nicht nur VITE_* fürs Frontend).`,
+      })
+    }
 
-  const genAI = new GoogleGenerativeAI(geminiKey)
-  const model = genAI.getGenerativeModel({ model: modelId })
+    const auth = req.headers.authorization
+    if (!auth?.startsWith('Bearer ')) {
+      return res.status(401).json({
+        error: 'missing_token',
+        hint: 'Authorization: Bearer <Firebase-ID-Token> fehlt.',
+      })
+    }
+    const idToken = auth.slice(7).trim()
+    try {
+      await verifyFirebaseIdToken(idToken, projectId)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error('firebase_id_token_verify', projectId, msg)
+      return res.status(401).json({
+        error: 'invalid_token',
+        hint: `JWT-Prüfung fehlgeschlagen. Projekt-ID auf dem Server: "${projectId}". Muss exakt die Firebase-Projekt-ID sein (wie in der Console), dieselbe wie bei der Anmeldung in der App.`,
+      })
+    }
 
-  const safeQuery = query.replace(/</g, ' ').replace(/>/g, ' ').slice(0, 2000)
+    let query: string
+    let items: SlimItem[]
+    try {
+      ;({ query, items } = parseBody(req))
+    } catch {
+      return res.status(400).json({ error: 'bad_request' })
+    }
 
-  const prompt = `Du bist eine Suchhilfe für E-Mail-Akten (Geschäftskorrespondenz).
+    if (!query) {
+      return res.status(400).json({ error: 'empty_query' })
+    }
+    if (items.length === 0) {
+      return res.status(400).json({ error: 'no_items' })
+    }
+
+    const allowed = new Set(items.map((i) => i.id).filter(Boolean))
+    const slim = items.filter((i) => i.id).slice(0, 55)
+
+    const genAI = new GoogleGenerativeAI(geminiKey)
+    const model = genAI.getGenerativeModel({ model: modelId })
+
+    const safeQuery = query.replace(/</g, ' ').replace(/>/g, ' ').slice(0, 2000)
+
+    const prompt = `Du bist eine Suchhilfe für E-Mail-Akten (Geschäftskorrespondenz).
 Der Nutzer sucht in natürlicher Sprache:
 """${safeQuery}"""
 
@@ -142,33 +180,58 @@ Regeln:
 - Wenn nichts passt: {"ids":[]}.
 - Keine IDs erfinden.`
 
-  let text: string
-  try {
-    const result = await model.generateContent(prompt)
-    text = result.response.text()
+    let text: string
+    try {
+      const result = await model.generateContent(prompt)
+      try {
+        text = result.response.text()
+      } catch (textErr) {
+        console.error('gemini_response_text', textErr)
+        const msg =
+          textErr instanceof Error ? textErr.message : String(textErr)
+        return res.status(502).json({
+          error: 'gemini_response_blocked',
+          hint: msg.slice(0, 400),
+        })
+      }
+    } catch (e) {
+      console.error('gemini_error', e)
+      const msg = e instanceof Error ? e.message : String(e)
+      return res.status(502).json({
+        error: 'gemini_failed',
+        hint: msg.slice(0, 400),
+      })
+    }
+
+    if (!text || !text.trim()) {
+      return res.status(200).json({ ids: [] })
+    }
+
+    let ids: string[]
+    try {
+      const jsonStr = extractJsonObject(text)
+      const parsed = JSON.parse(jsonStr) as { ids?: unknown }
+      ids = Array.isArray(parsed.ids)
+        ? parsed.ids.map((x) => String(x)).filter((id) => allowed.has(id))
+        : []
+    } catch {
+      console.error('gemini_parse', text.slice(0, 800))
+      return res.status(502).json({ error: 'gemini_parse_failed' })
+    }
+
+    const seen = new Set<string>()
+    ids = ids.filter((id) => {
+      if (seen.has(id)) return false
+      seen.add(id)
+      return true
+    })
+
+    return res.status(200).json({ ids })
   } catch (e) {
-    console.error('gemini_error', e)
-    return res.status(502).json({ error: 'gemini_failed' })
+    console.error('gemini_search_unhandled', e)
+    return res.status(500).json({
+      error: 'internal',
+      hint: e instanceof Error ? e.message.slice(0, 200) : 'unknown',
+    })
   }
-
-  let ids: string[]
-  try {
-    const jsonStr = extractJsonObject(text)
-    const parsed = JSON.parse(jsonStr) as { ids?: unknown }
-    ids = Array.isArray(parsed.ids)
-      ? parsed.ids.map((x) => String(x)).filter((id) => allowed.has(id))
-      : []
-  } catch {
-    console.error('gemini_parse', text.slice(0, 800))
-    return res.status(502).json({ error: 'gemini_parse_failed' })
-  }
-
-  const seen = new Set<string>()
-  ids = ids.filter((id) => {
-    if (seen.has(id)) return false
-    seen.add(id)
-    return true
-  })
-
-  return res.status(200).json({ ids })
 }
