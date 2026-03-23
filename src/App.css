@@ -496,17 +496,21 @@ button.chip:hover {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .list-item-email {
   display: flex;
   align-items: stretch;
   gap: 0.45rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .list-item-email .card.email {
   flex: 1;
   min-width: 0;
+  max-width: 100%;
 }
 
 .email-drag-handle {
@@ -850,6 +854,8 @@ button.ghost {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .thread-msg {
@@ -858,6 +864,8 @@ button.ghost {
   background: var(--pre-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .thread-msg-head {
@@ -928,6 +936,14 @@ h3.attachment-list-title {
 .attachment-meta {
   flex: 1;
   min-width: 0;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.attachment-meta strong {
+  font-weight: 600;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .attachment-actions {
@@ -978,16 +994,25 @@ a.attachment-download:hover {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--border);
+  min-width: 0;
+  max-width: 100%;
 }
 
 pre.body {
   margin: 0;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
   font-size: 0.85rem;
   line-height: 1.4;
   max-height: 320px;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 0.65rem 0.75rem;
   background: var(--pre-bg);
   border-radius: 8px;
@@ -1363,6 +1388,50 @@ code {
   pre.body,
   .thread-body {
     max-height: min(40dvh, 280px);
+  }
+
+  /* Detailbereich: nicht über den Viewport hinaus (Flex + lange Zeilen) */
+  .email-summary-toggle {
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    box-sizing: border-box;
+  }
+
+  .body-block,
+  .atts.thread-atts {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .attachment-list li {
+    flex-direction: column;
+    align-items: stretch;
+    align-content: flex-start;
+    gap: 0.5rem;
+  }
+
+  .attachment-actions {
+    width: 100%;
+    align-self: stretch;
+  }
+
+  a.attachment-download {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+    padding: 0.55rem 0.65rem;
+    border-radius: var(--radius-md, 10px);
+    background: var(--pill-bg);
+    border: 1px solid var(--border);
+    font-weight: 500;
+  }
+
+  .thread-msg-summary {
+    word-break: break-word;
+    overflow-wrap: anywhere;
   }
 
   .shell.narrow form.card button[type='submit'] {
