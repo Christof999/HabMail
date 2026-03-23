@@ -1,6 +1,35 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createTransport } from 'nodemailer'
+import { createRequire } from 'node:module'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { requireFirebaseAuth } from './lib/firebaseVerify'
+
+type NodemailerCreateTransport = typeof import('nodemailer').createTransport
+
+/**
+ * Kein top-level import von nodemailer: Vercel kann das Paket fehlerhaft bündeln
+ * → FUNCTION_INVOCATION_FAILED. Laden per require aus node_modules zur Laufzeit.
+ */
+function getNodemailerCreateTransport(): NodemailerCreateTransport {
+  const candidates = [
+    join(process.cwd(), 'package.json'),
+    fileURLToPath(import.meta.url),
+  ]
+  let lastErr: unknown
+  for (const filename of candidates) {
+    try {
+      const req = createRequire(filename)
+      const nm = req('nodemailer') as typeof import('nodemailer')
+      if (typeof nm.createTransport === 'function') {
+        return nm.createTransport as NodemailerCreateTransport
+      }
+    } catch (e) {
+      lastErr = e
+    }
+  }
+  const msg = lastErr instanceof Error ? lastErr.message : String(lastErr)
+  throw new Error(`nodemailer_load_failed: ${msg}`)
+}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MAX_SUBJECT = 500
@@ -157,6 +186,7 @@ export default async function handler(
 
     const text = buildPlainBody(kind, bodyUser, ctx)
 
+    const createTransport = getNodemailerCreateTransport()
     const transporter = createTransport({
       host,
       port,
