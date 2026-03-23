@@ -48,6 +48,19 @@ import {
 import { ThemeAppearanceControl } from './ThemeProvider'
 import './App.css'
 
+function AppLogoMark({ className }: { className?: string }) {
+  return (
+    <img
+      src="/favicon.svg"
+      alt=""
+      width={48}
+      height={46}
+      decoding="async"
+      className={['app-logo', className].filter(Boolean).join(' ')}
+    />
+  )
+}
+
 function norm(s: string) {
   return s.toLowerCase()
 }
@@ -761,7 +774,10 @@ export default function App() {
   if (configError) {
     return (
       <div className="shell">
-        <h1>HabMail</h1>
+        <div className="app-brand app-brand--inline">
+          <AppLogoMark className="app-logo--hero" />
+          <h1>HabMail</h1>
+        </div>
         <p className="error">{configError}</p>
         <p className="muted">
           Lokal: <code>.env</code> mit <code>VITE_FIREBASE_*</code> (siehe{' '}
@@ -781,8 +797,13 @@ export default function App() {
     return (
       <div className="shell narrow">
         <header className="top">
-          <h1>HabMail</h1>
-          <p className="muted">Anmeldung für Mitarbeitende</p>
+          <div className="app-brand">
+            <AppLogoMark className="app-logo--hero" />
+            <div className="app-brand-text">
+              <h1>HabMail</h1>
+              <p className="muted">Anmeldung für Mitarbeitende</p>
+            </div>
+          </div>
         </header>
         <form className="card" onSubmit={handleLogin}>
           <label>
@@ -932,22 +953,29 @@ export default function App() {
           </button>
         ) : null}
         <div className="bar-text">
-          <h1>HabMail</h1>
-          <p className={`muted bar-meta${isCompactLayout ? ' bar-meta--compact' : ''}`}>
-            <span className="bar-meta-email">{user.email}</span>
-            {!isCompactLayout ? (
-              <>
-                {' '}
-                · RTDB: <code>{EMAILS_PATH || '(root)'}</code>
-              </>
-            ) : (
-              <>
-                {' '}
-                ·{' '}
-                <code className="bar-meta-path">{EMAILS_PATH || 'root'}</code>
-              </>
-            )}
-          </p>
+          <div className="app-brand app-brand--bar">
+            <AppLogoMark className="app-logo--bar" />
+            <div className="app-brand-text">
+              <h1>HabMail</h1>
+              <p
+                className={`muted bar-meta${isCompactLayout ? ' bar-meta--compact' : ''}`}
+              >
+                <span className="bar-meta-email">{user.email}</span>
+                {!isCompactLayout ? (
+                  <>
+                    {' '}
+                    · RTDB: <code>{EMAILS_PATH || '(root)'}</code>
+                  </>
+                ) : (
+                  <>
+                    {' '}
+                    ·{' '}
+                    <code className="bar-meta-path">{EMAILS_PATH || 'root'}</code>
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
         </div>
         <div className="bar-trail">
           <ThemeAppearanceControl />

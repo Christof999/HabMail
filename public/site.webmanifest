@@ -1,0 +1,17 @@
+{
+  "name": "HabMail",
+  "short_name": "HabMail",
+  "description": "E-Mail-Übersicht",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f2f2f7",
+  "theme_color": "#f2f2f7",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    }
+  ]
+}
