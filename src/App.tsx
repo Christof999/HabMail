@@ -425,11 +425,6 @@ export default function App() {
   )
 
   const folderTree = useMemo(() => buildFolderTree(folders), [folders])
-  const moveSelectOptions = useMemo(
-    () => flattenFolderOptions(folderTree),
-    [folderTree],
-  )
-
   async function markThreadRead(thread: EmailThread) {
     if (!user) return
     setFolderActionError(null)
@@ -870,7 +865,7 @@ export default function App() {
             </p>
           ) : (
             <p className="muted small folder-mobile-hint">
-              Zum Verschieben: <strong>Verschieben</strong> in der Karte nutzen.
+              Zum Verschieben: Karte am <strong>linken Griff</strong> ziehen.
             </p>
           )}
           <nav className="folder-nav">
@@ -1194,11 +1189,8 @@ export default function App() {
               <EmailCard
                 thread={thread}
                 unread={unread}
-                moveSelectOptions={moveSelectOptions}
-                moveBusy={moveBusyKey === liKey}
                 onMarkInteracted={() => void markThreadRead(thread)}
                 onMarkUnread={() => void markThreadUnread(thread)}
-                onMoveTo={(folderId) => void moveThreadToFolder(thread, folderId)}
                 onRequestDelete={() => {
                   setFolderActionError(null)
                   setThreadDeleteTarget(thread)
@@ -1560,25 +1552,74 @@ function AttachmentList({
   )
 }
 
+function SvgReply({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className ?? 'email-action-svg'}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <polyline points="9 17 4 12 9 7" />
+      <path d="M20 17v-2a4 4 0 0 0-4-4H4" />
+    </svg>
+  )
+}
+
+function SvgForward({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className ?? 'email-action-svg'}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <polyline points="15 17 20 12 15 7" />
+      <path d="M4 18v-2a4 4 0 0 1 4-4h12" />
+    </svg>
+  )
+}
+
+function SvgMarkUnread({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className ?? 'email-action-svg'}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+      <circle cx="19" cy="5" r="2.5" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
 function EmailCard({
   thread,
   unread,
-  moveSelectOptions,
-  moveBusy,
   onMarkInteracted,
   onMarkUnread,
-  onMoveTo,
   onRequestDelete,
   onReply,
   onForward,
 }: {
   thread: EmailThread
   unread: boolean
-  moveSelectOptions: { id: string | null; label: string; depth: number }[]
-  moveBusy: boolean
   onMarkInteracted: () => void
   onMarkUnread: () => void
-  onMoveTo: (folderId: string | null) => void
   onRequestDelete: () => void
   onReply: () => void
   onForward: () => void
@@ -1589,12 +1630,31 @@ function EmailCard({
   const fromLine = fromLineForRow(head)
   const multi = thread.membersAsc.length > 1
 
+  function toggleDetails() {
+    setOpen((o) => {
+      if (!o) onMarkInteracted()
+      return !o
+    })
+  }
+
   return (
     <article
       className={`card email${unread ? ' email-unread' : ''}`}
     >
+      <button
+        type="button"
+        className="email-card-dismiss"
+        title="Unterhaltung löschen"
+        aria-label="Unterhaltung löschen"
+        onClick={(e) => {
+          e.stopPropagation()
+          onRequestDelete()
+        }}
+      >
+        ×
+      </button>
       <div className="email-head">
-        <div>
+        <div className="email-head-body">
           <h2>{head.subject || '(Ohne Betreff)'}</h2>
           <p className="meta">
             <span>{fromLine}</span>
@@ -1619,84 +1679,60 @@ function EmailCard({
             ) : null}
           </p>
         </div>
-        <div className="email-actions">
-          <label className="folder-move-label">
-            <span className="muted small">Verschieben</span>
-            <select
-              className="folder-move-select"
-              disabled={moveBusy}
-              aria-label="In Ordner verschieben"
-              value=""
-              onChange={(e) => {
-                const v = e.target.value
-                e.target.value = ''
-                if (!v) return
-                if (v === '__inbox__') onMoveTo(null)
-                else onMoveTo(v)
-              }}
-            >
-              <option value="">Ordner wählen…</option>
-              <option value="__inbox__">Posteingang</option>
-              {moveSelectOptions.map((opt) =>
-                opt.id ? (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ) : null,
-              )}
-            </select>
-          </label>
+        <div className="email-toolbar" role="toolbar" aria-label="E-Mail-Aktionen">
           <button
             type="button"
-            className="ghost small-btn"
+            className="email-icon-btn"
+            title="Antworten"
+            aria-label="Antworten"
             onClick={() => {
               onMarkInteracted()
               onReply()
             }}
           >
-            Antworten
+            <SvgReply />
           </button>
           <button
             type="button"
-            className="ghost small-btn"
+            className="email-icon-btn"
+            title="Weiterleiten"
+            aria-label="Weiterleiten"
             onClick={() => {
               onMarkInteracted()
               onForward()
             }}
           >
-            Weiterleiten
+            <SvgForward />
           </button>
           <button
             type="button"
-            className="ghost small-btn"
-            onClick={() => {
-              setOpen((o) => {
-                if (!o) onMarkInteracted()
-                return !o
-              })
-            }}
-          >
-            {open ? 'Weniger' : 'Details'}
-          </button>
-          <button
-            type="button"
-            className="ghost small-btn"
-            title="Ungelesen-Glow wieder anzeigen"
+            className="email-icon-btn"
+            title="Als ungelesen markieren"
+            aria-label="Als ungelesen markieren"
             onClick={() => onMarkUnread()}
           >
-            Ungelesen
-          </button>
-          <button
-            type="button"
-            className="ghost small-btn email-delete-btn"
-            title="Aus der Datenbank entfernen"
-            onClick={() => onRequestDelete()}
-          >
-            Löschen
+            <SvgMarkUnread />
           </button>
         </div>
       </div>
-      <p className="summary">{head.summary || '—'}</p>
+      <button
+        type="button"
+        className="email-summary-toggle"
+        aria-expanded={open}
+        title={
+          open
+            ? 'Erneut tippen, um Details zu schließen'
+            : 'Tippen, um Details (Volltext & Anhänge) anzuzeigen'
+        }
+        aria-label={
+          open
+            ? 'Zusammenfassung: Details ausblenden'
+            : 'Zusammenfassung: Details einblenden'
+        }
+        onClick={toggleDetails}
+      >
+        <span className="summary">{head.summary || '—'}</span>
+      </button>
       <p className="muted small">
         Zuletzt: {head.receivedAt || '—'}
         {multi ? (
