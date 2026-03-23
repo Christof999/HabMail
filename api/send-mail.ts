@@ -1,6 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { requireFirebaseAuth } from './lib/firebaseVerify'
-import { sendPlainMailSmtp } from './lib/smtpSendPlain'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MAX_SUBJECT = 500
@@ -83,8 +81,34 @@ export default async function handler(
     if (req.method === 'OPTIONS') {
       return res.status(204).end()
     }
+    if (req.method === 'GET') {
+      return res.status(200).json({
+        ok: true,
+        route: 'send-mail',
+        hint: 'POST mit Firebase Bearer-Token und JSON-Body zum Versand (keine Mail-Module geladen).',
+      })
+    }
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'method_not_allowed' })
+    }
+
+    let requireFirebaseAuth: typeof import('./lib/firebaseVerify').requireFirebaseAuth
+    let sendPlainMailSmtp: typeof import('./lib/smtpSendPlain').sendPlainMailSmtp
+    try {
+      const [fb, smtp] = await Promise.all([
+        import('./lib/firebaseVerify'),
+        import('./lib/smtpSendPlain'),
+      ])
+      requireFirebaseAuth = fb.requireFirebaseAuth
+      sendPlainMailSmtp = smtp.sendPlainMailSmtp
+    } catch (loadErr) {
+      console.error('send-mail: deferred import failed', loadErr)
+      const msg =
+        loadErr instanceof Error ? loadErr.message : String(loadErr)
+      return res.status(500).json({
+        error: 'deferred_module_load_failed',
+        hint: msg.slice(0, 400),
+      })
     }
 
     const auth = await requireFirebaseAuth(req)

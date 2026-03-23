@@ -1,5 +1,5 @@
-import net from 'node:net'
-import tls from 'node:tls'
+import * as net from 'node:net'
+import * as tls from 'node:tls'
 
 const SOCKET_MS = 28_000
 const CRLF = '\r\n'
