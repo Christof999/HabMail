@@ -45,6 +45,7 @@ import {
   threadKeysMatchingQuery,
   type EmailThread,
 } from './threading'
+import { ThemeAppearanceControl } from './ThemeProvider'
 import './App.css'
 
 function norm(s: string) {
@@ -953,13 +954,16 @@ export default function App() {
             )}
           </p>
         </div>
-        <button
-          type="button"
-          className={`ghost${isCompactLayout ? ' bar-logout-compact' : ''}`}
-          onClick={handleLogout}
-        >
-          Abmelden
-        </button>
+        <div className="bar-trail">
+          <ThemeAppearanceControl />
+          <button
+            type="button"
+            className={`ghost${isCompactLayout ? ' bar-logout-compact' : ''}`}
+            onClick={handleLogout}
+          >
+            Abmelden
+          </button>
+        </div>
       </header>
 
       {isCompactLayout && folderDrawerOpen ? (
@@ -975,17 +979,21 @@ export default function App() {
 
         <div className="app-main">
       <section className="toolbar">
-        <div className="mode-switch" role="group" aria-label="Suchmodus">
+        <div
+          className="mode-switch segmented"
+          role="group"
+          aria-label="Suchmodus"
+        >
           <button
             type="button"
-            className={searchMode === 'keywords' ? 'mode active' : 'mode'}
+            className={searchMode === 'keywords' ? 'active' : ''}
             onClick={setModeKeywords}
           >
             Stichworte
           </button>
           <button
             type="button"
-            className={searchMode === 'gemini' ? 'mode active' : 'mode'}
+            className={searchMode === 'gemini' ? 'active' : ''}
             onClick={setModeGemini}
           >
             KI (Gemini)

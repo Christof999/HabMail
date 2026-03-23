@@ -25,8 +25,9 @@
   align-self: flex-start;
   padding: 0.75rem 0.85rem;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg, 14px);
   background: var(--card);
+  box-shadow: var(--shadow-card, 0 1px 3px rgba(0, 0, 0, 0.06));
 }
 
 .folder-sidebar-head {
@@ -156,6 +157,7 @@
 .btn-danger {
   background: var(--danger);
   color: #fff;
+  font-weight: 600;
 }
 
 .btn-danger:hover {
@@ -220,8 +222,8 @@
 
 .card.email.email-unread {
   box-shadow:
-    0 0 0 1px rgba(56, 189, 248, 0.35),
-    0 0 18px rgba(56, 189, 248, 0.22);
+    0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent),
+    0 0 22px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
 .folder-move-label {
@@ -249,7 +251,7 @@
 h1 {
   font-size: 1.5rem;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.022em;
   margin: 0 0 0.25rem;
 }
 
@@ -289,7 +291,59 @@ h3 {
   gap: 1rem;
   margin-bottom: 1.25rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--bar-separator, var(--border));
+}
+
+.bar-trail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+/* iOS-artiges Segment (Suchmodus + Erscheinungsbild) */
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--segmented-bg, rgba(120, 120, 128, 0.12));
+  gap: 2px;
+  box-shadow: var(--shadow-sm, none);
+}
+
+.segmented button {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  padding: 0.38rem 0.55rem;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  line-height: 1.2;
+}
+
+.segmented button:hover {
+  color: var(--text);
+}
+
+.segmented button.active {
+  background: var(--segmented-active, #fff);
+  color: var(--accent);
+  box-shadow: var(--segmented-shadow, none);
+}
+
+.theme-segmented button {
+  padding-left: 0.45rem;
+  padding-right: 0.45rem;
+  font-size: 0.75rem;
 }
 
 .toolbar {
@@ -301,24 +355,8 @@ h3 {
 }
 
 .mode-switch {
-  display: flex;
-  gap: 0.35rem;
-}
-
-.mode-switch .mode {
-  font: inherit;
-  padding: 0.4rem 0.75rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--input-bg);
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.mode-switch .mode.active {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--pill-bg);
+  align-self: flex-start;
+  max-width: 100%;
 }
 
 .search-row {
@@ -466,7 +504,7 @@ button.chip:hover {
   flex: 1;
   min-width: 200px;
   padding: 0.55rem 0.75rem;
-  border-radius: 8px;
+  border-radius: var(--radius-md, 10px);
   border: 1px solid var(--border);
   background: var(--input-bg);
   color: var(--text);
@@ -552,8 +590,9 @@ button.chip:hover {
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg, 14px);
   padding: 1.1rem 1.15rem;
+  box-shadow: var(--shadow-card, none);
 }
 
 .card.email {
@@ -587,10 +626,12 @@ button {
   font: inherit;
   cursor: pointer;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md, 10px);
   padding: 0.55rem 1rem;
   background: var(--accent);
   color: #fff;
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 button:disabled {
@@ -602,6 +643,7 @@ button.ghost {
   background: transparent;
   color: var(--accent);
   border: 1px solid var(--border);
+  font-weight: 500;
 }
 
 .email-head {
@@ -1041,14 +1083,39 @@ code {
   }
 
   .bar--app.bar--compact {
-    align-items: center;
-    flex-wrap: nowrap;
-    gap: 0.5rem;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    align-items: start;
+    column-gap: 0.65rem;
+    row-gap: 0.55rem;
     padding-bottom: 0.85rem;
+    border-bottom-color: var(--bar-separator, var(--border));
+  }
+
+  .bar--compact .bar-menu-btn {
+    grid-column: 1;
+    grid-row: 1;
+    margin-top: 0.15rem;
   }
 
   .bar--compact .bar-text {
+    grid-column: 2;
+    grid-row: 1;
     min-width: 0;
+  }
+
+  .bar--compact .bar-trail {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .bar--compact .theme-segmented {
+    flex: 1;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .bar--compact h1 {
@@ -1076,12 +1143,19 @@ code {
     white-space: nowrap;
   }
 
-  .mode-switch .mode {
+  .mode-switch.segmented button {
     flex: 1;
     justify-content: center;
     min-height: 2.75rem;
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
+    font-size: 0.8rem;
+  }
+
+  .theme-segmented button {
+    font-size: 0.68rem;
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
   }
 
   .toolbar .search-row {
