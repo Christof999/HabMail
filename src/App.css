@@ -4,8 +4,222 @@
   padding: 1.5rem 1.25rem 3rem;
 }
 
+.shell.shell--wide {
+  max-width: 1180px;
+}
+
 .shell.narrow {
   max-width: 420px;
+}
+
+.app-body {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.folder-sidebar {
+  flex: 0 0 220px;
+  position: sticky;
+  top: 1rem;
+  align-self: flex-start;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+
+.folder-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.folder-sidebar-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0;
+}
+
+.folder-search-hint {
+  margin: 0 0 0.65rem;
+  line-height: 1.35;
+}
+
+.folder-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.folder-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.folder-tree .folder-tree {
+  margin-top: 0.1rem;
+}
+
+.folder-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.4rem 0.5rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.folder-item:hover {
+  background: var(--pill-bg);
+}
+
+.folder-item.active {
+  background: var(--pill-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.folder-item-root {
+  margin-bottom: 0.35rem;
+}
+
+.folder-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.2rem;
+  margin-bottom: 0.1rem;
+}
+
+.folder-row .folder-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.folder-row-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.folder-icon-btn {
+  font: inherit;
+  font-size: 0.85rem;
+  line-height: 1;
+  width: 1.65rem;
+  height: 1.65rem;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.folder-icon-btn:hover {
+  background: var(--pill-bg);
+  color: var(--text);
+}
+
+.folder-icon-btn--danger:hover {
+  color: var(--danger);
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn-danger:hover {
+  filter: brightness(1.05);
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.modal.card {
+  max-width: 400px;
+  width: 100%;
+  margin: 0;
+}
+
+.modal.card h3 {
+  margin-top: 0;
+}
+
+.folder-modal-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-top: 0.75rem;
+}
+
+.folder-modal-label input,
+.folder-modal-label select {
+  font: inherit;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.1rem;
+}
+
+.card.email.email-unread {
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.35),
+    0 0 18px rgba(56, 189, 248, 0.22);
+}
+
+.folder-move-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: flex-start;
+}
+
+.folder-move-select {
+  font: inherit;
+  font-size: 0.8rem;
+  max-width: 11rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
 }
 
 .top {

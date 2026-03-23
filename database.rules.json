@@ -1,8 +1,35 @@
 {
   "rules": {
+    "mailFolders": {
+      ".read": "auth != null",
+      "$folderId": {
+        ".write": "auth != null",
+        ".validate": "!newData.exists() || (newData.hasChild('name') && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 120)"
+      }
+    },
+    "emails": {
+      "$emailId": {
+        ".read": "auth != null",
+        "folderId": {
+          ".write": "auth != null",
+          ".validate": "!newData.exists() || newData.isString() || newData.val() == null"
+        },
+        "userRead": {
+          ".write": "auth != null",
+          ".validate": "newData.isBoolean()"
+        }
+      }
+    },
     "$entryId": {
       ".read": "auth != null",
-      ".write": false
+      "folderId": {
+        ".write": "auth != null",
+        ".validate": "!newData.exists() || newData.isString() || newData.val() == null"
+      },
+      "userRead": {
+        ".write": "auth != null",
+        ".validate": "newData.isBoolean()"
+      }
     }
   }
 }

@@ -156,6 +156,15 @@ export function normalizeEmailEntry(id: string, raw: unknown): EmailRow {
   const status = pickStr(o, ['status'])
   const priority = pickStr(o, ['prioritaet', 'priority', 'priorität'])
 
+  const folderIdStr = pickStr(o, ['folderId', 'mail_folder', 'ordner_id'])
+
+  const userRead =
+    typeof o.userRead === 'boolean'
+      ? o.userRead
+      : typeof o.user_read === 'boolean'
+        ? o.user_read
+        : undefined
+
   const ingestedAt =
     typeof o.ingestedAt === 'number' ? o.ingestedAt : undefined
 
@@ -189,8 +198,12 @@ export function normalizeEmailEntry(id: string, raw: unknown): EmailRow {
     hasAttachment,
     ingestedAt,
     attachments,
+    folderId: folderIdStr ? folderIdStr : undefined,
+    userRead,
   }
 }
+
+const SKIP_ROOT_KEYS = new Set(['mailFolders'])
 
 function rowHasContent(r: EmailRow): boolean {
   return Boolean(
@@ -205,7 +218,7 @@ function rowHasContent(r: EmailRow): boolean {
 export function parseEmailsTree(data: unknown): EmailRow[] {
   if (!data || typeof data !== 'object') return []
   return Object.entries(data as Record<string, unknown>)
-    .filter(([id]) => id.length > 0 && !id.startsWith('.'))
+    .filter(([id]) => id.length > 0 && !id.startsWith('.') && !SKIP_ROOT_KEYS.has(id))
     .filter(([, v]) => v !== null && typeof v === 'object')
     .map(([id, v]) => normalizeEmailEntry(id, v))
     .filter(rowHasContent)

@@ -18,6 +18,10 @@ export type EmailRecord = {
   hasAttachment?: boolean
   ingestedAt?: number
   attachments?: EmailAttachment[]
+  /** RTDB: ID aus mailFolders; leer/fehlend = Posteingang */
+  folderId?: string | null
+  /** true = in der App als gelesen markiert (überschreibt Anzeige „neu“) */
+  userRead?: boolean
 }
 
 export type EmailRow = { id: string } & EmailRecord

@@ -4,7 +4,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth'
-import { onValue, ref } from 'firebase/database'
+import { onValue, push, ref, update } from 'firebase/database'
 import { getFirebaseAuth, getFirebaseDb } from './firebase'
 import { parseEmailsTree } from './normalizeEmail'
 import {
@@ -19,6 +19,15 @@ import {
   type SavedFilter,
 } from './savedFilters'
 import { SendMailModal, type ComposeState } from './SendMailModal'
+import {
+  buildFolderTree,
+  collectDescendantFolderIds,
+  flattenFolderOptions,
+  parseMailFoldersTree,
+  rtdbEmailFieldPath,
+  type FolderTreeNode,
+  type MailFolder,
+} from './mailFolders'
 import {
   allThreadKeys,
   buildThreadsForKeys,
@@ -49,6 +58,84 @@ function emailsRefPath(): string {
 
 const EMAILS_PATH = emailsRefPath()
 
+function FolderTreeNav({
+  nodes,
+  selectedId,
+  onSelect,
+  onRequestRename,
+  onRequestDelete,
+  depth = 0,
+}: {
+  nodes: FolderTreeNode[]
+  selectedId: string | null
+  onSelect: (id: string) => void
+  onRequestRename: (node: FolderTreeNode) => void
+  onRequestDelete: (node: FolderTreeNode) => void
+  depth?: number
+}) {
+  if (!nodes.length) return null
+  return (
+    <ul className="folder-tree">
+      {nodes.map((n) => (
+        <li key={n.id}>
+          <div
+            className="folder-row"
+            style={{ paddingLeft: `${10 + depth * 12}px` }}
+          >
+            <button
+              type="button"
+              className={
+                selectedId === n.id ? 'folder-item active' : 'folder-item'
+              }
+              onClick={() => onSelect(n.id)}
+            >
+              {n.name}
+            </button>
+            <span className="folder-row-actions">
+              <button
+                type="button"
+                className="folder-icon-btn"
+                title="Umbenennen"
+                aria-label={`Ordner ${n.name} umbenennen`}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onRequestRename(n)
+                }}
+              >
+                ✎
+              </button>
+              <button
+                type="button"
+                className="folder-icon-btn folder-icon-btn--danger"
+                title="Löschen"
+                aria-label={`Ordner ${n.name} löschen`}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onRequestDelete(n)
+                }}
+              >
+                ×
+              </button>
+            </span>
+          </div>
+          {n.children.length > 0 ? (
+            <FolderTreeNav
+              nodes={n.children}
+              selectedId={selectedId}
+              onSelect={onSelect}
+              onRequestRename={onRequestRename}
+              onRequestDelete={onRequestDelete}
+              depth={depth + 1}
+            />
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export default function App() {
   const [configError, setConfigError] = useState<string | null>(null)
   const [user, setUser] = useState<import('firebase/auth').User | null>(null)
@@ -73,6 +160,27 @@ export default function App() {
   const [saveFilterName, setSaveFilterName] = useState('')
   const [filterFeedback, setFilterFeedback] = useState<string | null>(null)
   const [compose, setCompose] = useState<ComposeState | null>(null)
+  const [folders, setFolders] = useState<MailFolder[]>([])
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
+  const [showFolderModal, setShowFolderModal] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [newFolderParentId, setNewFolderParentId] = useState<string | null>(
+    null,
+  )
+  const [folderActionError, setFolderActionError] = useState<string | null>(
+    null,
+  )
+  const [moveBusyKey, setMoveBusyKey] = useState<string | null>(null)
+  const [renameFolderTarget, setRenameFolderTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+  const [renameFolderInput, setRenameFolderInput] = useState('')
+  const [deleteFolderTarget, setDeleteFolderTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+  const [folderOpsBusy, setFolderOpsBusy] = useState(false)
 
   useEffect(() => {
     try {
@@ -109,12 +217,30 @@ export default function App() {
   }, [user, configError])
 
   useEffect(() => {
+    if (!user || configError) return
+    const db = getFirebaseDb()
+    return onValue(
+      ref(db, 'mailFolders'),
+      (snap) => {
+        setFolders(parseMailFoldersTree(snap.val()))
+      },
+      () => {
+        /* optional: setFolders([]) */
+      },
+    )
+  }, [user, configError])
+
+  useEffect(() => {
     if (!user) {
       setSavedFilters([])
       return
     }
     setSavedFilters(loadSavedFilters(user.uid))
   }, [user])
+
+  const isSearchActive =
+    query.trim().length > 0 ||
+    (searchMode === 'gemini' && geminiOrderedIds !== null)
 
   /** Unterhaltungen (nach Betreff / Re:/Fwd:/AW: zusammengefasst) */
   const displayThreads = useMemo(() => {
@@ -141,6 +267,170 @@ export default function App() {
     () => displayThreads.reduce((n, t) => n + t.membersAsc.length, 0),
     [displayThreads],
   )
+
+  function threadHeadFolderId(thread: EmailThread): string | null {
+    const fid = thread.membersDesc[0].folderId?.trim()
+    return fid ? fid : null
+  }
+
+  const browsedThreads = useMemo(() => {
+    if (isSearchActive) return displayThreads
+    return displayThreads.filter((thread) => {
+      const fid = threadHeadFolderId(thread)
+      if (selectedFolderId === null) return !fid
+      return fid === selectedFolderId
+    })
+  }, [displayThreads, selectedFolderId, isSearchActive])
+
+  const browsedTotalMessages = useMemo(
+    () => browsedThreads.reduce((n, t) => n + t.membersAsc.length, 0),
+    [browsedThreads],
+  )
+
+  const folderTree = useMemo(() => buildFolderTree(folders), [folders])
+  const moveSelectOptions = useMemo(
+    () => flattenFolderOptions(folderTree),
+    [folderTree],
+  )
+
+  async function markThreadRead(thread: EmailThread) {
+    if (!user) return
+    setFolderActionError(null)
+    const db = getFirebaseDb()
+    const updates: Record<string, unknown> = {}
+    for (const r of thread.membersAsc) {
+      updates[rtdbEmailFieldPath(EMAILS_PATH, r.id, 'userRead')] = true
+    }
+    try {
+      await update(ref(db), updates)
+    } catch (e) {
+      setFolderActionError(
+        e instanceof Error ? e.message : 'Gelesen konnte nicht gespeichert werden',
+      )
+    }
+  }
+
+  async function markThreadUnread(thread: EmailThread) {
+    if (!user) return
+    setFolderActionError(null)
+    const db = getFirebaseDb()
+    const updates: Record<string, unknown> = {}
+    for (const r of thread.membersAsc) {
+      updates[rtdbEmailFieldPath(EMAILS_PATH, r.id, 'userRead')] = false
+    }
+    try {
+      await update(ref(db), updates)
+    } catch (e) {
+      setFolderActionError(
+        e instanceof Error
+          ? e.message
+          : 'Ungelesen konnte nicht gespeichert werden',
+      )
+    }
+  }
+
+  async function moveThreadToFolder(
+    thread: EmailThread,
+    targetFolderId: string | null,
+  ) {
+    if (!user) return
+    setFolderActionError(null)
+    const liKey = thread.membersDesc
+      .map((r) => r.id)
+      .sort()
+      .join('|')
+    setMoveBusyKey(liKey)
+    const db = getFirebaseDb()
+    const updates: Record<string, unknown> = {}
+    for (const r of thread.membersAsc) {
+      const path = rtdbEmailFieldPath(EMAILS_PATH, r.id, 'folderId')
+      updates[path] = targetFolderId
+    }
+    try {
+      await update(ref(db), updates)
+    } catch (e) {
+      setFolderActionError(
+        e instanceof Error ? e.message : 'Verschieben fehlgeschlagen',
+      )
+    } finally {
+      setMoveBusyKey(null)
+    }
+  }
+
+  async function createMailFolder() {
+    if (!user) return
+    const name = newFolderName.trim()
+    if (!name) return
+    setFolderActionError(null)
+    try {
+      const db = getFirebaseDb()
+      await push(ref(db, 'mailFolders'), {
+        name,
+        parentId: newFolderParentId,
+        createdAt: Date.now(),
+      })
+      setNewFolderName('')
+      setNewFolderParentId(null)
+      setShowFolderModal(false)
+    } catch (e) {
+      setFolderActionError(
+        e instanceof Error ? e.message : 'Ordner konnte nicht angelegt werden',
+      )
+    }
+  }
+
+  async function renameMailFolder(folderId: string, newName: string) {
+    if (!user) return
+    const name = newName.trim()
+    if (!name) return
+    setFolderActionError(null)
+    setFolderOpsBusy(true)
+    try {
+      const db = getFirebaseDb()
+      await update(ref(db), {
+        [`mailFolders/${folderId}/name`]: name,
+      })
+      setRenameFolderTarget(null)
+    } catch (e) {
+      setFolderActionError(
+        e instanceof Error ? e.message : 'Umbenennen fehlgeschlagen',
+      )
+    } finally {
+      setFolderOpsBusy(false)
+    }
+  }
+
+  async function deleteMailFolder(folderId: string) {
+    if (!user) return
+    setFolderActionError(null)
+    setFolderOpsBusy(true)
+    const db = getFirebaseDb()
+    const toRemove = collectDescendantFolderIds(folders, folderId)
+    const idSet = new Set(toRemove)
+    const updates: Record<string, unknown> = {}
+    for (const id of toRemove) {
+      updates[`mailFolders/${id}`] = null
+    }
+    for (const r of rows) {
+      const fid = r.folderId?.trim()
+      if (fid && idSet.has(fid)) {
+        updates[rtdbEmailFieldPath(EMAILS_PATH, r.id, 'folderId')] = null
+      }
+    }
+    try {
+      await update(ref(db), updates)
+      if (selectedFolderId && idSet.has(selectedFolderId)) {
+        setSelectedFolderId(null)
+      }
+      setDeleteFolderTarget(null)
+    } catch (e) {
+      setFolderActionError(
+        e instanceof Error ? e.message : 'Ordner konnte nicht gelöscht werden',
+      )
+    } finally {
+      setFolderOpsBusy(false)
+    }
+  }
 
   async function runGeminiSearch(searchQuery?: string) {
     if (!user) return
@@ -299,7 +589,7 @@ export default function App() {
   }
 
   return (
-    <div className="shell">
+    <div className="shell shell--wide">
       <header className="bar">
         <div>
           <h1>HabMail</h1>
@@ -313,6 +603,57 @@ export default function App() {
         </button>
       </header>
 
+      <div className="app-body">
+        <aside className="folder-sidebar" aria-label="Ordner">
+          <div className="folder-sidebar-head">
+            <h2 className="folder-sidebar-title">Ordner</h2>
+            <button
+              type="button"
+              className="ghost small-btn"
+              onClick={() => {
+                setFolderActionError(null)
+                setShowFolderModal(true)
+              }}
+            >
+              + Ordner
+            </button>
+          </div>
+          {isSearchActive ? (
+            <p className="muted small folder-search-hint">
+              Suche aktiv — es werden <strong>alle Ordner</strong> durchsucht;
+              die Liste ist nicht nach Ordner gefiltert.
+            </p>
+          ) : null}
+          <nav className="folder-nav">
+            <button
+              type="button"
+              className={
+                selectedFolderId === null
+                  ? 'folder-item folder-item-root active'
+                  : 'folder-item folder-item-root'
+              }
+              onClick={() => setSelectedFolderId(null)}
+            >
+              Posteingang
+            </button>
+            <FolderTreeNav
+              nodes={folderTree}
+              selectedId={selectedFolderId}
+              onSelect={setSelectedFolderId}
+              onRequestRename={(node) => {
+                setFolderActionError(null)
+                setRenameFolderTarget({ id: node.id, name: node.name })
+                setRenameFolderInput(node.name)
+              }}
+              onRequestDelete={(node) => {
+                setFolderActionError(null)
+                setDeleteFolderTarget({ id: node.id, name: node.name })
+              }}
+            />
+          </nav>
+        </aside>
+
+        <div className="app-main">
       <section className="toolbar">
         <div className="mode-switch" role="group" aria-label="Suchmodus">
           <button
@@ -457,26 +798,52 @@ export default function App() {
             <strong>Security Rules</strong> und ob der Pfad stimmt.
           </p>
         ) : null}
+        {folderActionError ? (
+          <p className="error" role="alert">
+            {folderActionError}
+          </p>
+        ) : null}
         <span className="muted">
-          {displayThreads.length} Unterhaltung
-          {displayThreads.length === 1 ? '' : 'en'}
-          {threadListTotalMessages > displayThreads.length
-            ? ` · ${threadListTotalMessages} Nachrichten`
-            : null}
+          {isSearchActive ? (
+            <>
+              {displayThreads.length} Unterhaltung
+              {displayThreads.length === 1 ? '' : 'en'}
+              {threadListTotalMessages > displayThreads.length
+                ? ` · ${threadListTotalMessages} Nachrichten`
+                : null}
+              {' '}
+              <span className="muted">(alle Ordner)</span>
+            </>
+          ) : (
+            <>
+              {browsedThreads.length} Unterhaltung
+              {browsedThreads.length === 1 ? '' : 'en'}
+              {browsedTotalMessages > browsedThreads.length
+                ? ` · ${browsedTotalMessages} Nachrichten`
+                : null}
+            </>
+          )}
         </span>
       </section>
 
       <ul className="list">
-        {displayThreads.map((thread) => {
+        {browsedThreads.map((thread) => {
           const head = thread.membersDesc[0]
           const liKey = thread.membersDesc
             .map((r) => r.id)
             .sort()
             .join('|')
+          const unread = head.userRead !== true
           return (
             <li key={liKey}>
               <EmailCard
                 thread={thread}
+                unread={unread}
+                moveSelectOptions={moveSelectOptions}
+                moveBusy={moveBusyKey === liKey}
+                onMarkInteracted={() => void markThreadRead(thread)}
+                onMarkUnread={() => void markThreadUnread(thread)}
+                onMoveTo={(folderId) => void moveThreadToFolder(thread, folderId)}
                 onReply={() =>
                   setCompose({ mode: 'reply', row: head })
                 }
@@ -489,13 +856,11 @@ export default function App() {
         })}
       </ul>
 
-      {displayThreads.length === 0 && !rtdbListenError ? (
+      {browsedThreads.length === 0 && !rtdbListenError ? (
         <div className="empty-block muted">
           {searchMode === 'gemini' && geminiOrderedIds?.length === 0 ? (
             <p>Keine Treffer laut KI.</p>
-          ) : rows.length > 0 &&
-            ((searchMode === 'gemini' && geminiOrderedIds !== null) ||
-              (searchMode === 'keywords' && query.trim())) ? (
+          ) : isSearchActive && displayThreads.length === 0 ? (
             <p>Keine Treffer mit der aktuellen Suche.</p>
           ) : rows.length === 0 ? (
             <>
@@ -525,9 +890,181 @@ export default function App() {
                 </li>
               </ul>
             </>
+          ) : !isSearchActive && rows.length > 0 ? (
+            selectedFolderId === null ? (
+              <p>
+                Im Posteingang ist nichts — alle sichtbaren Nachrichten liegen
+                vermutlich in <strong>Ordnern</strong>.
+              </p>
+            ) : (
+              <p>Keine E-Mails in diesem Ordner.</p>
+            )
           ) : (
             <p>Keine Einträge.</p>
           )}
+        </div>
+      ) : null}
+
+        </div>
+      </div>
+
+      {renameFolderTarget ? (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="rename-folder-title"
+          onClick={() => !folderOpsBusy && setRenameFolderTarget(null)}
+        >
+          <div
+            className="modal card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="rename-folder-title">Ordner umbenennen</h3>
+            <p className="muted small">
+              „{renameFolderTarget.name}“
+            </p>
+            <label className="folder-modal-label">
+              Neuer Name
+              <input
+                type="text"
+                value={renameFolderInput}
+                onChange={(e) => setRenameFolderInput(e.target.value)}
+                maxLength={120}
+                autoFocus
+              />
+            </label>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="ghost"
+                disabled={folderOpsBusy}
+                onClick={() => setRenameFolderTarget(null)}
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                disabled={
+                  folderOpsBusy || !renameFolderInput.trim()
+                }
+                onClick={() =>
+                  void renameMailFolder(
+                    renameFolderTarget.id,
+                    renameFolderInput,
+                  )
+                }
+              >
+                Speichern
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteFolderTarget ? (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-folder-title"
+          onClick={() => !folderOpsBusy && setDeleteFolderTarget(null)}
+        >
+          <div
+            className="modal card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="delete-folder-title">Ordner löschen?</h3>
+            <p className="muted small">
+              <strong>{deleteFolderTarget.name}</strong> wird entfernt — inklusive
+              aller <strong>Unterordner</strong>. E-Mails aus diesen Ordnern
+              werden in den <strong>Posteingang</strong> verschoben.
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="ghost"
+                disabled={folderOpsBusy}
+                onClick={() => setDeleteFolderTarget(null)}
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                className="btn-danger"
+                disabled={folderOpsBusy}
+                onClick={() => void deleteMailFolder(deleteFolderTarget.id)}
+              >
+                Löschen
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showFolderModal ? (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="folder-modal-title"
+          onClick={() => setShowFolderModal(false)}
+        >
+          <div
+            className="modal card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="folder-modal-title">Neuer Ordner</h3>
+            <p className="muted small">
+              Ordner sind für alle angemeldeten Nutzer gleich (Realtime Database:
+              <code> mailFolders</code>).
+            </p>
+            <label className="folder-modal-label">
+              Name
+              <input
+                type="text"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                maxLength={120}
+                autoFocus
+                placeholder="z. B. Rechnungen"
+              />
+            </label>
+            <label className="folder-modal-label">
+              Übergeordnet
+              <select
+                value={newFolderParentId ?? ''}
+                onChange={(e) =>
+                  setNewFolderParentId(e.target.value || null)
+                }
+              >
+                <option value="">(Oberste Ebene)</option>
+                {flattenFolderOptions(folderTree).map((opt) =>
+                  opt.id ? (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </option>
+                  ) : null,
+                )}
+              </select>
+            </label>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => setShowFolderModal(false)}
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                disabled={!newFolderName.trim()}
+                onClick={() => void createMailFolder()}
+              >
+                Anlegen
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -619,10 +1156,22 @@ function AttachmentList({
 
 function EmailCard({
   thread,
+  unread,
+  moveSelectOptions,
+  moveBusy,
+  onMarkInteracted,
+  onMarkUnread,
+  onMoveTo,
   onReply,
   onForward,
 }: {
   thread: EmailThread
+  unread: boolean
+  moveSelectOptions: { id: string | null; label: string; depth: number }[]
+  moveBusy: boolean
+  onMarkInteracted: () => void
+  onMarkUnread: () => void
+  onMoveTo: (folderId: string | null) => void
   onReply: () => void
   onForward: () => void
 }) {
@@ -633,7 +1182,9 @@ function EmailCard({
   const multi = thread.membersAsc.length > 1
 
   return (
-    <article className="card email">
+    <article
+      className={`card email${unread ? ' email-unread' : ''}`}
+    >
       <div className="email-head">
         <div>
           <h2>{head.subject || '(Ohne Betreff)'}</h2>
@@ -661,18 +1212,71 @@ function EmailCard({
           </p>
         </div>
         <div className="email-actions">
-          <button type="button" className="ghost small-btn" onClick={onReply}>
+          <label className="folder-move-label">
+            <span className="muted small">Verschieben</span>
+            <select
+              className="folder-move-select"
+              disabled={moveBusy}
+              aria-label="In Ordner verschieben"
+              value=""
+              onChange={(e) => {
+                const v = e.target.value
+                e.target.value = ''
+                if (!v) return
+                if (v === '__inbox__') onMoveTo(null)
+                else onMoveTo(v)
+              }}
+            >
+              <option value="">Ordner wählen…</option>
+              <option value="__inbox__">Posteingang</option>
+              {moveSelectOptions.map((opt) =>
+                opt.id ? (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ) : null,
+              )}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="ghost small-btn"
+            onClick={() => {
+              onMarkInteracted()
+              onReply()
+            }}
+          >
             Antworten
           </button>
-          <button type="button" className="ghost small-btn" onClick={onForward}>
+          <button
+            type="button"
+            className="ghost small-btn"
+            onClick={() => {
+              onMarkInteracted()
+              onForward()
+            }}
+          >
             Weiterleiten
           </button>
           <button
             type="button"
             className="ghost small-btn"
-            onClick={() => setOpen((o) => !o)}
+            onClick={() => {
+              setOpen((o) => {
+                if (!o) onMarkInteracted()
+                return !o
+              })
+            }}
           >
             {open ? 'Weniger' : 'Details'}
+          </button>
+          <button
+            type="button"
+            className="ghost small-btn"
+            title="Ungelesen-Glow wieder anzeigen"
+            onClick={() => onMarkUnread()}
+          >
+            Ungelesen
           </button>
         </div>
       </div>
