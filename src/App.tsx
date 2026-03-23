@@ -7,6 +7,10 @@ import {
 import { onValue, ref } from 'firebase/database'
 import { getFirebaseAuth, getFirebaseDb } from './firebase'
 import { parseEmailsTree } from './normalizeEmail'
+import {
+  buildGeminiItems,
+  requestGeminiSearch,
+} from './geminiSearch'
 import type { EmailRow } from './types'
 import './App.css'
 
@@ -20,9 +24,10 @@ function sortKey(r: EmailRow): number {
   return Number.isFinite(t) ? t : 0
 }
 
+/** Standard: Root (wie n8n push). Unterordner z. B. `emails` per Env setzen. */
 function emailsRefPath(): string {
   const raw = import.meta.env.VITE_FIREBASE_EMAILS_PATH?.trim()
-  if (raw === undefined || raw === '') return 'emails'
+  if (raw === undefined || raw === '') return ''
   if (raw === '/' || raw === '.') return ''
   return raw.replace(/^\/+|\/+$/g, '')
 }
@@ -39,6 +44,15 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [rows, setRows] = useState<EmailRow[]>([])
   const [query, setQuery] = useState('')
+  const [searchMode, setSearchMode] = useState<'keywords' | 'gemini'>(
+    'keywords',
+  )
+  const [geminiOrderedIds, setGeminiOrderedIds] = useState<string[] | null>(
+    null,
+  )
+  const [geminiLoading, setGeminiLoading] = useState(false)
+  const [geminiError, setGeminiError] = useState<string | null>(null)
+  const [rtdbListenError, setRtdbListenError] = useState<string | null>(null)
 
   useEffect(() => {
     try {
@@ -56,13 +70,22 @@ export default function App() {
 
   useEffect(() => {
     if (!user || configError) return
+    setRtdbListenError(null)
     const db = getFirebaseDb()
     const emailsRef = EMAILS_PATH ? ref(db, EMAILS_PATH) : ref(db)
-    return onValue(emailsRef, (snap) => {
-      const list = parseEmailsTree(snap.val())
-      list.sort((a, b) => sortKey(b) - sortKey(a))
-      setRows(list)
-    })
+    return onValue(
+      emailsRef,
+      (snap) => {
+        setRtdbListenError(null)
+        const list = parseEmailsTree(snap.val())
+        list.sort((a, b) => sortKey(b) - sortKey(a))
+        setRows(list)
+      },
+      (err) => {
+        setRtdbListenError(err.message)
+        setRows([])
+      },
+    )
   }, [user, configError])
 
   const filtered = useMemo(() => {
@@ -87,6 +110,52 @@ export default function App() {
       return parts.every((p) => hay.includes(p))
     })
   }, [rows, query])
+
+  const displayRows = useMemo(() => {
+    if (searchMode === 'keywords') return filtered
+    if (geminiOrderedIds === null) return rows
+    const map = new Map(rows.map((r) => [r.id, r]))
+    return geminiOrderedIds
+      .map((id) => map.get(id))
+      .filter((r): r is EmailRow => Boolean(r))
+  }, [searchMode, filtered, rows, geminiOrderedIds])
+
+  async function runGeminiSearch() {
+    if (!user) return
+    const q = query.trim()
+    if (!q) return
+    setGeminiLoading(true)
+    setGeminiError(null)
+    try {
+      const token = await user.getIdToken()
+      const items = buildGeminiItems(rows)
+      if (items.length === 0) {
+        setGeminiOrderedIds([])
+        return
+      }
+      const ids = await requestGeminiSearch(token, q, items)
+      setGeminiOrderedIds(ids)
+    } catch (e) {
+      setGeminiError(
+        e instanceof Error ? e.message : 'KI-Suche fehlgeschlagen',
+      )
+      setGeminiOrderedIds(null)
+    } finally {
+      setGeminiLoading(false)
+    }
+  }
+
+  function setModeKeywords() {
+    setSearchMode('keywords')
+    setGeminiOrderedIds(null)
+    setGeminiError(null)
+  }
+
+  function setModeGemini() {
+    setSearchMode('gemini')
+    setGeminiOrderedIds(null)
+    setGeminiError(null)
+  }
 
   async function handleLogin(e: FormEvent) {
     e.preventDefault()
@@ -123,11 +192,14 @@ export default function App() {
         <h1>HabMail</h1>
         <p className="error">{configError}</p>
         <p className="muted">
-          Lege eine <code>.env</code> mit den <code>VITE_FIREBASE_*</code>{' '}
-          Variablen an (siehe <code>.env.example</code>). Unter{' '}
-          <strong>Vercel</strong> dieselben Namen in den Projekteinstellungen
-          eintragen (Build-Zeit), damit <code>import.meta.env</code> sie
-          enthält.
+          Lokal: <code>.env</code> mit <code>VITE_FIREBASE_*</code> (siehe{' '}
+          <code>.env.example</code>). Auf <strong>Vercel</strong>: unter
+          Settings → Environment Variables dieselben Namen{' '}
+          <strong>exakt</strong> (Groß/Klein) anlegen, für{' '}
+          <strong>Production</strong> (und bei Preview-Deploys auch{' '}
+          <strong>Preview</strong>) aktivieren, dann{' '}
+          <strong>Redeploy</strong> auslösen. In den Build-Logs erscheint bei
+          fehlenden Keys eine Zeile <code>[habmail] Vercel-Build: …</code>.
         </p>
       </div>
     )
@@ -186,27 +258,123 @@ export default function App() {
       </header>
 
       <section className="toolbar">
-        <input
-          type="search"
-          className="search"
-          placeholder="Suche: Stichwörter (alle müssen vorkommen)…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Suche"
-        />
-        <span className="muted">{filtered.length} Einträge</span>
+        <div className="mode-switch" role="group" aria-label="Suchmodus">
+          <button
+            type="button"
+            className={searchMode === 'keywords' ? 'mode active' : 'mode'}
+            onClick={setModeKeywords}
+          >
+            Stichworte
+          </button>
+          <button
+            type="button"
+            className={searchMode === 'gemini' ? 'mode active' : 'mode'}
+            onClick={setModeGemini}
+          >
+            KI (Gemini)
+          </button>
+        </div>
+        <div className="search-row">
+          <input
+            type="search"
+            className="search"
+            placeholder={
+              searchMode === 'keywords'
+                ? 'Stichwörter (alle müssen vorkommen)…'
+                : 'Natürliche Sprache, z. B. Angebote zur Dieseltankanlage von Mayer…'
+            }
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Suche"
+            onKeyDown={(e) => {
+              if (
+                searchMode === 'gemini' &&
+                e.key === 'Enter' &&
+                !geminiLoading
+              ) {
+                e.preventDefault()
+                void runGeminiSearch()
+              }
+            }}
+          />
+          {searchMode === 'gemini' ? (
+            <button
+              type="button"
+              className="ai-btn"
+              disabled={geminiLoading || !query.trim()}
+              onClick={() => void runGeminiSearch()}
+            >
+              {geminiLoading ? 'Suche…' : 'KI suchen'}
+            </button>
+          ) : null}
+        </div>
+        {searchMode === 'gemini' ? (
+          <p className="muted gemini-hint">
+            Es werden bis zu 50 der neuesten Mails an Gemini geschickt (ohne
+            vollständige Anhänge). API-Key liegt nur auf Vercel (
+            <code>GEMINI_API_KEY</code>). Lokal:{' '}
+            <code>npx vercel dev -l 3000</code> und{' '}
+            <code>VITE_API_BASE_URL=http://127.0.0.1:3000</code>.
+          </p>
+        ) : null}
+        {geminiError ? <p className="error">{geminiError}</p> : null}
+        {rtdbListenError ? (
+          <p className="error" role="alert">
+            Realtime Database: {rtdbListenError} — prüfe die{' '}
+            <strong>Security Rules</strong> und ob der Pfad stimmt.
+          </p>
+        ) : null}
+        <span className="muted">{displayRows.length} Einträge</span>
       </section>
 
       <ul className="list">
-        {filtered.map((r) => (
+        {displayRows.map((r) => (
           <li key={r.id}>
             <EmailCard row={r} />
           </li>
         ))}
       </ul>
 
-      {filtered.length === 0 ? (
-        <p className="muted empty">Keine Einträge.</p>
+      {displayRows.length === 0 && !rtdbListenError ? (
+        <div className="empty-block muted">
+          {searchMode === 'gemini' && geminiOrderedIds?.length === 0 ? (
+            <p>Keine Treffer laut KI.</p>
+          ) : rows.length > 0 &&
+            (searchMode !== 'gemini' || geminiOrderedIds !== null) &&
+            (searchMode === 'gemini' || query.trim()) ? (
+            <p>Keine Treffer mit der aktuellen Suche.</p>
+          ) : rows.length === 0 ? (
+            <>
+              <p>
+                <strong>Keine Einträge an diesem Pfad.</strong> Die App liest
+                unter: <code>{EMAILS_PATH || '(Root der Datenbank)'}</code>
+              </p>
+              <p>
+                In der Firebase Console unter <strong>Realtime Database</strong>{' '}
+                prüfen, <em>wo</em> deine Keys liegen. Standard in dieser App ist
+                die <strong>Root</strong> (Push-IDs wie <code>-O...</code>).
+                Liegen die Mails in einem Unterordner, musst du den Pfad setzen
+                (siehe unten).
+              </p>
+              <ul className="hint-list">
+                <li>
+                  Liegen Einträge unter <code>emails</code> (oder anderem Namen),
+                  setze in Vercel{' '}
+                  <code>VITE_FIREBASE_EMAILS_PATH=emails</code> (ohne Slash).
+                </li>
+                <li>
+                  <strong>Rules deployen:</strong> aktuelle Regeln im Repo
+                  erlauben angemeldeten Nutzern Lesen für jeden{' '}
+                  <strong>obersten</strong> Knoten. In der Console unter
+                  Realtime Database → <strong>Regeln</strong> einspielen oder{' '}
+                  <code>firebase deploy --only database</code>.
+                </li>
+              </ul>
+            </>
+          ) : (
+            <p>Keine Einträge.</p>
+          )}
+        </div>
       ) : null}
     </div>
   )

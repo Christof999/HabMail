@@ -1,6 +1,6 @@
 {
   "rules": {
-    "emails": {
+    "$entryId": {
       ".read": "auth != null",
       ".write": false
     }

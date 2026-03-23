@@ -69,9 +69,21 @@ export function normalizeEmailEntry(id: string, raw: unknown): EmailRow {
   }
 }
 
+function rowHasContent(r: EmailRow): boolean {
+  return Boolean(
+    r.subject ||
+      r.sender ||
+      r.summary ||
+      r.originalBody ||
+      r.category,
+  )
+}
+
 export function parseEmailsTree(data: unknown): EmailRow[] {
   if (!data || typeof data !== 'object') return []
-  return Object.entries(data as Record<string, unknown>).map(([id, v]) =>
-    normalizeEmailEntry(id, v),
-  )
+  return Object.entries(data as Record<string, unknown>)
+    .filter(([id]) => id.length > 0 && !id.startsWith('.'))
+    .filter(([, v]) => v !== null && typeof v === 'object')
+    .map(([id, v]) => normalizeEmailEntry(id, v))
+    .filter(rowHasContent)
 }

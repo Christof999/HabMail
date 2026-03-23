@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_APP_ID: string
   /** RTDB-Pfad zur Liste (Standard: emails) */
   readonly VITE_FIREBASE_EMAILS_PATH?: string
+  /** Optional: z.B. http://localhost:3000 bei vercel dev, sonst leer (gleiche Origin auf Vercel) */
+  readonly VITE_API_BASE_URL?: string
 }
 
 interface ImportMeta {
