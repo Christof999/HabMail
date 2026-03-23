@@ -70,6 +70,13 @@ const EMAILS_PATH = emailsRefPath()
 /** dataTransfer-Typ + JSON-Payload für Thread-Verschieben per Drag and Drop */
 const HABMAIL_THREAD_DRAG_MIME = 'application/x-habmail-thread'
 
+/**
+ * Safari/WebKit (inkl. iPad mit Maus) setzt bei `dragover` oft ein leeres
+ * `dataTransfer.types` und meldet `effectAllowed` inkonsistent. Ohne
+ * `preventDefault` auf dem Ziel ist kein Drop möglich — daher Session-Flag.
+ */
+let habmailThreadDragSessionActive = false
+
 const MAIL_DROP_INBOX = '__habmail_inbox__'
 
 type HabmailThreadDragPayload = { habmailThread: true; memberIds: string[] }
@@ -92,12 +99,13 @@ function parseThreadDragPayload(raw: string): string[] | null {
 }
 
 function dragEventHasHabmailThread(e: DragEvent): boolean {
-  const types = e.dataTransfer.types
+  if (habmailThreadDragSessionActive) return true
+  const types = Array.from(e.dataTransfer.types ?? [])
   if (types.includes(HABMAIL_THREAD_DRAG_MIME)) return true
+  const ea = e.dataTransfer.effectAllowed
   if (
     types.includes('text/plain') &&
-    (e.dataTransfer.effectAllowed === 'move' ||
-      e.dataTransfer.effectAllowed === 'copyMove')
+    (ea === 'move' || ea === 'copyMove' || ea === 'all')
   ) {
     return true
   }
@@ -135,6 +143,7 @@ function FolderTreeNav({
   onRequestDelete,
   mailDropHighlightId,
   onMailDragOverFolder,
+  onMailDragEnterFolder,
   onMailDragLeaveFolder,
   onMailDropOnFolder,
   depth = 0,
@@ -146,6 +155,7 @@ function FolderTreeNav({
   onRequestDelete: (node: FolderTreeNode) => void
   mailDropHighlightId: string | null
   onMailDragOverFolder: (e: DragEvent, folderId: string) => void
+  onMailDragEnterFolder: (e: DragEvent, folderId: string) => void
   onMailDragLeaveFolder: (e: DragEvent, folderId: string) => void
   onMailDropOnFolder: (e: DragEvent, folderId: string) => void
   depth?: number
@@ -158,6 +168,7 @@ function FolderTreeNav({
           <div
             className={`folder-row${mailDropHighlightId === n.id ? ' folder-row--mail-drop-active' : ''}`}
             style={{ paddingLeft: `${10 + depth * 12}px` }}
+            onDragEnter={(e) => onMailDragEnterFolder(e, n.id)}
             onDragOver={(e) => onMailDragOverFolder(e, n.id)}
             onDragLeave={(e) => onMailDragLeaveFolder(e, n.id)}
             onDrop={(e) => onMailDropOnFolder(e, n.id)}
@@ -209,6 +220,7 @@ function FolderTreeNav({
               onRequestDelete={onRequestDelete}
               mailDropHighlightId={mailDropHighlightId}
               onMailDragOverFolder={onMailDragOverFolder}
+              onMailDragEnterFolder={onMailDragEnterFolder}
               onMailDragLeaveFolder={onMailDragLeaveFolder}
               onMailDropOnFolder={onMailDropOnFolder}
               depth={depth + 1}
@@ -460,7 +472,21 @@ export default function App() {
     setMailDropHighlightId(folderId)
   }
 
+  function handleMailDragEnterFolder(e: DragEvent, folderId: string) {
+    if (!dragEventHasHabmailThread(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setMailDropHighlightId(folderId)
+  }
+
   function handleMailDragOverInbox(e: DragEvent) {
+    if (!dragEventHasHabmailThread(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setMailDropHighlightId(MAIL_DROP_INBOX)
+  }
+
+  function handleMailDragEnterInbox(e: DragEvent) {
     if (!dragEventHasHabmailThread(e)) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
@@ -476,13 +502,18 @@ export default function App() {
   }
 
   function readThreadDragPayload(e: DragEvent): string[] | null {
-    let raw = e.dataTransfer.getData(HABMAIL_THREAD_DRAG_MIME)
-    if (!raw) raw = e.dataTransfer.getData('text/plain')
-    return parseThreadDragPayload(raw)
+    const fromPlain = parseThreadDragPayload(
+      e.dataTransfer.getData('text/plain'),
+    )
+    if (fromPlain?.length) return fromPlain
+    return parseThreadDragPayload(
+      e.dataTransfer.getData(HABMAIL_THREAD_DRAG_MIME),
+    )
   }
 
   function handleMailDropOnFolder(e: DragEvent, folderId: string) {
     e.preventDefault()
+    habmailThreadDragSessionActive = false
     setMailDropHighlightId(null)
     const memberIds = readThreadDragPayload(e)
     if (!memberIds?.length) return
@@ -493,6 +524,7 @@ export default function App() {
 
   function handleMailDropOnInbox(e: DragEvent) {
     e.preventDefault()
+    habmailThreadDragSessionActive = false
     setMailDropHighlightId(null)
     const memberIds = readThreadDragPayload(e)
     if (!memberIds?.length) return
@@ -854,6 +886,7 @@ export default function App() {
                 .filter(Boolean)
                 .join(' ')}
               onClick={() => selectFolder(null)}
+              onDragEnter={handleMailDragEnterInbox}
               onDragOver={handleMailDragOverInbox}
               onDragLeave={handleMailDragLeaveInbox}
               onDrop={handleMailDropOnInbox}
@@ -875,6 +908,7 @@ export default function App() {
               }}
               mailDropHighlightId={mailDropHighlightId}
               onMailDragOverFolder={handleMailDragOverFolder}
+              onMailDragEnterFolder={handleMailDragEnterFolder}
               onMailDragLeaveFolder={handleMailDragLeaveFolder}
               onMailDropOnFolder={handleMailDropOnFolder}
             />
@@ -1131,15 +1165,19 @@ export default function App() {
                 title="Zum Ordner ziehen"
                 aria-label="Unterhaltung zum Ordner ziehen (Drag and Drop)"
                 onDragStart={(e) => {
-                  e.dataTransfer.effectAllowed = 'move'
+                  habmailThreadDragSessionActive = true
+                  e.dataTransfer.effectAllowed = 'copyMove'
+                  e.dataTransfer.setData('text/plain', dragPayload)
                   e.dataTransfer.setData(
                     HABMAIL_THREAD_DRAG_MIME,
                     dragPayload,
                   )
-                  e.dataTransfer.setData('text/plain', dragPayload)
                   setMailDropHighlightId(null)
                 }}
-                onDragEnd={() => setMailDropHighlightId(null)}
+                onDragEnd={() => {
+                  habmailThreadDragSessionActive = false
+                  setMailDropHighlightId(null)
+                }}
               >
                 <span className="email-drag-grip" aria-hidden>
                   ⋮⋮
