@@ -16,17 +16,113 @@ function pickBool(o: Record<string, unknown>, keys: string[]): boolean | undefin
   return undefined
 }
 
-function parseAttachments(raw: unknown): EmailAttachment[] | undefined {
-  if (!Array.isArray(raw)) return undefined
-  const list = raw.map((a) => {
-    const x = (a && typeof a === 'object' ? a : {}) as Record<string, unknown>
-    return {
-      filename: String(x.filename ?? x.dateiname ?? ''),
-      mimeType: String(x.mimeType ?? x.mime_type ?? x.mimetype ?? ''),
-      dataBase64: String(x.dataBase64 ?? x.data_base64 ?? x.base64 ?? ''),
+/** data:image/png;base64,xxxx → xxxx */
+function stripDataUrlBase64(s: string): string {
+  const t = s.trim()
+  const m = t.match(/^data:[^;]+;base64,(.+)$/i)
+  return m ? m[1].trim() : t.replace(/\s/g, '')
+}
+
+function pickBase64Payload(x: Record<string, unknown>): string {
+  const candidates = [
+    x.dataBase64,
+    x.data_base64,
+    x.base64,
+    x.contentBase64,
+    x.content_base64,
+    x.inhalt_base64,
+    /** n8n / allgemein */
+    x.data,
+    x.content,
+    x.binary,
+    /** manchmal verschachtelt */
+    typeof x.file === 'object' && x.file !== null
+      ? (x.file as Record<string, unknown>).data
+      : undefined,
+  ]
+  for (const v of candidates) {
+    if (v == null) continue
+    if (typeof v === 'string' && v.trim() !== '') {
+      return stripDataUrlBase64(v)
     }
-  })
-  return list.length ? list : undefined
+  }
+  return ''
+}
+
+function normalizeOneAttachment(x: Record<string, unknown>): EmailAttachment {
+  const filename = pickStr(x, [
+    'filename',
+    'dateiname',
+    'fileName',
+    'file_name',
+    'name',
+    'title',
+  ])
+  const mimeType = pickStr(x, [
+    'mimeType',
+    'mime_type',
+    'mimetype',
+    'contentType',
+    'content_type',
+    'type',
+  ])
+  let dataBase64 = pickBase64Payload(x)
+  if (!dataBase64 && typeof x.binary === 'object' && x.binary !== null) {
+    const b = x.binary as Record<string, unknown>
+    dataBase64 = pickBase64Payload(b)
+  }
+  return { filename, mimeType, dataBase64 }
+}
+
+const ATTACHMENT_SHAPE_KEYS =
+  /^(filename|dateiname|fileName|dataBase64|data_base64|base64|data|content|mimeType|mimetype)$/i
+
+/**
+ * RTDB speichert Arrays manchmal als Objekt { "0": {...}, "1": {...} }.
+ * Einzelner Anhang oft als ein Objekt ohne Array.
+ */
+function coerceToAttachmentRecords(raw: unknown): Record<string, unknown>[] {
+  if (raw == null) return []
+  if (Array.isArray(raw)) {
+    return raw.filter((x) => x != null && typeof x === 'object') as Record<
+      string,
+      unknown
+    >[]
+  }
+  if (typeof raw === 'object' && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>
+    const keys = Object.keys(o)
+    if (
+      keys.some(
+        (k) => ATTACHMENT_SHAPE_KEYS.test(k) || k === 'mime_type' || k === 'content_type',
+      )
+    ) {
+      return [o]
+    }
+    const vals = Object.values(o).filter(
+      (v) => v != null && typeof v === 'object' && !Array.isArray(v),
+    ) as Record<string, unknown>[]
+    if (vals.length > 0) return vals
+  }
+  return []
+}
+
+function parseAttachmentsFromRaw(raw: unknown): EmailAttachment[] | undefined {
+  const records = coerceToAttachmentRecords(raw)
+  const list = records.map((x) => normalizeOneAttachment(x))
+  const withData = list.filter((a) => a.dataBase64.length > 0)
+  return withData.length > 0 ? withData : undefined
+}
+
+function firstDefinedAttachmentArray(
+  o: Record<string, unknown>,
+  keys: string[],
+): EmailAttachment[] | undefined {
+  for (const k of keys) {
+    const parsed = parseAttachmentsFromRaw(o[k])
+    if (parsed) return parsed
+  }
+  return undefined
 }
 
 /** Unterstützt n8n (deutsch) und ältere Webhook-Felder (englisch). */
@@ -47,7 +143,17 @@ export function normalizeEmailEntry(id: string, raw: unknown): EmailRow {
     typeof o.ingestedAt === 'number' ? o.ingestedAt : undefined
 
   const attachments =
-    parseAttachments(o.attachments) ?? parseAttachments(o.anhaenge)
+    firstDefinedAttachmentArray(o, [
+      'attachments',
+      'anhaenge',
+      'anhaenge_liste',
+      'attachment',
+      'dateianhang',
+      'dateianhaenge',
+      'files',
+      'files_list',
+    ]) ?? undefined
+
   const explicitHat = pickBool(o, ['hat_anhang', 'hasAttachment', 'hatAnhang'])
   const hasAttachment =
     explicitHat === true || Boolean(attachments && attachments.length > 0)

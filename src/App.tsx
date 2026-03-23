@@ -11,7 +11,7 @@ import {
   buildGeminiItems,
   requestGeminiSearch,
 } from './geminiSearch'
-import type { EmailRow } from './types'
+import type { EmailAttachment, EmailRow } from './types'
 import {
   addSavedFilter,
   loadSavedFilters,
@@ -546,6 +546,73 @@ function fromLineForRow(row: EmailRow): string {
     : row.sender || row.senderName || '—'
 }
 
+function attachmentHasPayload(row: EmailRow): boolean {
+  return Boolean(
+    row.attachments?.some((a) => (a.dataBase64?.trim?.() ?? '').length > 0),
+  )
+}
+
+/** Hinweis, wenn nur hat_anhang / hasAttachment gesetzt ist, aber keine Bytes in RTDB. */
+function AttachmentMissingDataHint({ row }: { row: EmailRow }) {
+  if (!row.hasAttachment || attachmentHasPayload(row)) return null
+  return (
+    <p className="muted small attachment-nodata">
+      <strong>Anhang markiert</strong>, aber es liegen keine Dateidaten in der
+      Datenbank. In n8n beim Schreiben nach Firebase ein Array{' '}
+      <code>anhaenge</code> oder <code>attachments</code> mitschicken: pro Datei
+      z. B. <code>filename</code>/<code>dateiname</code> und Base64 in{' '}
+      <code>dataBase64</code>, <code>data_base64</code> oder <code>data</code>.
+    </p>
+  )
+}
+
+function AttachmentList({
+  attachments,
+  idPrefix,
+  heading,
+  titleTag: TitleTag = 'h4',
+}: {
+  attachments: EmailAttachment[]
+  idPrefix: string
+  heading: string
+  titleTag?: 'h3' | 'h4'
+}) {
+  if (!attachments.length) return null
+  return (
+    <div className="atts thread-atts">
+      <TitleTag className="attachment-list-title">{heading}</TitleTag>
+      <ul className="attachment-list">
+        {attachments.map((a, i) => {
+          const mime = (a.mimeType || 'application/octet-stream').trim()
+          const name = (a.filename || 'Anhang').trim() || 'Anhang'
+          const href = `data:${mime};base64,${a.dataBase64}`
+          const approxKb = Math.round((a.dataBase64.length * 3) / 4 / 1024)
+          return (
+            <li key={`${idPrefix}-${name}-${i}`}>
+              <span className="attachment-meta">
+                <strong>{name}</strong>{' '}
+                <span className="muted">({mime})</span>
+                {approxKb > 0 ? (
+                  <span className="muted small"> · ca. {approxKb} KB</span>
+                ) : null}
+              </span>
+              <div className="attachment-actions">
+                <a
+                  className="attachment-download"
+                  href={href}
+                  download={name}
+                >
+                  Herunterladen
+                </a>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
 function EmailCard({
   thread,
   onReply,
@@ -646,20 +713,13 @@ function EmailCard({
                       <pre className="body thread-body">
                         {r.originalBody || '—'}
                       </pre>
-                      {r.attachments && r.attachments.length > 0 ? (
-                        <div className="atts thread-atts">
-                          <h4>Anhänge (Base64)</h4>
-                          <ul>
-                            {r.attachments.map((a, i) => (
-                              <li key={`${r.id}-${a.filename}-${i}`}>
-                                <strong>{a.filename || 'Datei'}</strong>{' '}
-                                <span className="muted">({a.mimeType})</span>{' '}
-                                — {a.dataBase64.length} Zeichen
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
+                      <AttachmentMissingDataHint row={r} />
+                      <AttachmentList
+                        attachments={r.attachments ?? []}
+                        idPrefix={r.id}
+                        heading="Anhänge"
+                        titleTag="h4"
+                      />
                     </li>
                   )
                 })}
@@ -669,20 +729,13 @@ function EmailCard({
             <>
               <h3>Originaltext</h3>
               <pre className="body">{head.originalBody || '—'}</pre>
-              {head.attachments && head.attachments.length > 0 ? (
-                <div className="atts">
-                  <h3>Anhänge (Base64)</h3>
-                  <ul>
-                    {head.attachments.map((a, i) => (
-                      <li key={`${a.filename}-${i}`}>
-                        <strong>{a.filename || 'Datei'}</strong>{' '}
-                        <span className="muted">({a.mimeType})</span> —{' '}
-                        {a.dataBase64.length} Zeichen
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
+              <AttachmentMissingDataHint row={head} />
+              <AttachmentList
+                attachments={head.attachments ?? []}
+                idPrefix={head.id}
+                heading="Anhänge"
+                titleTag="h3"
+              />
             </>
           )}
         </div>
