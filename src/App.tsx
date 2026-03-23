@@ -19,6 +19,14 @@ import {
   type SavedFilter,
 } from './savedFilters'
 import { SendMailModal, type ComposeState } from './SendMailModal'
+import {
+  allThreadKeys,
+  buildThreadsForKeys,
+  orderThreadsByGeminiRank,
+  subjectThreadKey,
+  threadKeysMatchingQuery,
+  type EmailThread,
+} from './threading'
 import './App.css'
 
 function norm(s: string) {
@@ -108,37 +116,31 @@ export default function App() {
     setSavedFilters(loadSavedFilters(user.uid))
   }, [user])
 
-  const filtered = useMemo(() => {
+  /** Unterhaltungen (nach Betreff / Re:/Fwd:/AW: zusammengefasst) */
+  const displayThreads = useMemo(() => {
+    if (searchMode === 'gemini') {
+      if (geminiOrderedIds === null) {
+        return buildThreadsForKeys(rows, allThreadKeys(rows))
+      }
+      if (geminiOrderedIds.length === 0) return []
+      const map = new Map(rows.map((r) => [r.id, r]))
+      const keys = new Set<string>()
+      for (const id of geminiOrderedIds) {
+        const r = map.get(id)
+        if (r) keys.add(subjectThreadKey(r.subject, r.id))
+      }
+      const threads = buildThreadsForKeys(rows, keys)
+      return orderThreadsByGeminiRank(threads, geminiOrderedIds)
+    }
     const q = norm(query.trim())
-    if (!q) return rows
-    const parts = q.split(/\s+/).filter(Boolean)
-    return rows.filter((r) => {
-      const hay = norm(
-        [
-          r.subject,
-          r.sender,
-          r.senderName,
-          r.category,
-          r.summary,
-          r.originalBody,
-          r.status,
-          r.priority,
-        ]
-          .filter(Boolean)
-          .join(' '),
-      )
-      return parts.every((p) => hay.includes(p))
-    })
-  }, [rows, query])
+    const keys = threadKeysMatchingQuery(rows, q, norm)
+    return buildThreadsForKeys(rows, keys)
+  }, [searchMode, rows, query, geminiOrderedIds])
 
-  const displayRows = useMemo(() => {
-    if (searchMode === 'keywords') return filtered
-    if (geminiOrderedIds === null) return rows
-    const map = new Map(rows.map((r) => [r.id, r]))
-    return geminiOrderedIds
-      .map((id) => map.get(id))
-      .filter((r): r is EmailRow => Boolean(r))
-  }, [searchMode, filtered, rows, geminiOrderedIds])
+  const threadListTotalMessages = useMemo(
+    () => displayThreads.reduce((n, t) => n + t.membersAsc.length, 0),
+    [displayThreads],
+  )
 
   async function runGeminiSearch(searchQuery?: string) {
     if (!user) return
@@ -455,28 +457,45 @@ export default function App() {
             <strong>Security Rules</strong> und ob der Pfad stimmt.
           </p>
         ) : null}
-        <span className="muted">{displayRows.length} Einträge</span>
+        <span className="muted">
+          {displayThreads.length} Unterhaltung
+          {displayThreads.length === 1 ? '' : 'en'}
+          {threadListTotalMessages > displayThreads.length
+            ? ` · ${threadListTotalMessages} Nachrichten`
+            : null}
+        </span>
       </section>
 
       <ul className="list">
-        {displayRows.map((r) => (
-          <li key={r.id}>
-            <EmailCard
-              row={r}
-              onReply={() => setCompose({ mode: 'reply', row: r })}
-              onForward={() => setCompose({ mode: 'forward', row: r })}
-            />
-          </li>
-        ))}
+        {displayThreads.map((thread) => {
+          const head = thread.membersDesc[0]
+          const liKey = thread.membersDesc
+            .map((r) => r.id)
+            .sort()
+            .join('|')
+          return (
+            <li key={liKey}>
+              <EmailCard
+                thread={thread}
+                onReply={() =>
+                  setCompose({ mode: 'reply', row: head })
+                }
+                onForward={() =>
+                  setCompose({ mode: 'forward', row: head })
+                }
+              />
+            </li>
+          )
+        })}
       </ul>
 
-      {displayRows.length === 0 && !rtdbListenError ? (
+      {displayThreads.length === 0 && !rtdbListenError ? (
         <div className="empty-block muted">
           {searchMode === 'gemini' && geminiOrderedIds?.length === 0 ? (
             <p>Keine Treffer laut KI.</p>
           ) : rows.length > 0 &&
-            (searchMode !== 'gemini' || geminiOrderedIds !== null) &&
-            (searchMode === 'gemini' || query.trim()) ? (
+            ((searchMode === 'gemini' && geminiOrderedIds !== null) ||
+              (searchMode === 'keywords' && query.trim())) ? (
             <p>Keine Treffer mit der aktuellen Suche.</p>
           ) : rows.length === 0 ? (
             <>
@@ -521,40 +540,50 @@ export default function App() {
   )
 }
 
+function fromLineForRow(row: EmailRow): string {
+  return row.senderName && row.sender
+    ? `${row.senderName} <${row.sender}>`
+    : row.sender || row.senderName || '—'
+}
+
 function EmailCard({
-  row,
+  thread,
   onReply,
   onForward,
 }: {
-  row: EmailRow
+  thread: EmailThread
   onReply: () => void
   onForward: () => void
 }) {
   const [open, setOpen] = useState(false)
-  const attCount = row.attachments?.length ?? 0
-  const fromLine =
-    row.senderName && row.sender
-      ? `${row.senderName} <${row.sender}>`
-      : row.sender || row.senderName || '—'
+  const head = thread.membersDesc[0]
+  const attCountHead = head.attachments?.length ?? 0
+  const fromLine = fromLineForRow(head)
+  const multi = thread.membersAsc.length > 1
 
   return (
     <article className="card email">
       <div className="email-head">
         <div>
-          <h2>{row.subject || '(Ohne Betreff)'}</h2>
+          <h2>{head.subject || '(Ohne Betreff)'}</h2>
           <p className="meta">
             <span>{fromLine}</span>
-            <span className="pill">{row.category || '—'}</span>
-            {row.priority ? (
-              <span className="pill pill-prio">{row.priority}</span>
+            {multi ? (
+              <span className="pill pill-thread" title="Zusammengehörige Nachrichten">
+                {thread.membersAsc.length} im Verlauf
+              </span>
             ) : null}
-            <span className={`status status-${norm(row.status)}`}>
-              {row.status}
+            <span className="pill">{head.category || '—'}</span>
+            {head.priority ? (
+              <span className="pill pill-prio">{head.priority}</span>
+            ) : null}
+            <span className={`status status-${norm(head.status)}`}>
+              {head.status}
             </span>
-            {row.hasAttachment ? (
+            {head.hasAttachment ? (
               <span className="muted">
-                {attCount > 0
-                  ? `${attCount} Anhang/Anhänge`
+                {attCountHead > 0
+                  ? `${attCountHead} Anhang/Anhänge`
                   : 'Mit Anhang'}
               </span>
             ) : null}
@@ -576,28 +605,86 @@ function EmailCard({
           </button>
         </div>
       </div>
-      <p className="summary">{row.summary || '—'}</p>
+      <p className="summary">{head.summary || '—'}</p>
       <p className="muted small">
-        Empfangen: {row.receivedAt || '—'}
+        Zuletzt: {head.receivedAt || '—'}
+        {multi ? (
+          <>
+            {' '}
+            · älteste: {thread.membersAsc[0]?.receivedAt || '—'}
+          </>
+        ) : null}
       </p>
       {open ? (
         <div className="body-block">
-          <h3>Originaltext</h3>
-          <pre className="body">{row.originalBody || '—'}</pre>
-          {row.attachments && row.attachments.length > 0 ? (
-            <div className="atts">
-              <h3>Anhänge (Base64)</h3>
-              <ul>
-                {row.attachments.map((a, i) => (
-                  <li key={`${a.filename}-${i}`}>
-                    <strong>{a.filename || 'Datei'}</strong>{' '}
-                    <span className="muted">({a.mimeType})</span> —{' '}
-                    {a.dataBase64.length} Zeichen
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+          {multi ? (
+            <>
+              <h3>Verlauf ({thread.membersAsc.length} Nachrichten)</h3>
+              <p className="muted small thread-hint">
+                Zusammengefasst nach gleichem Kernthema im Betreff (ohne Re:/Fwd:/AW:
+                usw.).
+              </p>
+              <ol className="thread-timeline">
+                {thread.membersAsc.map((r) => {
+                  const fl = fromLineForRow(r)
+                  return (
+                    <li key={r.id} className="thread-msg">
+                      <div className="thread-msg-head">
+                        <strong>{fl}</strong>
+                        <span className="muted small">
+                          {r.receivedAt || '—'}
+                        </span>
+                      </div>
+                      {r.subject && r.subject !== head.subject ? (
+                        <p className="thread-msg-subject muted small">
+                          {r.subject}
+                        </p>
+                      ) : null}
+                      {r.summary ? (
+                        <p className="thread-msg-summary small">{r.summary}</p>
+                      ) : null}
+                      <pre className="body thread-body">
+                        {r.originalBody || '—'}
+                      </pre>
+                      {r.attachments && r.attachments.length > 0 ? (
+                        <div className="atts thread-atts">
+                          <h4>Anhänge (Base64)</h4>
+                          <ul>
+                            {r.attachments.map((a, i) => (
+                              <li key={`${r.id}-${a.filename}-${i}`}>
+                                <strong>{a.filename || 'Datei'}</strong>{' '}
+                                <span className="muted">({a.mimeType})</span>{' '}
+                                — {a.dataBase64.length} Zeichen
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </li>
+                  )
+                })}
+              </ol>
+            </>
+          ) : (
+            <>
+              <h3>Originaltext</h3>
+              <pre className="body">{head.originalBody || '—'}</pre>
+              {head.attachments && head.attachments.length > 0 ? (
+                <div className="atts">
+                  <h3>Anhänge (Base64)</h3>
+                  <ul>
+                    {head.attachments.map((a, i) => (
+                      <li key={`${a.filename}-${i}`}>
+                        <strong>{a.filename || 'Datei'}</strong>{' '}
+                        <span className="muted">({a.mimeType})</span> —{' '}
+                        {a.dataBase64.length} Zeichen
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
       ) : null}
     </article>
