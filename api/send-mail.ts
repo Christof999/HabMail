@@ -1,35 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createRequire } from 'node:module'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { requireFirebaseAuth } from './lib/firebaseVerify'
-
-type NodemailerCreateTransport = typeof import('nodemailer').createTransport
-
-/**
- * Kein top-level import von nodemailer: Vercel kann das Paket fehlerhaft bündeln
- * → FUNCTION_INVOCATION_FAILED. Laden per require aus node_modules zur Laufzeit.
- */
-function getNodemailerCreateTransport(): NodemailerCreateTransport {
-  const candidates = [
-    join(process.cwd(), 'package.json'),
-    fileURLToPath(import.meta.url),
-  ]
-  let lastErr: unknown
-  for (const filename of candidates) {
-    try {
-      const req = createRequire(filename)
-      const nm = req('nodemailer') as typeof import('nodemailer')
-      if (typeof nm.createTransport === 'function') {
-        return nm.createTransport as NodemailerCreateTransport
-      }
-    } catch (e) {
-      lastErr = e
-    }
-  }
-  const msg = lastErr instanceof Error ? lastErr.message : String(lastErr)
-  throw new Error(`nodemailer_load_failed: ${msg}`)
-}
+import { sendPlainMailSmtp } from './lib/smtpSendPlain'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MAX_SUBJECT = 500
@@ -125,10 +96,8 @@ export default async function handler(
     const user = process.env.SMTP_USER?.trim()
     const pass = process.env.SMTP_PASS?.trim()
     const port = parseInt(process.env.SMTP_PORT?.trim() || '587', 10)
-    const secure =
-      process.env.SMTP_SECURE === '1' ||
-      process.env.SMTP_SECURE === 'true' ||
-      port === 465
+    /** Nur Port 465 = TLS sofort; 587 = STARTTLS nach EHLO */
+    const implicitTls = port === 465
     const fromAddr =
       process.env.SMTP_FROM?.trim() || process.env.SMTP_USER?.trim() || ''
 
@@ -186,33 +155,21 @@ export default async function handler(
 
     const text = buildPlainBody(kind, bodyUser, ctx)
 
-    const createTransport = getNodemailerCreateTransport()
-    const transporter = createTransport({
-      host,
-      port,
-      secure,
-      auth: { user, pass },
-      connectionTimeout: 25_000,
-      greetingTimeout: 25_000,
-      // IONOS & viele Provider: Port 587 = STARTTLS
-      ...(secure
-        ? {}
-        : {
-            requireTLS: true,
-            tls: { minVersion: 'TLSv1.2' as const },
-          }),
-    })
-
     try {
-      await transporter.sendMail({
-        from: fromAddr,
-        to: recipients.join(', '),
-        subject,
-        text,
+      await sendPlainMailSmtp({
+        host,
+        port,
+        implicitTls,
+        user,
+        pass,
+        fromHeader: fromAddr,
         replyTo: fromAddr,
+        recipients,
+        subject,
+        textBody: text,
       })
     } catch (e) {
-      console.error('nodemailer_send', e)
+      console.error('smtp_send', e)
       const msg = e instanceof Error ? e.message : String(e)
       return res.status(502).json({
         error: 'smtp_send_failed',

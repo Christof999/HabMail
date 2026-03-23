@@ -4,8 +4,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/send-mail.ts": {
-      "maxDuration": 60,
-      "includeFiles": "node_modules/nodemailer/**"
+      "maxDuration": 60
     }
   }
 }
