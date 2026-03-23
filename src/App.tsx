@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type DragEvent,
+  type FormEvent,
+  type SetStateAction,
+} from 'react'
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -25,6 +33,7 @@ import {
   flattenFolderOptions,
   parseMailFoldersTree,
   rtdbEmailFieldPath,
+  rtdbEmailRecordPath,
   type FolderTreeNode,
   type MailFolder,
 } from './mailFolders'
@@ -58,12 +67,76 @@ function emailsRefPath(): string {
 
 const EMAILS_PATH = emailsRefPath()
 
+/** dataTransfer-Typ + JSON-Payload für Thread-Verschieben per Drag and Drop */
+const HABMAIL_THREAD_DRAG_MIME = 'application/x-habmail-thread'
+
+const MAIL_DROP_INBOX = '__habmail_inbox__'
+
+type HabmailThreadDragPayload = { habmailThread: true; memberIds: string[] }
+
+function stringifyThreadDragPayload(memberIds: string[]): string {
+  const p: HabmailThreadDragPayload = { habmailThread: true, memberIds }
+  return JSON.stringify(p)
+}
+
+function parseThreadDragPayload(raw: string): string[] | null {
+  try {
+    const o = JSON.parse(raw) as HabmailThreadDragPayload
+    if (!o || o.habmailThread !== true || !Array.isArray(o.memberIds)) {
+      return null
+    }
+    return o.memberIds.filter((id) => typeof id === 'string' && id.length > 0)
+  } catch {
+    return null
+  }
+}
+
+function dragEventHasHabmailThread(e: DragEvent): boolean {
+  const types = e.dataTransfer.types
+  if (types.includes(HABMAIL_THREAD_DRAG_MIME)) return true
+  if (
+    types.includes('text/plain') &&
+    (e.dataTransfer.effectAllowed === 'move' ||
+      e.dataTransfer.effectAllowed === 'copyMove')
+  ) {
+    return true
+  }
+  return false
+}
+
+function threadFromDragMemberIds(
+  allRows: EmailRow[],
+  memberIds: string[],
+): EmailThread | null {
+  if (!memberIds.length) return null
+  const idSet = new Set(memberIds)
+  const first = allRows.find((r) => idSet.has(r.id))
+  if (!first) return null
+  const key = subjectThreadKey(first.subject, first.id)
+  const threads = buildThreadsForKeys(allRows, new Set([key]))
+  return threads[0] ?? null
+}
+
+function folderRowMailDragLeave(
+  e: DragEvent,
+  folderId: string,
+  setHighlight: Dispatch<SetStateAction<string | null>>,
+) {
+  const rel = e.relatedTarget as Node | null
+  if (rel && e.currentTarget.contains(rel)) return
+  setHighlight((h) => (h === folderId ? null : h))
+}
+
 function FolderTreeNav({
   nodes,
   selectedId,
   onSelect,
   onRequestRename,
   onRequestDelete,
+  mailDropHighlightId,
+  onMailDragOverFolder,
+  onMailDragLeaveFolder,
+  onMailDropOnFolder,
   depth = 0,
 }: {
   nodes: FolderTreeNode[]
@@ -71,6 +144,10 @@ function FolderTreeNav({
   onSelect: (id: string) => void
   onRequestRename: (node: FolderTreeNode) => void
   onRequestDelete: (node: FolderTreeNode) => void
+  mailDropHighlightId: string | null
+  onMailDragOverFolder: (e: DragEvent, folderId: string) => void
+  onMailDragLeaveFolder: (e: DragEvent, folderId: string) => void
+  onMailDropOnFolder: (e: DragEvent, folderId: string) => void
   depth?: number
 }) {
   if (!nodes.length) return null
@@ -79,8 +156,11 @@ function FolderTreeNav({
       {nodes.map((n) => (
         <li key={n.id}>
           <div
-            className="folder-row"
+            className={`folder-row${mailDropHighlightId === n.id ? ' folder-row--mail-drop-active' : ''}`}
             style={{ paddingLeft: `${10 + depth * 12}px` }}
+            onDragOver={(e) => onMailDragOverFolder(e, n.id)}
+            onDragLeave={(e) => onMailDragLeaveFolder(e, n.id)}
+            onDrop={(e) => onMailDropOnFolder(e, n.id)}
           >
             <button
               type="button"
@@ -127,6 +207,10 @@ function FolderTreeNav({
               onSelect={onSelect}
               onRequestRename={onRequestRename}
               onRequestDelete={onRequestDelete}
+              mailDropHighlightId={mailDropHighlightId}
+              onMailDragOverFolder={onMailDragOverFolder}
+              onMailDragLeaveFolder={onMailDragLeaveFolder}
+              onMailDropOnFolder={onMailDropOnFolder}
               depth={depth + 1}
             />
           ) : null}
@@ -181,6 +265,12 @@ export default function App() {
     name: string
   } | null>(null)
   const [folderOpsBusy, setFolderOpsBusy] = useState(false)
+  const [threadDeleteTarget, setThreadDeleteTarget] =
+    useState<EmailThread | null>(null)
+  const [deleteThreadBusy, setDeleteThreadBusy] = useState(false)
+  const [mailDropHighlightId, setMailDropHighlightId] = useState<
+    string | null
+  >(null)
 
   useEffect(() => {
     try {
@@ -329,6 +419,54 @@ export default function App() {
     }
   }
 
+  function handleMailDragOverFolder(e: DragEvent, folderId: string) {
+    if (!dragEventHasHabmailThread(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setMailDropHighlightId(folderId)
+  }
+
+  function handleMailDragOverInbox(e: DragEvent) {
+    if (!dragEventHasHabmailThread(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setMailDropHighlightId(MAIL_DROP_INBOX)
+  }
+
+  function handleMailDragLeaveInbox(e: DragEvent) {
+    folderRowMailDragLeave(e, MAIL_DROP_INBOX, setMailDropHighlightId)
+  }
+
+  function handleMailDragLeaveFolder(e: DragEvent, folderId: string) {
+    folderRowMailDragLeave(e, folderId, setMailDropHighlightId)
+  }
+
+  function readThreadDragPayload(e: DragEvent): string[] | null {
+    let raw = e.dataTransfer.getData(HABMAIL_THREAD_DRAG_MIME)
+    if (!raw) raw = e.dataTransfer.getData('text/plain')
+    return parseThreadDragPayload(raw)
+  }
+
+  function handleMailDropOnFolder(e: DragEvent, folderId: string) {
+    e.preventDefault()
+    setMailDropHighlightId(null)
+    const memberIds = readThreadDragPayload(e)
+    if (!memberIds?.length) return
+    const thread = threadFromDragMemberIds(rows, memberIds)
+    if (!thread) return
+    void moveThreadToFolder(thread, folderId)
+  }
+
+  function handleMailDropOnInbox(e: DragEvent) {
+    e.preventDefault()
+    setMailDropHighlightId(null)
+    const memberIds = readThreadDragPayload(e)
+    if (!memberIds?.length) return
+    const thread = threadFromDragMemberIds(rows, memberIds)
+    if (!thread) return
+    void moveThreadToFolder(thread, null)
+  }
+
   async function moveThreadToFolder(
     thread: EmailThread,
     targetFolderId: string | null,
@@ -397,6 +535,27 @@ export default function App() {
       )
     } finally {
       setFolderOpsBusy(false)
+    }
+  }
+
+  async function deleteThreadFromDb(thread: EmailThread) {
+    if (!user) return
+    setFolderActionError(null)
+    setDeleteThreadBusy(true)
+    const db = getFirebaseDb()
+    const updates: Record<string, unknown> = {}
+    for (const r of thread.membersAsc) {
+      updates[rtdbEmailRecordPath(EMAILS_PATH, r.id)] = null
+    }
+    try {
+      await update(ref(db), updates)
+      setThreadDeleteTarget(null)
+    } catch (e) {
+      setFolderActionError(
+        e instanceof Error ? e.message : 'Löschen fehlgeschlagen',
+      )
+    } finally {
+      setDeleteThreadBusy(false)
     }
   }
 
@@ -624,15 +783,27 @@ export default function App() {
               die Liste ist nicht nach Ordner gefiltert.
             </p>
           ) : null}
+          <p className="muted small folder-dnd-hint">
+            Unterhaltung am <strong>linken Griff</strong> der Karte ziehen und
+            auf <strong>Posteingang</strong> oder einen Ordner fallen lassen.
+          </p>
           <nav className="folder-nav">
             <button
               type="button"
-              className={
+              className={[
                 selectedFolderId === null
                   ? 'folder-item folder-item-root active'
-                  : 'folder-item folder-item-root'
-              }
+                  : 'folder-item folder-item-root',
+                mailDropHighlightId === MAIL_DROP_INBOX
+                  ? 'folder-item--mail-drop-active'
+                  : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
               onClick={() => setSelectedFolderId(null)}
+              onDragOver={handleMailDragOverInbox}
+              onDragLeave={handleMailDragLeaveInbox}
+              onDrop={handleMailDropOnInbox}
             >
               Posteingang
             </button>
@@ -649,6 +820,10 @@ export default function App() {
                 setFolderActionError(null)
                 setDeleteFolderTarget({ id: node.id, name: node.name })
               }}
+              mailDropHighlightId={mailDropHighlightId}
+              onMailDragOverFolder={handleMailDragOverFolder}
+              onMailDragLeaveFolder={handleMailDragLeaveFolder}
+              onMailDropOnFolder={handleMailDropOnFolder}
             />
           </nav>
         </aside>
@@ -834,8 +1009,31 @@ export default function App() {
             .sort()
             .join('|')
           const unread = head.userRead !== true
+          const dragPayload = stringifyThreadDragPayload(
+            thread.membersAsc.map((r) => r.id),
+          )
           return (
-            <li key={liKey}>
+            <li key={liKey} className="list-item-email">
+              <div
+                className="email-drag-handle"
+                draggable={moveBusyKey !== liKey}
+                title="Zum Ordner ziehen"
+                aria-label="Unterhaltung zum Ordner ziehen (Drag and Drop)"
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = 'move'
+                  e.dataTransfer.setData(
+                    HABMAIL_THREAD_DRAG_MIME,
+                    dragPayload,
+                  )
+                  e.dataTransfer.setData('text/plain', dragPayload)
+                  setMailDropHighlightId(null)
+                }}
+                onDragEnd={() => setMailDropHighlightId(null)}
+              >
+                <span className="email-drag-grip" aria-hidden>
+                  ⋮⋮
+                </span>
+              </div>
               <EmailCard
                 thread={thread}
                 unread={unread}
@@ -844,6 +1042,10 @@ export default function App() {
                 onMarkInteracted={() => void markThreadRead(thread)}
                 onMarkUnread={() => void markThreadUnread(thread)}
                 onMoveTo={(folderId) => void moveThreadToFolder(thread, folderId)}
+                onRequestDelete={() => {
+                  setFolderActionError(null)
+                  setThreadDeleteTarget(thread)
+                }}
                 onReply={() =>
                   setCompose({ mode: 'reply', row: head })
                 }
@@ -956,6 +1158,53 @@ export default function App() {
                 }
               >
                 Speichern
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {threadDeleteTarget ? (
+        <div
+          className="modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-thread-title"
+          onClick={() => !deleteThreadBusy && setThreadDeleteTarget(null)}
+        >
+          <div
+            className="modal card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="delete-thread-title">Unterhaltung löschen?</h3>
+            <p className="muted small">
+              <strong>
+                {threadDeleteTarget.membersDesc[0].subject || '(Ohne Betreff)'}
+              </strong>{' '}
+              —{' '}
+              {threadDeleteTarget.membersAsc.length === 1
+                ? 'Diese Nachricht wird'
+                : `Alle ${threadDeleteTarget.membersAsc.length} Nachrichten in diesem Verlauf werden`}{' '}
+              dauerhaft aus der Datenbank entfernt.
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="ghost"
+                disabled={deleteThreadBusy}
+                onClick={() => setThreadDeleteTarget(null)}
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                className="btn-danger"
+                disabled={deleteThreadBusy}
+                onClick={() =>
+                  void deleteThreadFromDb(threadDeleteTarget)
+                }
+              >
+                Löschen
               </button>
             </div>
           </div>
@@ -1162,6 +1411,7 @@ function EmailCard({
   onMarkInteracted,
   onMarkUnread,
   onMoveTo,
+  onRequestDelete,
   onReply,
   onForward,
 }: {
@@ -1172,6 +1422,7 @@ function EmailCard({
   onMarkInteracted: () => void
   onMarkUnread: () => void
   onMoveTo: (folderId: string | null) => void
+  onRequestDelete: () => void
   onReply: () => void
   onForward: () => void
 }) {
@@ -1277,6 +1528,14 @@ function EmailCard({
             onClick={() => onMarkUnread()}
           >
             Ungelesen
+          </button>
+          <button
+            type="button"
+            className="ghost small-btn email-delete-btn"
+            title="Aus der Datenbank entfernen"
+            onClick={() => onRequestDelete()}
+          >
+            Löschen
           </button>
         </div>
       </div>

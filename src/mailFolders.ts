@@ -9,6 +9,16 @@ export function rtdbEmailFieldPath(
     : `${emailId}/${field}`
 }
 
+/** Ganzer E-Mail-Datensatz (Knoten löschen mit update(..., null)) */
+export function rtdbEmailRecordPath(
+  emailsPathTrimmed: string,
+  emailId: string,
+): string {
+  return emailsPathTrimmed
+    ? `${emailsPathTrimmed}/${emailId}`
+    : emailId
+}
+
 export type MailFolder = {
   id: string
   name: string

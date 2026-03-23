@@ -10,6 +10,7 @@
     "emails": {
       "$emailId": {
         ".read": "auth != null",
+        ".write": "auth != null && !newData.exists()",
         "folderId": {
           ".write": "auth != null",
           ".validate": "!newData.exists() || newData.isString() || newData.val() == null"
@@ -22,6 +23,7 @@
     },
     "$entryId": {
       ".read": "auth != null",
+      ".write": "auth != null && !newData.exists()",
       "folderId": {
         ".write": "auth != null",
         ".validate": "!newData.exists() || newData.isString() || newData.val() == null"

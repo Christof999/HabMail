@@ -51,6 +51,22 @@
   line-height: 1.35;
 }
 
+.folder-dnd-hint {
+  margin: 0 0 0.65rem;
+  line-height: 1.35;
+}
+
+.folder-item--mail-drop-active,
+.folder-row--mail-drop-active {
+  outline: 2px dashed var(--accent);
+  outline-offset: 1px;
+  background: var(--pill-bg);
+}
+
+.folder-row--mail-drop-active {
+  border-radius: 8px;
+}
+
 .folder-nav {
   display: flex;
   flex-direction: column;
@@ -144,6 +160,10 @@
 
 .btn-danger:hover {
   filter: brightness(1.05);
+}
+
+.email-delete-btn:hover {
+  color: var(--danger);
 }
 
 .app-main {
@@ -460,6 +480,49 @@ button.chip:hover {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.list-item-email {
+  display: flex;
+  align-items: stretch;
+  gap: 0.45rem;
+}
+
+.list-item-email .card.email {
+  flex: 1;
+  min-width: 0;
+}
+
+.email-drag-handle {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  min-height: 3.25rem;
+  align-self: stretch;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--pill-bg);
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.email-drag-handle:active {
+  cursor: grabbing;
+}
+
+.email-drag-handle[draggable='false'] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.email-drag-grip {
+  font-size: 0.65rem;
+  line-height: 1;
+  letter-spacing: -0.12em;
 }
 
 .empty {
