@@ -12,6 +12,13 @@ import {
   requestGeminiSearch,
 } from './geminiSearch'
 import type { EmailRow } from './types'
+import {
+  addSavedFilter,
+  loadSavedFilters,
+  removeSavedFilter,
+  type SavedFilter,
+} from './savedFilters'
+import { SendMailModal, type ComposeState } from './SendMailModal'
 import './App.css'
 
 function norm(s: string) {
@@ -53,6 +60,11 @@ export default function App() {
   const [geminiLoading, setGeminiLoading] = useState(false)
   const [geminiError, setGeminiError] = useState<string | null>(null)
   const [rtdbListenError, setRtdbListenError] = useState<string | null>(null)
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([])
+  const [showSaveFilterForm, setShowSaveFilterForm] = useState(false)
+  const [saveFilterName, setSaveFilterName] = useState('')
+  const [filterFeedback, setFilterFeedback] = useState<string | null>(null)
+  const [compose, setCompose] = useState<ComposeState | null>(null)
 
   useEffect(() => {
     try {
@@ -88,6 +100,14 @@ export default function App() {
     )
   }, [user, configError])
 
+  useEffect(() => {
+    if (!user) {
+      setSavedFilters([])
+      return
+    }
+    setSavedFilters(loadSavedFilters(user.uid))
+  }, [user])
+
   const filtered = useMemo(() => {
     const q = norm(query.trim())
     if (!q) return rows
@@ -120,9 +140,9 @@ export default function App() {
       .filter((r): r is EmailRow => Boolean(r))
   }, [searchMode, filtered, rows, geminiOrderedIds])
 
-  async function runGeminiSearch() {
+  async function runGeminiSearch(searchQuery?: string) {
     if (!user) return
-    const q = query.trim()
+    const q = (searchQuery ?? query).trim()
     if (!q) return
     setGeminiLoading(true)
     setGeminiError(null)
@@ -143,6 +163,40 @@ export default function App() {
     } finally {
       setGeminiLoading(false)
     }
+  }
+
+  function saveCurrentFilter() {
+    if (!user || !query.trim()) return
+    const name =
+      saveFilterName.trim() || query.trim().slice(0, 56) || 'Filter'
+    const next = addSavedFilter(user.uid, savedFilters, {
+      name,
+      query: query.trim(),
+      mode: searchMode,
+    })
+    setSavedFilters(next)
+    setSaveFilterName('')
+    setShowSaveFilterForm(false)
+    setFilterFeedback('Gespeichert.')
+    window.setTimeout(() => setFilterFeedback(null), 2200)
+  }
+
+  function deleteSavedFilter(id: string) {
+    if (!user) return
+    setSavedFilters(removeSavedFilter(user.uid, savedFilters, id))
+  }
+
+  async function applySavedFilter(f: SavedFilter) {
+    setGeminiError(null)
+    setQuery(f.query)
+    if (f.mode === 'keywords') {
+      setSearchMode('keywords')
+      setGeminiOrderedIds(null)
+      return
+    }
+    setSearchMode('gemini')
+    setGeminiOrderedIds(null)
+    await runGeminiSearch(f.query)
   }
 
   function setModeKeywords() {
@@ -308,6 +362,83 @@ export default function App() {
             </button>
           ) : null}
         </div>
+
+        <div className="saved-filters-block">
+          <div className="saved-filters-actions">
+            <button
+              type="button"
+              className="ghost small-btn"
+              onClick={() => setShowSaveFilterForm((v) => !v)}
+            >
+              {showSaveFilterForm ? 'Abbrechen' : 'Filter speichern'}
+            </button>
+            {filterFeedback ? (
+              <span className="muted small">{filterFeedback}</span>
+            ) : null}
+          </div>
+          {showSaveFilterForm ? (
+            <div className="save-filter-form card">
+              <label className="save-filter-label">
+                Name
+                <input
+                  type="text"
+                  value={saveFilterName}
+                  onChange={(e) => setSaveFilterName(e.target.value)}
+                  placeholder={query.trim().slice(0, 48) || 'Kurzer Name'}
+                  maxLength={80}
+                />
+              </label>
+              <p className="muted small save-filter-preview">
+                Übernimmt:{' '}
+                <strong>{searchMode === 'gemini' ? 'KI' : 'Stichworte'}</strong>{' '}
+                — „{query.trim().slice(0, 120)}
+                {query.trim().length > 120 ? '…' : ''}“
+              </p>
+              <button
+                type="button"
+                disabled={!query.trim()}
+                onClick={saveCurrentFilter}
+              >
+                Speichern
+              </button>
+            </div>
+          ) : null}
+          {savedFilters.length > 0 ? (
+            <div className="saved-filters-chips">
+              <span className="muted small chips-label">Gespeichert:</span>
+              <ul className="chips" aria-label="Gespeicherte Filter">
+                {savedFilters.map((f) => (
+                  <li key={f.id} className="chip-wrap">
+                    <button
+                      type="button"
+                      className="chip"
+                      title={`${f.mode === 'gemini' ? 'KI' : 'Stichworte'}: ${f.query}`}
+                      onClick={() => void applySavedFilter(f)}
+                    >
+                      <span className="chip-mode">
+                        {f.mode === 'gemini' ? 'KI' : 'SW'}
+                      </span>
+                      {f.name}
+                    </button>
+                    <button
+                      type="button"
+                      className="chip-remove"
+                      aria-label={`Filter ${f.name} löschen`}
+                      onClick={() => deleteSavedFilter(f.id)}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <p className="muted small saved-filters-note">
+            Gespeicherte Filter liegen nur in <strong>diesem Browser</strong> (pro
+            angemeldetem Nutzer).
+          </p>
+        </div>
+
         {searchMode === 'gemini' ? (
           <p className="muted gemini-hint">
             Es werden bis zu 50 der neuesten Mails an Gemini geschickt (ohne
@@ -330,7 +461,11 @@ export default function App() {
       <ul className="list">
         {displayRows.map((r) => (
           <li key={r.id}>
-            <EmailCard row={r} />
+            <EmailCard
+              row={r}
+              onReply={() => setCompose({ mode: 'reply', row: r })}
+              onForward={() => setCompose({ mode: 'forward', row: r })}
+            />
           </li>
         ))}
       </ul>
@@ -376,11 +511,25 @@ export default function App() {
           )}
         </div>
       ) : null}
+
+      <SendMailModal
+        compose={compose}
+        user={user}
+        onClose={() => setCompose(null)}
+      />
     </div>
   )
 }
 
-function EmailCard({ row }: { row: EmailRow }) {
+function EmailCard({
+  row,
+  onReply,
+  onForward,
+}: {
+  row: EmailRow
+  onReply: () => void
+  onForward: () => void
+}) {
   const [open, setOpen] = useState(false)
   const attCount = row.attachments?.length ?? 0
   const fromLine =
@@ -411,13 +560,21 @@ function EmailCard({ row }: { row: EmailRow }) {
             ) : null}
           </p>
         </div>
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => setOpen((o) => !o)}
-        >
-          {open ? 'Weniger' : 'Details'}
-        </button>
+        <div className="email-actions">
+          <button type="button" className="ghost small-btn" onClick={onReply}>
+            Antworten
+          </button>
+          <button type="button" className="ghost small-btn" onClick={onForward}>
+            Weiterleiten
+          </button>
+          <button
+            type="button"
+            className="ghost small-btn"
+            onClick={() => setOpen((o) => !o)}
+          >
+            {open ? 'Weniger' : 'Details'}
+          </button>
+        </div>
       </div>
       <p className="summary">{row.summary || '—'}</p>
       <p className="muted small">

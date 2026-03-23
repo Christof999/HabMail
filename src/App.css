@@ -105,6 +105,128 @@ h3 {
   margin: 0;
 }
 
+.saved-filters-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.saved-filters-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.small-btn {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.85rem;
+}
+
+.save-filter-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.85rem 1rem;
+}
+
+.save-filter-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.save-filter-label input {
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.save-filter-preview {
+  margin: 0;
+}
+
+.saved-filters-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.4rem 0.6rem;
+}
+
+.chips-label {
+  flex-shrink: 0;
+  line-height: 2;
+}
+
+ul.chips {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.chip-wrap {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+}
+
+button.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: 0.3rem 0.15rem 0.3rem 0.55rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+button.chip:hover {
+  background: var(--pre-bg);
+}
+
+.chip-mode {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  opacity: 0.9;
+}
+
+.chip-remove {
+  border: none;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  padding: 0 0.45rem;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chip-remove:hover {
+  color: var(--danger);
+  background: var(--pre-bg);
+}
+
+.saved-filters-note {
+  margin: 0;
+}
+
 .toolbar .search-row .search,
 .search {
   flex: 1;
@@ -211,6 +333,91 @@ button.ghost {
   gap: 0.75rem;
 }
 
+.email-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1.25rem;
+  overflow-y: auto;
+}
+
+.modal-dialog {
+  width: 100%;
+  max-width: 520px;
+  margin: 2rem auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.modal-head h2 {
+  margin: 0;
+  flex: 1;
+}
+
+.modal-close {
+  flex-shrink: 0;
+  padding: 0.25rem 0.55rem;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.send-mail-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.send-mail-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.send-mail-form input,
+.send-mail-form textarea {
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.send-mail-form textarea {
+  resize: vertical;
+  min-height: 6rem;
+}
+
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
+}
+
 .meta {
   display: flex;
   flex-wrap: wrap;
@@ -281,4 +488,18 @@ code {
   background: var(--pre-bg);
   padding: 0.1rem 0.3rem;
   border-radius: 4px;
+}
+
+/* Primär-Button-Styles nicht auf Filter-Chips anwenden */
+.saved-filters-block .chip-wrap button.chip,
+.saved-filters-block .chip-wrap .chip-remove {
+  background: transparent;
+  color: var(--text);
+  border-radius: 0;
+  padding: 0.3rem 0.15rem 0.3rem 0.55rem;
+}
+
+.saved-filters-block .chip-wrap .chip-remove {
+  padding: 0 0.45rem;
+  color: var(--muted);
 }
