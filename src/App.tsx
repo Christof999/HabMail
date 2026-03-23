@@ -1657,7 +1657,7 @@ function EmailCard({
         <div className="email-head-body">
           <h2>{head.subject || '(Ohne Betreff)'}</h2>
           <p className="meta">
-            <span>{fromLine}</span>
+            <span className="email-from-line">{fromLine}</span>
             {multi ? (
               <span className="pill pill-thread" title="Zusammengehörige Nachrichten">
                 {thread.membersAsc.length} im Verlauf
@@ -1757,7 +1757,7 @@ function EmailCard({
                   return (
                     <li key={r.id} className="thread-msg">
                       <div className="thread-msg-head">
-                        <strong>{fl}</strong>
+                        <strong className="email-from-line">{fl}</strong>
                         <span className="muted small">
                           {r.receivedAt || '—'}
                         </span>

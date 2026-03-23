@@ -824,6 +824,18 @@ button.ghost {
   margin: 0;
 }
 
+/* Lange Absenderzeilen (Name <email>) dürfen umbrechen und nicht aus Flex/Card ragen */
+.email-from-line {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.meta .email-from-line {
+  flex: 1 1 auto;
+}
+
 .pill {
   background: var(--pill-bg);
   color: var(--pill-fg);
@@ -875,6 +887,13 @@ button.ghost {
   gap: 0.35rem 0.75rem;
   margin-bottom: 0.5rem;
   font-size: 0.9rem;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.thread-msg-head .email-from-line {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .thread-msg-subject {
