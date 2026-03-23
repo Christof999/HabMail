@@ -271,6 +271,11 @@ export default function App() {
   const [mailDropHighlightId, setMailDropHighlightId] = useState<
     string | null
   >(null)
+  const [isCompactLayout, setIsCompactLayout] = useState(() => {
+    if (typeof globalThis.window === 'undefined') return false
+    return globalThis.window.matchMedia('(max-width: 767px)').matches
+  })
+  const [folderDrawerOpen, setFolderDrawerOpen] = useState(false)
 
   useEffect(() => {
     try {
@@ -327,6 +332,35 @@ export default function App() {
     }
     setSavedFilters(loadSavedFilters(user.uid))
   }, [user])
+
+  useEffect(() => {
+    const mq = globalThis.window.matchMedia('(max-width: 767px)')
+    const sync = () => setIsCompactLayout(mq.matches)
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+
+  useEffect(() => {
+    if (!isCompactLayout) setFolderDrawerOpen(false)
+  }, [isCompactLayout])
+
+  useEffect(() => {
+    if (!isCompactLayout || !folderDrawerOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFolderDrawerOpen(false)
+    }
+    globalThis.window.addEventListener('keydown', onKey)
+    return () => globalThis.window.removeEventListener('keydown', onKey)
+  }, [isCompactLayout, folderDrawerOpen])
+
+  useEffect(() => {
+    if (!isCompactLayout || !folderDrawerOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [isCompactLayout, folderDrawerOpen])
 
   const isSearchActive =
     query.trim().length > 0 ||
@@ -683,6 +717,11 @@ export default function App() {
     await signOut(auth)
   }
 
+  function selectFolder(folderId: string | null) {
+    setSelectedFolderId(folderId)
+    if (isCompactLayout) setFolderDrawerOpen(false)
+  }
+
   if (!authReady) {
     return (
       <div className="shell">
@@ -747,25 +786,32 @@ export default function App() {
     )
   }
 
-  return (
-    <div className="shell shell--wide">
-      <header className="bar">
-        <div>
-          <h1>HabMail</h1>
-          <p className="muted">
-            {user.email} · RTDB:{' '}
-            <code>{EMAILS_PATH || '(root)'}</code>
-          </p>
-        </div>
-        <button type="button" className="ghost" onClick={handleLogout}>
-          Abmelden
-        </button>
-      </header>
-
-      <div className="app-body">
-        <aside className="folder-sidebar" aria-label="Ordner">
+  const folderSidebar = (
+        <aside
+          id="folder-drawer"
+          className={[
+            'folder-sidebar',
+            isCompactLayout ? 'folder-sidebar--drawer' : '',
+            isCompactLayout && folderDrawerOpen ? 'is-open' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          aria-label="Ordner"
+          aria-hidden={isCompactLayout ? !folderDrawerOpen : undefined}
+        >
           <div className="folder-sidebar-head">
             <h2 className="folder-sidebar-title">Ordner</h2>
+            <div className="folder-sidebar-head-actions">
+              {isCompactLayout ? (
+                <button
+                  type="button"
+                  className="icon-btn folder-drawer-close"
+                  aria-label="Ordnerliste schließen"
+                  onClick={() => setFolderDrawerOpen(false)}
+                >
+                  ×
+                </button>
+              ) : null}
             <button
               type="button"
               className="ghost small-btn"
@@ -776,6 +822,7 @@ export default function App() {
             >
               + Ordner
             </button>
+            </div>
           </div>
           {isSearchActive ? (
             <p className="muted small folder-search-hint">
@@ -783,10 +830,16 @@ export default function App() {
               die Liste ist nicht nach Ordner gefiltert.
             </p>
           ) : null}
-          <p className="muted small folder-dnd-hint">
-            Unterhaltung am <strong>linken Griff</strong> der Karte ziehen und
-            auf <strong>Posteingang</strong> oder einen Ordner fallen lassen.
-          </p>
+          {!isCompactLayout ? (
+            <p className="muted small folder-dnd-hint">
+              Unterhaltung am <strong>linken Griff</strong> der Karte ziehen und
+              auf <strong>Posteingang</strong> oder einen Ordner fallen lassen.
+            </p>
+          ) : (
+            <p className="muted small folder-mobile-hint">
+              Zum Verschieben: <strong>Verschieben</strong> in der Karte nutzen.
+            </p>
+          )}
           <nav className="folder-nav">
             <button
               type="button"
@@ -800,7 +853,7 @@ export default function App() {
               ]
                 .filter(Boolean)
                 .join(' ')}
-              onClick={() => setSelectedFolderId(null)}
+              onClick={() => selectFolder(null)}
               onDragOver={handleMailDragOverInbox}
               onDragLeave={handleMailDragLeaveInbox}
               onDrop={handleMailDropOnInbox}
@@ -810,7 +863,7 @@ export default function App() {
             <FolderTreeNav
               nodes={folderTree}
               selectedId={selectedFolderId}
-              onSelect={setSelectedFolderId}
+              onSelect={selectFolder}
               onRequestRename={(node) => {
                 setFolderActionError(null)
                 setRenameFolderTarget({ id: node.id, name: node.name })
@@ -827,6 +880,64 @@ export default function App() {
             />
           </nav>
         </aside>
+  )
+
+  return (
+    <div className="shell shell--wide">
+      <header className={`bar bar--app${isCompactLayout ? ' bar--compact' : ''}`}>
+        {isCompactLayout ? (
+          <button
+            type="button"
+            className="icon-btn bar-menu-btn"
+            aria-label="Ordner öffnen"
+            aria-expanded={folderDrawerOpen}
+            aria-controls="folder-drawer"
+            onClick={() => setFolderDrawerOpen((o) => !o)}
+          >
+            <span className="bar-menu-icon" aria-hidden>
+              <span />
+              <span />
+              <span />
+            </span>
+          </button>
+        ) : null}
+        <div className="bar-text">
+          <h1>HabMail</h1>
+          <p className={`muted bar-meta${isCompactLayout ? ' bar-meta--compact' : ''}`}>
+            <span className="bar-meta-email">{user.email}</span>
+            {!isCompactLayout ? (
+              <>
+                {' '}
+                · RTDB: <code>{EMAILS_PATH || '(root)'}</code>
+              </>
+            ) : (
+              <>
+                {' '}
+                ·{' '}
+                <code className="bar-meta-path">{EMAILS_PATH || 'root'}</code>
+              </>
+            )}
+          </p>
+        </div>
+        <button
+          type="button"
+          className={`ghost${isCompactLayout ? ' bar-logout-compact' : ''}`}
+          onClick={handleLogout}
+        >
+          Abmelden
+        </button>
+      </header>
+
+      {isCompactLayout && folderDrawerOpen ? (
+        <div
+          className="folder-drawer-backdrop"
+          aria-hidden
+          onClick={() => setFolderDrawerOpen(false)}
+        />
+      ) : null}
+
+      <div className={`app-body${isCompactLayout ? ' app-body--compact' : ''}`}>
+        {folderSidebar}
 
         <div className="app-main">
       <section className="toolbar">
