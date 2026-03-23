@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import nodemailer from 'nodemailer'
+import { createTransport } from 'nodemailer'
 import { requireFirebaseAuth } from './lib/firebaseVerify'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -104,9 +104,16 @@ export default async function handler(
       process.env.SMTP_FROM?.trim() || process.env.SMTP_USER?.trim() || ''
 
     if (!host || !user || !pass || !fromAddr) {
+      console.error('send-mail: smtp_misconfigured', {
+        hasHost: Boolean(host),
+        hasUser: Boolean(user),
+        hasPass: Boolean(pass),
+        hasFrom: Boolean(fromAddr),
+      })
       return res.status(500).json({
         error: 'smtp_misconfigured',
-        hint: 'SMTP_HOST, SMTP_USER, SMTP_PASS und optional SMTP_FROM in Vercel setzen.',
+        hint:
+          'Auf Vercel unter Environment Variables für Production (und Preview) setzen: SMTP_HOST, SMTP_USER, SMTP_PASS; optional SMTP_FROM. Nach dem Anlegen Redeploy auslösen.',
       })
     }
 
@@ -150,11 +157,20 @@ export default async function handler(
 
     const text = buildPlainBody(kind, bodyUser, ctx)
 
-    const transporter = nodemailer.createTransport({
+    const transporter = createTransport({
       host,
       port,
       secure,
       auth: { user, pass },
+      connectionTimeout: 25_000,
+      greetingTimeout: 25_000,
+      // IONOS & viele Provider: Port 587 = STARTTLS
+      ...(secure
+        ? {}
+        : {
+            requireTLS: true,
+            tls: { minVersion: 'TLSv1.2' as const },
+          }),
     })
 
     try {

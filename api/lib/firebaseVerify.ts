@@ -11,6 +11,7 @@ export function resolveFirebaseProjectId(): string {
   return (
     process.env.FIREBASE_PROJECT_ID?.trim() ||
     process.env.VITE_FIREBASE_PROJECT_ID?.trim() ||
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim() ||
     ''
   )
 }
