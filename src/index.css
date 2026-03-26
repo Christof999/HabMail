@@ -1,16 +1,19 @@
-/* Apple-HIG-inspirierte Tokens; Umschaltung über html[data-theme] */
+/*
+ * Design-Richtung: ruhige Premium-Mail-UI (inspiriert u. a. von Superhuman:
+ * viel Weißraum, klare Typografie, dezente Schatten, violetter Akzent wie HabMail-Logo).
+ * Umschaltung über html[data-theme].
+ */
 
 html {
   font-family:
+    'Inter',
     -apple-system,
     BlinkMacSystemFont,
-    'SF Pro Text',
-    'SF Pro Display',
     'Segoe UI',
     Roboto,
     'Helvetica Neue',
     sans-serif;
-  line-height: 1.47;
+  line-height: 1.5;
   font-weight: 400;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -21,73 +24,75 @@ html {
 html[data-theme='light'],
 html[data-theme='system'] {
   color-scheme: light;
-  --text: #1c1c1e;
-  --muted: #636366;
-  --bg: #f2f2f7;
+  --text: #111111;
+  --muted: #5c5c5f;
+  --bg: #f9f9fa;
   --card: #ffffff;
-  --border: rgba(60, 60, 67, 0.2);
+  --border: rgba(15, 15, 20, 0.08);
   --input-bg: #ffffff;
-  --pre-bg: #e5e5ea;
-  --accent: #007aff;
-  --accent-soft: rgba(0, 122, 255, 0.14);
-  --danger: #ff3b30;
-  --pill-bg: rgba(0, 122, 255, 0.12);
-  --pill-fg: #007aff;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  --radius-lg: 14px;
-  --radius-md: 10px;
-  --segmented-bg: rgba(120, 120, 128, 0.12);
+  --pre-bg: #f1f1f3;
+  /* Logo-Nähe (#863bff), für UI leicht gedämpft */
+  --accent: #6e3df5;
+  --accent-soft: rgba(110, 61, 245, 0.12);
+  --danger: #e11d48;
+  --pill-bg: rgba(110, 61, 245, 0.1);
+  --pill-fg: #5a2fd4;
+  --shadow-sm: 0 1px 2px rgba(15, 15, 20, 0.04);
+  --shadow-card:
+    0 1px 2px rgba(15, 15, 20, 0.04), 0 8px 24px rgba(15, 15, 20, 0.06);
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --segmented-bg: rgba(15, 15, 20, 0.06);
   --segmented-active: #ffffff;
   --segmented-shadow:
-    0 3px 1px rgba(0, 0, 0, 0.04), 0 3px 8px rgba(0, 0, 0, 0.12);
-  --bar-separator: rgba(60, 60, 67, 0.12);
+    0 1px 2px rgba(15, 15, 20, 0.06), 0 4px 12px rgba(15, 15, 20, 0.08);
+  --bar-separator: rgba(15, 15, 20, 0.08);
 }
 
 @media (prefers-color-scheme: dark) {
   html[data-theme='system'] {
     color-scheme: dark;
-    --text: #f2f2f7;
-    --muted: #8e8e93;
-    --bg: #000000;
-    --card: #1c1c1e;
-    --border: rgba(255, 255, 255, 0.12);
-    --input-bg: #2c2c2e;
-    --pre-bg: #2c2c2e;
-    --accent: #0a84ff;
-    --accent-soft: rgba(10, 132, 255, 0.22);
-    --danger: #ff453a;
-    --pill-bg: rgba(10, 132, 255, 0.2);
-    --pill-fg: #0a84ff;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.35);
-    --segmented-bg: rgba(120, 120, 128, 0.24);
-    --segmented-active: #3a3a3c;
-    --segmented-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset;
-    --bar-separator: rgba(255, 255, 255, 0.1);
+    --text: #f4f4f5;
+    --muted: #a1a1a6;
+    --bg: #0c0c0e;
+    --card: #161618;
+    --border: rgba(255, 255, 255, 0.1);
+    --input-bg: #1e1e22;
+    --pre-bg: #1e1e22;
+    --accent: #a78bfa;
+    --accent-soft: rgba(167, 139, 250, 0.18);
+    --danger: #fb7185;
+    --pill-bg: rgba(167, 139, 250, 0.16);
+    --pill-fg: #c4b5fd;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.45);
+    --segmented-bg: rgba(255, 255, 255, 0.08);
+    --segmented-active: #252528;
+    --segmented-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+    --bar-separator: rgba(255, 255, 255, 0.09);
   }
 }
 
 html[data-theme='dark'] {
   color-scheme: dark;
-  --text: #f2f2f7;
-  --muted: #8e8e93;
-  --bg: #000000;
-  --card: #1c1c1e;
-  --border: rgba(255, 255, 255, 0.12);
-  --input-bg: #2c2c2e;
-  --pre-bg: #2c2c2e;
-  --accent: #0a84ff;
-  --accent-soft: rgba(10, 132, 255, 0.22);
-  --danger: #ff453a;
-  --pill-bg: rgba(10, 132, 255, 0.2);
-  --pill-fg: #0a84ff;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.35);
-  --segmented-bg: rgba(120, 120, 128, 0.24);
-  --segmented-active: #3a3a3c;
-  --segmented-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset;
-  --bar-separator: rgba(255, 255, 255, 0.1);
+  --text: #f4f4f5;
+  --muted: #a1a1a6;
+  --bg: #0c0c0e;
+  --card: #161618;
+  --border: rgba(255, 255, 255, 0.1);
+  --input-bg: #1e1e22;
+  --pre-bg: #1e1e22;
+  --accent: #a78bfa;
+  --accent-soft: rgba(167, 139, 250, 0.18);
+  --danger: #fb7185;
+  --pill-bg: rgba(167, 139, 250, 0.16);
+  --pill-fg: #c4b5fd;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.45);
+  --segmented-bg: rgba(255, 255, 255, 0.08);
+  --segmented-active: #252528;
+  --segmented-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+  --bar-separator: rgba(255, 255, 255, 0.09);
 }
 
 html {

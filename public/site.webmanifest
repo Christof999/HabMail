@@ -4,8 +4,8 @@
   "description": "E-Mail-Übersicht",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f2f2f7",
-  "theme_color": "#f2f2f7",
+  "background_color": "#f9f9fa",
+  "theme_color": "#f9f9fa",
   "icons": [
     {
       "src": "/favicon.svg",

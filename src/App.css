@@ -1,7 +1,7 @@
 .shell {
   max-width: 900px;
   margin: 0 auto;
-  padding: 1.5rem 1.25rem 3rem;
+  padding: 1.75rem 1.5rem 3.25rem;
 }
 
 .shell.shell--wide {
@@ -158,6 +158,9 @@
   background: var(--danger);
   color: #fff;
   font-weight: 600;
+  box-shadow:
+    0 1px 2px rgba(15, 15, 20, 0.08),
+    0 0 0 1px color-mix(in srgb, var(--danger) 35%, transparent);
 }
 
 .btn-danger:hover {
@@ -177,7 +180,9 @@
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(12, 12, 14, 0.48);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .modal.card {
@@ -268,15 +273,16 @@
 }
 
 h1 {
-  font-size: 1.5rem;
+  font-size: 1.625rem;
   font-weight: 600;
-  letter-spacing: -0.022em;
+  letter-spacing: -0.035em;
   margin: 0 0 0.25rem;
 }
 
 h2 {
-  font-size: 1.05rem;
+  font-size: 1.0625rem;
   font-weight: 600;
+  letter-spacing: -0.02em;
   margin: 0 0 0.35rem;
 }
 
@@ -321,11 +327,11 @@ h3 {
   gap: 0.65rem;
 }
 
-/* iOS-artiges Segment (Suchmodus + Erscheinungsbild) */
+/* Segment (Suchmodus + Erscheinungsbild): ruhige „Control“-Optik */
 .segmented {
   display: inline-flex;
-  padding: 3px;
-  border-radius: 10px;
+  padding: 4px;
+  border-radius: 12px;
   background: var(--segmented-bg, rgba(120, 120, 128, 0.12));
   gap: 2px;
   box-shadow: var(--shadow-sm, none);
@@ -341,7 +347,7 @@ h3 {
   letter-spacing: -0.01em;
   padding: 0.38rem 0.55rem;
   border: none;
-  border-radius: 7px;
+  border-radius: 9px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -650,12 +656,28 @@ button {
   font: inherit;
   cursor: pointer;
   border: none;
-  border-radius: var(--radius-md, 10px);
-  padding: 0.55rem 1rem;
+  border-radius: 9999px;
+  padding: 0.55rem 1.15rem;
   background: var(--accent);
   color: #fff;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  box-shadow:
+    0 1px 2px rgba(15, 15, 20, 0.06),
+    0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
+button.icon-btn:hover:not(:disabled),
+button.folder-icon-btn:hover:not(:disabled),
+button.email-icon-btn:hover:not(:disabled),
+button.email-card-dismiss:hover:not(:disabled),
+button.email-summary-toggle:hover:not(:disabled),
+button.chip:hover:not(:disabled) {
+  filter: none;
 }
 
 button:disabled {
@@ -667,7 +689,13 @@ button.ghost {
   background: transparent;
   color: var(--accent);
   border: 1px solid var(--border);
-  font-weight: 500;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+button.ghost:hover:not(:disabled) {
+  filter: none;
+  background: var(--accent-soft);
 }
 
 .email-card-dismiss {
@@ -782,7 +810,9 @@ button.ghost {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(12, 12, 14, 0.48);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: flex-start;
   justify-content: center;

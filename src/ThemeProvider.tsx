@@ -32,7 +32,7 @@ function isDarkResolved(theme: ThemeMode): boolean {
 function applyMetaThemeColor(dark: boolean) {
   const el = document.getElementById('habmail-theme-color')
   if (el && 'content' in el) {
-    ;(el as HTMLMetaElement).content = dark ? '#1c1c1e' : '#f2f2f7'
+    ;(el as HTMLMetaElement).content = dark ? '#161618' : '#f9f9fa'
   }
 }
 
