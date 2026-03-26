@@ -396,12 +396,6 @@ h3 {
   white-space: nowrap;
 }
 
-.gemini-hint {
-  font-size: 0.8rem;
-  line-height: 1.35;
-  margin: 0;
-}
-
 .saved-filters-block {
   display: flex;
   flex-direction: column;
@@ -518,10 +512,6 @@ button.chip:hover {
 .chip-remove:hover {
   color: var(--danger);
   background: var(--pre-bg);
-}
-
-.saved-filters-note {
-  margin: 0;
 }
 
 .toolbar .search-row .search,

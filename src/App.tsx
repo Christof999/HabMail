@@ -1127,21 +1127,8 @@ export default function App() {
               </ul>
             </div>
           ) : null}
-          <p className="muted small saved-filters-note">
-            Gespeicherte Filter liegen nur in <strong>diesem Browser</strong> (pro
-            angemeldetem Nutzer).
-          </p>
         </div>
 
-        {searchMode === 'gemini' ? (
-          <p className="muted gemini-hint">
-            Es werden bis zu 50 der neuesten Mails an Gemini geschickt (ohne
-            vollständige Anhänge). API-Key liegt nur auf Vercel (
-            <code>GEMINI_API_KEY</code>). Lokal:{' '}
-            <code>npx vercel dev -l 3000</code> und{' '}
-            <code>VITE_API_BASE_URL=http://127.0.0.1:3000</code>.
-          </p>
-        ) : null}
         {geminiError ? <p className="error">{geminiError}</p> : null}
         {rtdbListenError ? (
           <p className="error" role="alert">
@@ -1270,14 +1257,7 @@ export default function App() {
               </ul>
             </>
           ) : !isSearchActive && rows.length > 0 ? (
-            selectedFolderId === null ? (
-              <p>
-                Im Posteingang ist nichts — alle sichtbaren Nachrichten liegen
-                vermutlich in <strong>Ordnern</strong>.
-              </p>
-            ) : (
-              <p>Keine E-Mails in diesem Ordner.</p>
-            )
+            <p>So leer hier …</p>
           ) : (
             <p>Keine Einträge.</p>
           )}
