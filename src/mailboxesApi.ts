@@ -141,23 +141,48 @@ export function suggestImapHost(smtpHost: string): string {
   return `imap.${host.slice(match[0].length)}`
 }
 
-/** Bekannte Anbieter als Startpunkt, damit niemand Hostnamen suchen muss. */
-export const MAIL_PROVIDER_PRESETS: {
+export type MailProvider = {
   label: string
   host: string
   port: number
   imapHost: string
+  imapPort: number
   hint?: string
-}[] = [
+}
+
+/**
+ * Bekannte Anbieter als Startpunkt, damit niemand Hostnamen suchen muss.
+ *
+ * IONOS steht vorn und ist vorausgewählt: die Postfächer, die hier
+ * zusammenlaufen, liegen alle dort. Wer einen anderen Anbieter hat, wählt ihn
+ * um — die Server tauscht das Formular dann selbst aus.
+ */
+export const MAIL_PROVIDER_PRESETS: MailProvider[] = [
+  {
+    label: 'IONOS',
+    host: 'smtp.ionos.de',
+    port: 587,
+    imapHost: 'imap.ionos.de',
+    imapPort: 993,
+  },
   {
     label: 'Gmail / Googlemail',
     host: 'smtp.gmail.com',
     port: 587,
     imapHost: 'imap.gmail.com',
+    imapPort: 993,
     hint: 'Braucht ein App-Passwort, nicht das Kontopasswort.',
   },
-  { label: 'GMX', host: 'mail.gmx.net', port: 587, imapHost: 'imap.gmx.net' },
-  { label: 'Web.de', host: 'smtp.web.de', port: 587, imapHost: 'imap.web.de' },
-  { label: 'IONOS', host: 'smtp.ionos.de', port: 587, imapHost: 'imap.ionos.de' },
-  { label: 'Strato', host: 'smtp.strato.de', port: 587, imapHost: 'imap.strato.de' },
+  { label: 'GMX', host: 'mail.gmx.net', port: 587, imapHost: 'imap.gmx.net', imapPort: 993 },
+  { label: 'Web.de', host: 'smtp.web.de', port: 587, imapHost: 'imap.web.de', imapPort: 993 },
+  {
+    label: 'Strato',
+    host: 'smtp.strato.de',
+    port: 587,
+    imapHost: 'imap.strato.de',
+    imapPort: 993,
+  },
 ]
+
+/** Vorauswahl im Formular. */
+export const DEFAULT_PROVIDER: MailProvider = MAIL_PROVIDER_PRESETS[0]

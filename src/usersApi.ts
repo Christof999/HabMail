@@ -61,3 +61,23 @@ export const updateUser = callable<
 >('updateUser')
 
 export const deleteUser = callable<{ uid: string }, { deleted: string }>('deleteUser')
+
+export type MigrationResult = {
+  targetUid: string
+  source: string
+  emails: number
+  folders: number
+  dryRun: boolean
+  moved: boolean
+  sourceRemoved: boolean
+  samples: string[]
+}
+
+/**
+ * Den alten, flach liegenden Bestand einem Benutzer zuordnen. Ohne `dryRun:
+ * false` wird nur gezählt — geschrieben wird erst auf ausdrückliche Ansage.
+ */
+export const migrateLegacy = callable<
+  { uid?: string; source?: string; dryRun?: boolean; keepSource?: boolean },
+  MigrationResult
+>('migrateLegacy')

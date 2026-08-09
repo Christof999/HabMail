@@ -12,6 +12,13 @@ if (!admin.apps.length) {
 }
 
 const { pollAllMailboxes } = require("./poll");
+
+/**
+ * Diese Werte liegen im Secret Manager, nicht in der Funktionskonfiguration.
+ * Functions v2 stellt sie nur bereit, wenn sie hier angefordert werden — ohne
+ * die Angabe wären sie zur Laufzeit schlicht nicht da.
+ */
+const POLL_SECRETS = ["EMAILPROXY_KEY", "GEMINI_API_KEY"];
 const users = require("./users");
 
 /**
@@ -22,6 +29,7 @@ exports.createUser = users.createUser;
 exports.listUsers = users.listUsers;
 exports.updateUser = users.updateUser;
 exports.deleteUser = users.deleteUser;
+exports.migrateLegacy = users.migrateLegacy;
 exports.whoAmI = users.whoAmI;
 
 const MAX_JSON_BYTES = 6 * 1024 * 1024;
@@ -160,6 +168,7 @@ exports.pollMailboxes = onSchedule(
     timeZone: "Europe/Berlin",
     timeoutSeconds: 540,
     memory: "512MiB",
+    secrets: POLL_SECRETS,
     // Zwei gleichzeitige Läufe würden dieselben Mails doppelt verarbeiten.
     maxInstances: 1,
   },
@@ -175,7 +184,13 @@ exports.pollMailboxes = onSchedule(
  * offener Endpunkt, der fremde Postfächer leerpumpt.
  */
 exports.pollMailboxesNow = onRequest(
-  { cors: false, invoker: "public", timeoutSeconds: 540, memory: "512MiB" },
+  {
+    cors: false,
+    invoker: "public",
+    timeoutSeconds: 540,
+    memory: "512MiB",
+    secrets: POLL_SECRETS,
+  },
   async (req, res) => {
     const expected = (process.env.POLL_TRIGGER_TOKEN || "").trim();
     if (expected === "") {

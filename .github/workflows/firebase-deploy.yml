@@ -1,0 +1,110 @@
+# Datenbankregeln und Functions ausrollen, ohne Terminal.
+#
+# Läuft automatisch, wenn sich etwas an den Functions oder den Regeln ändert,
+# und lässt sich über Actions → „Firebase ausrollen“ → „Run workflow“ auch von
+# Hand starten (geht auch im Browser auf dem Handy).
+#
+# Einmalig unter Settings → Secrets and variables → Actions anzulegen:
+#
+#   FIREBASE_SERVICE_ACCOUNT  Inhalt der Service-Account-JSON-Datei.
+#                             Firebase Console → Projekteinstellungen →
+#                             Dienstkonten → „Neuen privaten Schlüssel
+#                             generieren“. Die ganze Datei einfügen.
+#   FIREBASE_PROJECT_ID       z.B. habmail-1234
+#   EMAILPROXY_KEY            der ep_… Schlüssel aus dem Email-Proxy
+#   GEMINI_API_KEY            für die Kategorisierung
+#
+# Als *Variables* (nicht Secrets, das sind keine Geheimnisse):
+#
+#   EMAILPROXY_URL            https://dein-proxy.vercel.app
+#   ADMIN_UIDS                deine Firebase-UID, mehrere mit Komma
+#
+# Die beiden Secrets landen im Google Secret Manager und tauchen nirgends im
+# Protokoll auf. EMAILPROXY_URL und ADMIN_UIDS werden als gewöhnliche
+# Umgebungsvariablen in functions/.env.<projekt> geschrieben.
+
+name: Firebase ausrollen
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['**']
+    paths:
+      - 'functions/**'
+      - 'database.rules.json'
+      - 'firebase.json'
+      - '.github/workflows/firebase-deploy.yml'
+
+# Zwei gleichzeitige Deploys würden sich gegenseitig überholen.
+concurrency:
+  group: firebase-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Zugangsdaten ablegen
+        env:
+          SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SERVICE_ACCOUNT" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT fehlt. Siehe Kommentar oben in dieser Datei."
+            exit 1
+          fi
+          printf '%s' "$SERVICE_ACCOUNT" > "$RUNNER_TEMP/service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/service-account.json" >> "$GITHUB_ENV"
+
+      - name: Konfiguration schreiben
+        env:
+          PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          EMAILPROXY_URL: ${{ vars.EMAILPROXY_URL }}
+          ADMIN_UIDS: ${{ vars.ADMIN_UIDS }}
+        run: |
+          if [ -z "$PROJECT_ID" ]; then
+            echo "::error::FIREBASE_PROJECT_ID fehlt."
+            exit 1
+          fi
+          # Keine Geheimnisse — nur eine URL und Benutzerkennungen.
+          {
+            echo "EMAILPROXY_URL=$EMAILPROXY_URL"
+            echo "ADMIN_UIDS=$ADMIN_UIDS"
+          } > "functions/.env.$PROJECT_ID"
+
+      - name: Geheimnisse übernehmen
+        env:
+          PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          EMAILPROXY_KEY: ${{ secrets.EMAILPROXY_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          # --data-file - liest von der Standardeingabe; der Wert steht damit
+          # nie in der Kommandozeile und taucht im Protokoll nicht auf.
+          # Beide werden von den Functions als Secret angefordert. Fehlt eines,
+          # schlägt das Ausrollen ohnehin fehl — dann lieber hier mit einer
+          # verständlichen Meldung.
+          for name in EMAILPROXY_KEY GEMINI_API_KEY; do
+            value="${!name}"
+            if [ -z "$value" ]; then
+              echo "::error::$name fehlt. Siehe Kommentar oben in dieser Datei."
+              exit 1
+            fi
+            printf '%s' "$value" | npx --yes firebase-tools functions:secrets:set "$name" \
+              --project "$PROJECT_ID" --force --data-file - > /dev/null
+            echo "$name übernommen."
+          done
+
+      - name: Ausrollen
+        env:
+          PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: |
+          npx --yes firebase-tools deploy \
+            --only functions,database \
+            --project "$PROJECT_ID" \
+            --non-interactive \
+            --force

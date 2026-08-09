@@ -23,3 +23,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Vom Deploy-Workflow erzeugt, gehört nicht ins Repo
+functions/.env
+functions/.env.*

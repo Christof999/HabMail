@@ -14,6 +14,7 @@ const admin = require("firebase-admin");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const { USER_DIRECTORY_PATH, ADMINS_PATH, userRootPath } = require("./paths");
+const { migrateLegacyData } = require("./migrate");
 
 /** Administratoren aus der Umgebung — der Startpunkt, bevor es Einträge gibt. */
 function bootstrapAdminUids() {
@@ -201,6 +202,39 @@ const deleteUser = onCall(async (request) => {
   return { deleted: uid };
 });
 
+/**
+ * Den alten, flach liegenden Bestand einem Benutzer zuordnen.
+ *
+ * Dasselbe wie functions/scripts/migrate-to-users.mjs, nur ohne Terminal:
+ * ein Administrator löst es aus der Oberfläche aus. Standardmäßig ein
+ * Trockenlauf — geschrieben wird erst, wenn dryRun ausdrücklich false ist.
+ */
+const migrateLegacy = onCall(async (request) => {
+  const callerUid = await requireAdmin(request);
+  const targetUid =
+    typeof request.data?.uid === "string" && request.data.uid.trim() !== ""
+      ? request.data.uid.trim()
+      : callerUid;
+
+  // Ein Ziel, das es nicht gibt, würde einen verwaisten Zweig anlegen.
+  try {
+    await admin.auth().getUser(targetUid);
+  } catch {
+    throw new HttpsError("not-found", `Es gibt keinen Benutzer mit der Kennung ${targetUid}.`);
+  }
+
+  try {
+    return await migrateLegacyData({
+      targetUid,
+      source: typeof request.data?.source === "string" ? request.data.source : "",
+      dryRun: request.data?.dryRun !== false,
+      keepSource: request.data?.keepSource === true,
+    });
+  } catch (error) {
+    throw new HttpsError("internal", `Migration fehlgeschlagen: ${error?.message}`);
+  }
+});
+
 /** Damit die Oberfläche weiß, ob sie die Verwaltung überhaupt anbieten soll. */
 const whoAmI = onCall(async (request) => {
   const uid = request.auth?.uid;
@@ -208,4 +242,12 @@ const whoAmI = onCall(async (request) => {
   return { uid, isAdmin: await isAdmin(uid) };
 });
 
-module.exports = { createUser, listUsers, updateUser, deleteUser, whoAmI, isAdmin };
+module.exports = {
+  createUser,
+  listUsers,
+  updateUser,
+  deleteUser,
+  migrateLegacy,
+  whoAmI,
+  isAdmin,
+};

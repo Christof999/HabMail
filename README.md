@@ -55,6 +55,29 @@ einen gewöhnlichen Client-Key, der auf seine eigenen Postfächer beschränkt is
 5. Erst danach wird dem Proxy bestätigt, dass die Mails durch sind. Bricht
    etwas ab, kommen sie beim nächsten Lauf erneut — das ist Absicht.
 
+## Einrichten ohne Terminal
+
+Der ganze Ablauf geht über Weboberflächen — Browser reicht, auch auf dem Handy.
+
+1. **Client im Email-Proxy anlegen.** Die Startseite des Proxys öffnen →
+   *App einrichten* → Admin-Key einfügen, Name `habmail`, *Client anlegen*.
+   Der `ep_…`-Schlüssel wird einmalig angezeigt: kopieren.
+2. **GitHub-Secrets setzen.** Repo → Settings → Secrets and variables → Actions:
+   `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_PROJECT_ID`, `EMAILPROXY_KEY`,
+   `GEMINI_API_KEY`. Unter *Variables*: `EMAILPROXY_URL` und `ADMIN_UIDS`
+   (deine Firebase-UID, zu finden in der Firebase Console unter Authentication).
+3. **Ausrollen.** Repo → Actions → *Firebase ausrollen* → *Run workflow*. Das
+   spielt Datenbankregeln und Functions ein und legt die Secrets an.
+4. **Vercel-Variablen setzen** (Vercel-Dashboard → Settings → Environment
+   Variables), siehe Abschnitt 3 unten. Danach neu deployen.
+5. **Anmelden**, dann *Benutzer verwalten* → *Bestand übernehmen* → *Nachsehen*,
+   um alte Mails in deinen Posteingang zu holen.
+6. **Postfach hinzufügen**: *Postfächer verwalten* → *Postfach hinzufügen*.
+   IONOS ist vorausgewählt — Adresse und Passwort reichen.
+
+Die Abschnitte unten beschreiben dasselbe ausführlicher, inklusive der
+Terminal-Varianten.
+
 ## Einrichten
 
 ### 1. Firebase
@@ -68,7 +91,9 @@ npm install
 npm run dev
 ```
 
-Datenbankregeln und Functions ausrollen:
+Datenbankregeln und Functions ausrollen — entweder über den Workflow
+[`.github/workflows/firebase-deploy.yml`](.github/workflows/firebase-deploy.yml)
+(Actions → *Firebase ausrollen* → *Run workflow*, kein Terminal nötig) oder:
 
 ```bash
 npx firebase deploy --only database,functions
@@ -79,8 +104,12 @@ Cloud-Scheduler-Aufgabe.
 
 ### 2. Email-Proxy verbinden
 
-Im Proxy einen Client anlegen und ihm genau zwei Befugnisse geben — mehr
-braucht HabMail nicht, und mehr soll es auch nicht haben:
+HabMail braucht im Proxy einen Client mit genau zwei Befugnissen — mehr nicht,
+und mehr soll es auch nicht haben. Am einfachsten über die **Startseite des
+Proxys**, Abschnitt *App einrichten*: Admin-Key einfügen, Name `habmail`,
+*Client anlegen*. Der Key wird einmalig angezeigt.
+
+Auf der Kommandozeile geht dasselbe so:
 
 ```bash
 node scripts/emailproxy-admin.mjs client:create --id habmail
@@ -88,8 +117,8 @@ node scripts/emailproxy-admin.mjs client:own-mailboxes --id habmail   # eigene P
 node scripts/emailproxy-admin.mjs client:receive --id habmail         # abholen
 ```
 
-`client:create` gibt den Key **einmalig** aus. Ihn bei den Functions und in
-Vercel hinterlegen:
+Der Key gehört dann in die GitHub-Secrets (`EMAILPROXY_KEY`) — der Workflow
+legt daraus das Firebase-Secret an. Ohne Workflow:
 
 ```bash
 npx firebase functions:secrets:set EMAILPROXY_KEY
@@ -130,17 +159,23 @@ Postfächer eines anderen anfragen.
 Passwörter setzen, sperren, Adminrechte vergeben. Ein Konto zu löschen entfernt
 auch dessen Mails und Ordner — die Postfächer im Proxy bleiben bestehen.
 
-**Postfächer verwalten** (für jeden Benutzer, für seine eigenen): Adresse,
-Passwort und SMTP-Server eintragen; den IMAP-Server schlägt das Formular vor.
-Ohne IMAP-Server kann über das Postfach nur verschickt werden.
+**Postfächer verwalten** (für jeden Benutzer, für seine eigenen):
+**IONOS ist vorausgewählt**, Adresse und Passwort reichen — Server und Ports
+sind hinterlegt (`smtp.ionos.de:587`, `imap.ionos.de:993`). Andere Anbieter
+über die Auswahl; unter *Servereinstellungen ändern* lässt sich alles von Hand
+überschreiben. Ohne IMAP-Server kann über das Postfach nur verschickt werden.
 
 Bei Gmail und GMX braucht es ein App-Passwort, nicht das Kontopasswort.
 
 ## Bestand migrieren
 
 Wer HabMail schon vor der Benutzertrennung benutzt hat, hat Mails flach an der
-Wurzel der Datenbank liegen. Dieses Skript zieht sie um und trägt dich als
-Administrator ein:
+Wurzel der Datenbank liegen. In der App: *Benutzer verwalten* →
+**Bestand übernehmen** → *Nachsehen* zeigt, was gefunden wurde, und erst der
+zweite Knopf verschiebt etwas.
+
+Dasselbe auf der Kommandozeile — die trägt zusätzlich den Administrator ein,
+was für den allerersten Start nützlich ist:
 
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS=/pfad/zum/service-account.json

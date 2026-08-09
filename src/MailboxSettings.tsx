@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { User } from 'firebase/auth'
 import {
   createMailbox,
+  DEFAULT_PROVIDER,
   deleteMailbox,
   listMailboxes,
   MAIL_PROVIDER_PRESETS,
@@ -25,6 +26,7 @@ type Props = {
 }
 
 type FormState = {
+  provider: string
   id: string
   host: string
   port: string
@@ -37,15 +39,22 @@ type FormState = {
   imapFolder: string
 }
 
+/**
+ * Vorbelegt mit IONOS: die Postfächer, die hier zusammenlaufen, liegen alle
+ * dort. Damit bleiben im Normalfall genau zwei Felder auszufüllen — Adresse
+ * und Passwort. Die Server stehen unter „Servereinstellungen“ und nur dann
+ * im Weg, wenn man sie wirklich braucht.
+ */
 const EMPTY_FORM: FormState = {
+  provider: DEFAULT_PROVIDER.label,
   id: '',
-  host: '',
-  port: '587',
+  host: DEFAULT_PROVIDER.host,
+  port: String(DEFAULT_PROVIDER.port),
   user: '',
   password: '',
   from: '',
-  imapHost: '',
-  imapPort: '993',
+  imapHost: DEFAULT_PROVIDER.imapHost,
+  imapPort: String(DEFAULT_PROVIDER.imapPort),
   imapPassword: '',
   imapFolder: 'INBOX',
 }
@@ -75,6 +84,7 @@ export default function MailboxSettings({ user, onClose }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
@@ -103,13 +113,21 @@ export default function MailboxSettings({ user, onClose }: Props) {
 
   function applyPreset(label: string) {
     const preset = MAIL_PROVIDER_PRESETS.find((p) => p.label === label)
-    if (preset === undefined) return
+    if (preset === undefined) {
+      // „Anderer Anbieter“: Felder leeren, damit klar ist, dass sie zu
+      // füllen sind — und die Servereinstellungen gleich aufklappen.
+      setForm((prev) => ({ ...prev, provider: label, host: '', imapHost: '' }))
+      setShowAdvanced(true)
+      setNotice(null)
+      return
+    }
     setForm((prev) => ({
       ...prev,
+      provider: preset.label,
       host: preset.host,
       port: String(preset.port),
       imapHost: preset.imapHost,
-      imapPort: '993',
+      imapPort: String(preset.imapPort),
     }))
     setNotice(preset.hint ?? null)
   }
@@ -148,6 +166,7 @@ export default function MailboxSettings({ user, onClose }: Props) {
 
       const created = await createMailbox(await user.getIdToken(), input)
       setForm(EMPTY_FORM)
+      setShowAdvanced(false)
       setShowForm(false)
       setNotice(
         created.imap === undefined
@@ -305,13 +324,16 @@ export default function MailboxSettings({ user, onClose }: Props) {
           <div className="mailbox-form">
             <label className="folder-modal-label">
               Anbieter
-              <select defaultValue="" onChange={(e) => applyPreset(e.target.value)}>
-                <option value="">(auswählen oder selbst eintragen)</option>
+              <select
+                value={form.provider}
+                onChange={(e) => applyPreset(e.target.value)}
+              >
                 {MAIL_PROVIDER_PRESETS.map((preset) => (
                   <option key={preset.label} value={preset.label}>
                     {preset.label}
                   </option>
                 ))}
+                <option value="__custom__">Anderer Anbieter …</option>
               </select>
             </label>
             <label className="folder-modal-label">
@@ -333,59 +355,85 @@ export default function MailboxSettings({ user, onClose }: Props) {
                 onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
               />
             </label>
-            <label className="folder-modal-label">
-              Kurzname
-              <input
-                type="text"
-                value={form.id}
-                placeholder={toId(form.user) || 'firma'}
-                onChange={(e) => setForm((p) => ({ ...p, id: e.target.value }))}
-              />
-            </label>
-            <div className="mailbox-form-row">
-              <label className="folder-modal-label">
-                SMTP-Server (Versand)
-                <input
-                  type="text"
-                  value={form.host}
-                  placeholder="smtp.ionos.de"
-                  onChange={(e) => onHostChange(e.target.value)}
-                />
-              </label>
-              <label className="folder-modal-label mailbox-port">
-                Port
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={form.port}
-                  onChange={(e) => setForm((p) => ({ ...p, port: e.target.value }))}
-                />
-              </label>
-            </div>
-            <div className="mailbox-form-row">
-              <label className="folder-modal-label">
-                IMAP-Server (Empfang, optional)
-                <input
-                  type="text"
-                  value={form.imapHost}
-                  placeholder="imap.ionos.de"
-                  onChange={(e) => setForm((p) => ({ ...p, imapHost: e.target.value }))}
-                />
-              </label>
-              <label className="folder-modal-label mailbox-port">
-                Port
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={form.imapPort}
-                  onChange={(e) => setForm((p) => ({ ...p, imapPort: e.target.value }))}
-                />
-              </label>
-            </div>
             <p className="muted small">
-              Ohne IMAP-Server kann über dieses Postfach nur verschickt werden. Das
-              IMAP-Passwort bleibt leer, wenn es dasselbe wie oben ist.
+              Versand über <code>{form.host || '—'}</code>, Empfang über{' '}
+              <code>{form.imapHost || '—'}</code>.
             </p>
+
+            <button
+              type="button"
+              className="ghost small-btn mailbox-advanced-toggle"
+              aria-expanded={showAdvanced}
+              onClick={() => setShowAdvanced((v) => !v)}
+            >
+              {showAdvanced ? 'Servereinstellungen ausblenden' : 'Servereinstellungen ändern'}
+            </button>
+
+            {showAdvanced ? (
+              <div className="mailbox-advanced">
+                <label className="folder-modal-label">
+                  Kurzname
+                  <input
+                    type="text"
+                    value={form.id}
+                    placeholder={toId(form.user) || 'firma'}
+                    onChange={(e) => setForm((p) => ({ ...p, id: e.target.value }))}
+                  />
+                </label>
+                <div className="mailbox-form-row">
+                  <label className="folder-modal-label">
+                    SMTP-Server (Versand)
+                    <input
+                      type="text"
+                      value={form.host}
+                      placeholder="smtp.ionos.de"
+                      onChange={(e) => onHostChange(e.target.value)}
+                    />
+                  </label>
+                  <label className="folder-modal-label mailbox-port">
+                    Port
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={form.port}
+                      onChange={(e) => setForm((p) => ({ ...p, port: e.target.value }))}
+                    />
+                  </label>
+                </div>
+                <div className="mailbox-form-row">
+                  <label className="folder-modal-label">
+                    IMAP-Server (Empfang)
+                    <input
+                      type="text"
+                      value={form.imapHost}
+                      placeholder="imap.ionos.de"
+                      onChange={(e) => setForm((p) => ({ ...p, imapHost: e.target.value }))}
+                    />
+                  </label>
+                  <label className="folder-modal-label mailbox-port">
+                    Port
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={form.imapPort}
+                      onChange={(e) => setForm((p) => ({ ...p, imapPort: e.target.value }))}
+                    />
+                  </label>
+                </div>
+                <label className="folder-modal-label">
+                  IMAP-Passwort (nur wenn es ein anderes ist)
+                  <input
+                    type="password"
+                    value={form.imapPassword}
+                    autoComplete="new-password"
+                    onChange={(e) => setForm((p) => ({ ...p, imapPassword: e.target.value }))}
+                  />
+                </label>
+                <p className="muted small">
+                  Ohne IMAP-Server kann über dieses Postfach nur verschickt werden.
+                </p>
+              </div>
+            ) : null}
 
             <div className="modal-actions">
               <button

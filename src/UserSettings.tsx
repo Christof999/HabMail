@@ -4,8 +4,10 @@ import {
   createUser,
   deleteUser,
   listUsers,
+  migrateLegacy,
   updateUser,
   type ManagedUser,
+  type MigrationResult,
 } from './usersApi'
 
 /**
@@ -32,6 +34,7 @@ export default function UserSettings({ currentUser, onClose }: Props) {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [migration, setMigration] = useState<MigrationResult | null>(null)
 
   const load = useCallback(async () => {
     setError(null)
@@ -110,6 +113,26 @@ export default function UserSettings({ currentUser, onClose }: Props) {
       await deleteUser({ uid: user.uid })
       setConfirmDelete(null)
       return `${user.email} entfernt — samt Mails und Ordnern.`
+    })
+
+  /**
+   * Erst zählen, dann übernehmen. Der Trockenlauf zeigt, was gefunden wurde,
+   * bevor irgendetwas verschoben wird.
+   */
+  const checkLegacy = () =>
+    run(async () => {
+      const result = await migrateLegacy({ dryRun: true })
+      setMigration(result)
+      return result.emails === 0 && result.folders === 0
+        ? 'Kein alter Bestand gefunden — es liegt nichts mehr an der alten Stelle.'
+        : `Gefunden: ${result.emails} Mails und ${result.folders} Ordner.`
+    })
+
+  const applyLegacy = () =>
+    run(async () => {
+      const result = await migrateLegacy({ dryRun: false })
+      setMigration(null)
+      return `${result.emails} Mails und ${result.folders} Ordner übernommen.`
     })
 
   const formValid =
@@ -222,6 +245,31 @@ export default function UserSettings({ currentUser, onClose }: Props) {
             })}
           </ul>
         )}
+
+        <div className="mailbox-form">
+          <p className="muted small">
+            <strong>Bestand übernehmen.</strong> Mails aus der Zeit vor der
+            Benutzertrennung liegen noch flach in der Datenbank und werden nicht
+            mehr angezeigt. Hier landen sie in deinem Posteingang.
+          </p>
+          {migration ? (
+            <p className="muted small">
+              Gefunden: <strong>{migration.emails}</strong> Mails,{' '}
+              <strong>{migration.folders}</strong> Ordner
+              {migration.samples.length > 0 ? ` — z.B. „${migration.samples[0]}“` : ''}.
+            </p>
+          ) : null}
+          <div className="mailbox-item-actions">
+            <button type="button" className="ghost" disabled={busy} onClick={() => void checkLegacy()}>
+              Nachsehen
+            </button>
+            {migration !== null && migration.emails + migration.folders > 0 ? (
+              <button type="button" disabled={busy} onClick={() => void applyLegacy()}>
+                In meinen Posteingang übernehmen
+              </button>
+            ) : null}
+          </div>
+        </div>
 
         {showForm ? (
           <div className="mailbox-form">

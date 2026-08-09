@@ -1029,6 +1029,17 @@ button.ghost:hover:not(:disabled) {
   overflow-wrap: anywhere;
 }
 
+.mailbox-advanced-toggle {
+  margin-top: 0.6rem;
+}
+
+.mailbox-advanced {
+  margin-top: 0.5rem;
+  padding: 0.1rem 0.7rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
 .user-admin-check {
   display: flex;
   align-items: center;
