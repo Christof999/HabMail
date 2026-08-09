@@ -6,22 +6,40 @@
 #
 # Einmalig unter Settings → Secrets and variables → Actions anzulegen:
 #
-#   FIREBASE_SERVICE_ACCOUNT  Inhalt der Service-Account-JSON-Datei.
-#                             Firebase Console → Projekteinstellungen →
-#                             Dienstkonten → „Neuen privaten Schlüssel
-#                             generieren“. Die ganze Datei einfügen.
+# Reiter „Secrets“:
+#   FIREBASE_SERVICE_ACCOUNT  Inhalt der Service-Account-JSON-Datei, komplett.
 #   FIREBASE_PROJECT_ID       z.B. habmail-1234
 #   EMAILPROXY_KEY            der ep_… Schlüssel aus dem Email-Proxy
 #   GEMINI_API_KEY            für die Kategorisierung
 #
-# Als *Variables* (nicht Secrets, das sind keine Geheimnisse):
-#
+# Reiter „Variables“:
 #   EMAILPROXY_URL            https://dein-proxy.vercel.app
 #   ADMIN_UIDS                deine Firebase-UID, mehrere mit Komma
 #
-# Die beiden Secrets landen im Google Secret Manager und tauchen nirgends im
-# Protokoll auf. EMAILPROXY_URL und ADMIN_UIDS werden als gewöhnliche
-# Umgebungsvariablen in functions/.env.<projekt> geschrieben.
+# Optional, ebenfalls als Variables:
+#   GEMINI_MODEL, POLL_MESSAGE_LIMIT, MAX_INLINE_ATTACHMENT_BYTES
+# Optional als Secrets:
+#   INGEST_TOKEN, POLL_TRIGGER_TOKEN
+#
+# Alle Werte landen in functions/.env.<projekt>, das der Workflow erzeugt und
+# das nicht im Repository liegt. Firebase liest diese Datei beim Ausrollen und
+# setzt die Werte als Umgebungsvariablen der Functions.
+#
+# ---------------------------------------------------------------------------
+# Rechte des Dienstkontos
+# ---------------------------------------------------------------------------
+# Der Schlüssel aus „Projekteinstellungen → Dienstkonten“ reicht zum Ausrollen
+# von Functions NICHT aus. In der Google Cloud Console unter IAM dem Konto
+# (firebase-adminsdk-…@<projekt>.iam.gserviceaccount.com) diese Rollen geben:
+#
+#   Firebase Admin
+#   Cloud Functions Admin
+#   Dienstkontonutzer          (Service Account User)
+#   Cloud Build-Bearbeiter     (Cloud Build Editor)
+#   Artifact Registry-Administrator
+#
+# Fehlt eine davon, bricht das Ausrollen mit „Permission denied“ oder
+# „missing required permission“ ab und nennt die fehlende Berechtigung.
 
 name: Firebase ausrollen
 
@@ -53,50 +71,80 @@ jobs:
       - name: Zugangsdaten ablegen
         env:
           SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: |
-          if [ -z "$SERVICE_ACCOUNT" ]; then
-            echo "::error::FIREBASE_SERVICE_ACCOUNT fehlt. Siehe Kommentar oben in dieser Datei."
+          missing=""
+          [ -z "$SERVICE_ACCOUNT" ] && missing="$missing FIREBASE_SERVICE_ACCOUNT"
+          [ -z "$PROJECT_ID" ] && missing="$missing FIREBASE_PROJECT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::Diese Secrets fehlen:$missing — siehe Kommentar oben in dieser Datei."
             exit 1
           fi
+
           printf '%s' "$SERVICE_ACCOUNT" > "$RUNNER_TEMP/service-account.json"
+
+          # Früh prüfen: eine abgeschnittene oder falsch eingefügte JSON-Datei
+          # führt sonst erst viel später zu einer unverständlichen Meldung.
+          # Der Stacktrace von node hilft dabei niemandem, deshalb nur die
+          # eigentliche Ursache in einer Zeile.
+          if ! reason=$(node -e '
+            const fs = require("node:fs");
+            const sa = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/service-account.json", "utf8"));
+            for (const field of ["type", "project_id", "private_key", "client_email"]) {
+              if (!sa[field]) throw new Error("es fehlt das Feld " + field);
+            }
+            console.log(sa.client_email);
+          ' 2>&1); then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT ist kein vollständiges Dienstkonto-JSON ($(printf '%s' "$reason" | grep -m1 -oE '(SyntaxError|Error): .*' | head -c 160)). Die heruntergeladene Datei komplett einfügen, von { bis }."
+            exit 1
+          fi
+          echo "Dienstkonto: $reason"
+
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/service-account.json" >> "$GITHUB_ENV"
 
       - name: Konfiguration schreiben
         env:
           PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
-          EMAILPROXY_URL: ${{ vars.EMAILPROXY_URL }}
-          ADMIN_UIDS: ${{ vars.ADMIN_UIDS }}
-        run: |
-          if [ -z "$PROJECT_ID" ]; then
-            echo "::error::FIREBASE_PROJECT_ID fehlt."
-            exit 1
-          fi
-          # Keine Geheimnisse — nur eine URL und Benutzerkennungen.
-          {
-            echo "EMAILPROXY_URL=$EMAILPROXY_URL"
-            echo "ADMIN_UIDS=$ADMIN_UIDS"
-          } > "functions/.env.$PROJECT_ID"
-
-      - name: Geheimnisse übernehmen
-        env:
-          PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          # Geheim
           EMAILPROXY_KEY: ${{ secrets.EMAILPROXY_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
+          POLL_TRIGGER_TOKEN: ${{ secrets.POLL_TRIGGER_TOKEN }}
+          # Nicht geheim
+          EMAILPROXY_URL: ${{ vars.EMAILPROXY_URL }}
+          ADMIN_UIDS: ${{ vars.ADMIN_UIDS }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          POLL_MESSAGE_LIMIT: ${{ vars.POLL_MESSAGE_LIMIT }}
+          MAX_INLINE_ATTACHMENT_BYTES: ${{ vars.MAX_INLINE_ATTACHMENT_BYTES }}
         run: |
-          # --data-file - liest von der Standardeingabe; der Wert steht damit
-          # nie in der Kommandozeile und taucht im Protokoll nicht auf.
-          # Beide werden von den Functions als Secret angefordert. Fehlt eines,
-          # schlägt das Ausrollen ohnehin fehl — dann lieber hier mit einer
-          # verständlichen Meldung.
-          for name in EMAILPROXY_KEY GEMINI_API_KEY; do
-            value="${!name}"
-            if [ -z "$value" ]; then
-              echo "::error::$name fehlt. Siehe Kommentar oben in dieser Datei."
-              exit 1
+          env_file="functions/.env.$PROJECT_ID"
+          : > "$env_file"
+
+          # Leere Werte weglassen: eine Zeile "GEMINI_MODEL=" würde den
+          # Standardwert im Code überschreiben statt ihn zu lassen.
+          #
+          # Das abschließende "return 0" ist wichtig: der Schritt läuft unter
+          # "set -e", und eine Funktion, die mit dem Ergebnis eines fehl-
+          # geschlagenen Tests endet, würde den ganzen Lauf still abbrechen.
+          write() {
+            if [ -n "${!1}" ]; then
+              printf '%s=%s\n' "$1" "${!1}" >> "$env_file"
             fi
-            printf '%s' "$value" | npx --yes firebase-tools functions:secrets:set "$name" \
-              --project "$PROJECT_ID" --force --data-file - > /dev/null
-            echo "$name übernommen."
+            return 0
+          }
+          for name in EMAILPROXY_URL EMAILPROXY_KEY GEMINI_API_KEY GEMINI_MODEL \
+                      ADMIN_UIDS INGEST_TOKEN POLL_TRIGGER_TOKEN \
+                      POLL_MESSAGE_LIMIT MAX_INLINE_ATTACHMENT_BYTES; do
+            write "$name"
+          done
+
+          # Nur die Namen ins Protokoll, nie die Werte.
+          echo "Gesetzt: $(cut -d= -f1 "$env_file" | tr '\n' ' ')"
+
+          for required in EMAILPROXY_URL EMAILPROXY_KEY; do
+            if ! grep -q "^$required=" "$env_file"; then
+              echo "::warning::$required fehlt — HabMail kann dann keine Mails abholen."
+            fi
           done
 
       - name: Ausrollen

@@ -66,14 +66,24 @@ Der ganze Ablauf geht über Weboberflächen — Browser reicht, auch auf dem Han
    `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_PROJECT_ID`, `EMAILPROXY_KEY`,
    `GEMINI_API_KEY`. Unter *Variables*: `EMAILPROXY_URL` und `ADMIN_UIDS`
    (deine Firebase-UID, zu finden in der Firebase Console unter Authentication).
-3. **Ausrollen.** Repo → Actions → *Firebase ausrollen* → *Run workflow*. Das
-   spielt Datenbankregeln und Functions ein und legt die Secrets an.
-4. **Vercel-Variablen setzen** (Vercel-Dashboard → Settings → Environment
+3. **Dem Dienstkonto Rechte geben.** Der Schlüssel aus den Projekteinstellungen
+   darf noch keine Functions ausrollen. Google Cloud Console → IAM → das Konto
+   `firebase-adminsdk-…` bearbeiten und diese Rollen ergänzen: *Firebase Admin*,
+   *Cloud Functions Admin*, *Dienstkontonutzer*, *Cloud Build-Bearbeiter*,
+   *Artifact Registry-Administrator*.
+4. **Ausrollen.** Repo → Actions → *Firebase ausrollen* → *Run workflow*. Das
+   spielt Datenbankregeln, Functions und die Konfiguration ein.
+5. **Vercel-Variablen setzen** (Vercel-Dashboard → Settings → Environment
    Variables), siehe Abschnitt 3 unten. Danach neu deployen.
-5. **Anmelden**, dann *Benutzer verwalten* → *Bestand übernehmen* → *Nachsehen*,
+6. **Anmelden**, dann *Benutzer verwalten* → *Bestand übernehmen* → *Nachsehen*,
    um alte Mails in deinen Posteingang zu holen.
-6. **Postfach hinzufügen**: *Postfächer verwalten* → *Postfach hinzufügen*.
+7. **Postfach hinzufügen**: *Postfächer verwalten* → *Postfach hinzufügen*.
    IONOS ist vorausgewählt — Adresse und Passwort reichen.
+
+> Die Schlüssel landen als Umgebungsvariablen der Functions, nicht im Google
+> Secret Manager. Das spart die Secret-Manager-Einrichtung; wer die strengere
+> Variante will, setzt sie mit `firebase functions:secrets:set` und trägt sie
+> unter `secrets:` in `functions/index.js` ein.
 
 Die Abschnitte unten beschreiben dasselbe ausführlicher, inklusive der
 Terminal-Varianten.
