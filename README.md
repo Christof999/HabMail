@@ -66,13 +66,19 @@ Der ganze Ablauf geht über Weboberflächen — Browser reicht, auch auf dem Han
    `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_PROJECT_ID`, `EMAILPROXY_KEY`,
    `GEMINI_API_KEY`. Unter *Variables*: `EMAILPROXY_URL` und `ADMIN_UIDS`
    (deine Firebase-UID, zu finden in der Firebase Console unter Authentication).
-3. **Dem Dienstkonto Rechte geben.** Der Schlüssel aus den Projekteinstellungen
-   darf noch keine Functions ausrollen. Google Cloud Console → IAM → das Konto
-   `firebase-adminsdk-…` bearbeiten und diese Rollen ergänzen: *Firebase Admin*,
-   *Cloud Functions Admin*, *Dienstkontonutzer*, *Cloud Build-Bearbeiter*,
-   *Artifact Registry-Administrator*.
-4. **Ausrollen.** Repo → Actions → *Firebase ausrollen* → *Run workflow*. Das
-   spielt Datenbankregeln, Functions und die Konfiguration ein.
+3. **Google-APIs aktivieren und dem Dienstkonto Rechte geben.** Beides einmalig
+   und beides als Projektinhaber. Die genauen Links mit deiner Projekt-ID gibt
+   der Workflow aus, wenn er scheitert — einfach einmal laufen lassen und den
+   Schritt *Hilfe bei Fehlern* aufklappen. Nötig sind:
+   - die APIs Cloud Functions, Cloud Build, Artifact Registry, Cloud Run,
+     Eventarc, Pub/Sub, Cloud Scheduler und Cloud Storage,
+   - für das Konto `firebase-adminsdk-…` die Rollen *Firebase Admin*,
+     *Cloud Functions Admin*, *Dienstkontonutzer*, *Cloud Build-Bearbeiter*,
+     *Artifact Registry-Administrator*.
+4. **Ausrollen.** Repo → Actions → *Firebase ausrollen* → *Run workflow*. Die
+   Datenbankregeln gehen in einem eigenen Schritt raus, vor den Functions —
+   sie schotten die Daten der Benutzer ab und sollen auch dann live sein, wenn
+   an den Functions noch etwas fehlt.
 5. **Vercel-Variablen setzen** (Vercel-Dashboard → Settings → Environment
    Variables), siehe Abschnitt 3 unten. Danach neu deployen.
 6. **Anmelden**, dann *Benutzer verwalten* → *Bestand übernehmen* → *Nachsehen*,

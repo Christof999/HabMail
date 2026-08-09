@@ -151,12 +151,45 @@ jobs:
             fi
           done
 
-      - name: Ausrollen
+      # Getrennt von den Functions: die Datenbankregeln sind das, was die Daten
+      # der Benutzer voneinander abschottet. Die sollen auch dann live gehen,
+      # wenn beim Ausrollen der Functions noch etwas fehlt.
+      - name: Datenbankregeln ausrollen
         env:
           PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: |
           npx --yes firebase-tools deploy \
-            --only functions,database \
+            --only database \
             --project "$PROJECT_ID" \
             --non-interactive \
             --force
+
+      - name: Functions ausrollen
+        env:
+          PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: |
+          npx --yes firebase-tools deploy \
+            --only functions \
+            --project "$PROJECT_ID" \
+            --non-interactive \
+            --force
+
+      # Läuft nur, wenn oben etwas schiefging: die häufigste Ursache sind
+      # Google-APIs, die im Projekt noch nicht aktiviert sind. Das Dienstkonto
+      # darf sie standardmäßig nicht selbst einschalten.
+      - name: Hilfe bei Fehlern
+        if: failure()
+        env:
+          PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: |
+          apis="cloudfunctions.googleapis.com,cloudbuild.googleapis.com,artifactregistry.googleapis.com,run.googleapis.com,eventarc.googleapis.com,pubsub.googleapis.com,cloudscheduler.googleapis.com,storage.googleapis.com"
+          echo "::error::Ausrollen fehlgeschlagen. Bei \"Permissions denied enabling …\" fehlen die Google-APIs — der Link unten schaltet alle nötigen auf einmal ein."
+          echo ""
+          echo "APIs aktivieren (einmalig, als Projektinhaber):"
+          echo "  https://console.cloud.google.com/flows/enableapi?apiid=$apis&project=$PROJECT_ID"
+          echo ""
+          echo "Rechte des Dienstkontos prüfen:"
+          echo "  https://console.cloud.google.com/iam-admin/iam?project=$PROJECT_ID"
+          echo ""
+          echo "Nötige Rollen: Firebase Admin, Cloud Functions Admin, Dienstkontonutzer,"
+          echo "Cloud Build-Bearbeiter, Artifact Registry-Administrator."
