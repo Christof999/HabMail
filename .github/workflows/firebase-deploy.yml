@@ -98,7 +98,11 @@ jobs:
             echo "::error::FIREBASE_SERVICE_ACCOUNT ist kein vollständiges Dienstkonto-JSON ($(printf '%s' "$reason" | grep -m1 -oE '(SyntaxError|Error): .*' | head -c 160)). Die heruntergeladene Datei komplett einfügen, von { bis }."
             exit 1
           fi
-          echo "Dienstkonto: $reason"
+          # Das Konto in der Google Cloud Console zu finden ist mühsam, wenn man
+          # mehrere Projekte hat. Hier steht die Adresse und der direkte Link.
+          echo "Dienstkonto:  $reason"
+          echo "Projekt:      ${reason##*@}" | sed 's/\.iam\.gserviceaccount\.com//'
+          echo "Rechte hier vergeben: https://console.cloud.google.com/iam-admin/iam?project=$PROJECT_ID"
 
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/service-account.json" >> "$GITHUB_ENV"
 
