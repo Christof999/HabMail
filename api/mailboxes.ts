@@ -1,9 +1,14 @@
 /**
  * Postfächer aus der Oberfläche verwalten.
  *
- * Der Browser darf den Admin-Key des Email-Proxys nicht sehen — er liegt
- * ausschließlich hier auf dem Server. Diese Funktion prüft das Firebase-Token
- * des angemeldeten Nutzers und reicht die Anfrage dann an den Proxy weiter.
+ * Bewusst NICHT mit dem Admin-Key des Proxys: der darf alles, auch die
+ * Postfächer anderer Projekte lesen und löschen. Hier läuft alles über einen
+ * gewöhnlichen Client-Key gegen /api/mailboxes, und die Firebase-UID des
+ * angemeldeten Nutzers geht als "subject" mit. Der Proxy bindet das Postfach
+ * daran — ein Nutzer sieht dadurch ausschließlich seine eigenen.
+ *
+ * Die UID kommt aus dem geprüften Token, niemals aus dem Request-Body. Sonst
+ * könnte ein Angemeldeter die Postfächer eines anderen anfragen.
  *
  * Eine Datei bewusst: Vercel-NFT kann Hilfsmodule unter api/lib/ im Lambda
  * auslassen → FUNCTION_INVOCATION_FAILED. Alles hier = ein zuverlässiges Bundle.
@@ -27,7 +32,9 @@ function resolveFirebaseProjectId(): string {
 
 async function requireFirebaseAuth(
   req: VercelRequest,
-): Promise<{ ok: true } | { ok: false; status: number; body: Record<string, string> }> {
+): Promise<
+  { ok: true; uid: string } | { ok: false; status: number; body: Record<string, string> }
+> {
   const projectId = resolveFirebaseProjectId()
   if (!projectId) {
     return {
@@ -51,11 +58,19 @@ async function requireFirebaseAuth(
     }
   }
   try {
-    await jose.jwtVerify(auth.slice(7).trim(), JWKS, {
+    const { payload } = await jose.jwtVerify(auth.slice(7).trim(), JWKS, {
       issuer: `https://securetoken.google.com/${projectId}`,
       audience: projectId,
     })
-    return { ok: true }
+    const uid = typeof payload.sub === 'string' ? payload.sub : ''
+    if (uid === '') {
+      return {
+        ok: false,
+        status: 401,
+        body: { error: 'invalid_token', hint: 'Im Token fehlt die Benutzerkennung.' },
+      }
+    }
+    return { ok: true, uid }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error('firebase_id_token_verify', projectId, msg)
@@ -67,11 +82,11 @@ async function requireFirebaseAuth(
   }
 }
 
-function proxyConfig(): { url: string; adminKey: string } | null {
+function proxyConfig(): { url: string; apiKey: string } | null {
   const url = process.env.EMAILPROXY_URL?.trim().replace(/\/$/, '') ?? ''
-  const adminKey = process.env.EMAILPROXY_ADMIN_KEY?.trim() ?? ''
-  if (!url || !adminKey) return null
-  return { url, adminKey }
+  const apiKey = process.env.EMAILPROXY_KEY?.trim() ?? ''
+  if (!url || !apiKey) return null
+  return { url, apiKey }
 }
 
 /** Nur diese Felder gehen an den Proxy — der Rest wird verworfen. */
@@ -141,19 +156,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(503).json({
       error: 'proxy_not_configured',
       hint:
-        'EMAILPROXY_URL und EMAILPROXY_ADMIN_KEY fehlen in den Vercel-Umgebungsvariablen. ' +
-        'Ohne die beiden kann HabMail keine Postfächer verwalten.',
+        'EMAILPROXY_URL und EMAILPROXY_KEY fehlen in den Vercel-Umgebungsvariablen. ' +
+        'Ohne die beiden kann HabMail keine Postfächer verwalten. Der Key braucht ' +
+        'im Proxy die Befugnis canManageMailboxes.',
     })
   }
 
-  const path = buildProxyPath(req, method)
-  const body = method === 'GET' || method === 'DELETE' ? undefined : parseBody(req)
+  const path = buildProxyPath(req, method, auth.uid)
+  // subject immer aus dem geprüften Token — was im Body stand, ist irrelevant.
+  const body =
+    method === 'GET' || method === 'DELETE'
+      ? undefined
+      : { ...parseBody(req), subject: auth.uid }
 
   try {
     const response = await fetch(`${config.url}${path}`, {
       method,
       headers: {
-        Authorization: `Bearer ${config.adminKey}`,
+        Authorization: `Bearer ${config.apiKey}`,
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -176,13 +196,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-function buildProxyPath(req: VercelRequest, method: string): string {
+function buildProxyPath(req: VercelRequest, method: string, uid: string): string {
+  const subject = `subject=${encodeURIComponent(uid)}`
+
   if (method === 'DELETE') {
     const id = typeof req.query.id === 'string' ? req.query.id : ''
-    return `/api/admin/mailboxes?id=${encodeURIComponent(id)}`
+    return `/api/mailboxes?${subject}&id=${encodeURIComponent(id)}`
   }
-  if (method === 'GET' && (req.query.verify === '1' || req.query.verify === 'true')) {
-    return '/api/admin/mailboxes?verify=1'
+  if (method === 'GET') {
+    const verify = req.query.verify === '1' || req.query.verify === 'true'
+    return `/api/mailboxes?${subject}${verify ? '&verify=1' : ''}`
   }
-  return '/api/admin/mailboxes'
+  return '/api/mailboxes'
 }

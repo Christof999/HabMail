@@ -14,6 +14,23 @@ Die Zugangsdaten der Postfächer liegen **nicht** in diesem Projekt, sondern
 verschlüsselt im [Email-Proxy](https://github.com/Christof999/Emailproxy).
 HabMail kennt nur dessen URL und einen API-Key.
 
+## Wer sieht was
+
+HabMail ist ein Mehrbenutzer-System. Jeder Benutzer hat seinen eigenen
+Posteingang und seine eigenen Postfächer:
+
+- **Mails und Ordner** liegen unter `users/<uid>/`. Die Regeln in
+  [`database.rules.json`](database.rules.json) erlauben jedem Benutzer nur den
+  Zugriff auf seinen eigenen Zweig.
+- **Postfächer** trägt der Proxy unter dem Eigentümer `habmail:<uid>`. Ein
+  Benutzer sieht ausschließlich seine eigenen — nicht die anderer Benutzer und
+  nicht die anderer Projekte, die denselben Proxy benutzen.
+- **Konten legt ein Administrator an.** Eine Selbstregistrierung gibt es nicht.
+
+Der **Admin-Key des Proxys gehört nicht in dieses Projekt**. Er darf alles,
+auch die Postfächer aller anderen Projekte lesen und löschen. HabMail benutzt
+einen gewöhnlichen Client-Key, der auf seine eigenen Postfächer beschränkt ist.
+
 ## Aufbau
 
 | Teil | Wo | Wofür |
@@ -30,8 +47,11 @@ HabMail kennt nur dessen URL und einen API-Key.
    Postfach die neuen Mails über `GET /api/receive`.
 3. Jede Mail geht an Gemini: Kategorie, Zusammenfassung, Priorität — bei
    Rechnungen zusätzlich Nummer, Betrag, Datum und Fälligkeit.
-4. Der Datensatz landet in der Realtime Database. Der Schlüssel wird aus der
-   Message-ID abgeleitet, dieselbe Mail kann also nicht doppelt entstehen.
+4. Der Datensatz landet unter `users/<uid>/emails` — welcher Benutzer gemeint
+   ist, sagt der Proxy über den Eigentümer des Postfachs. Der Schlüssel wird
+   aus der Message-ID abgeleitet, dieselbe Mail kann also nicht doppelt
+   entstehen. Postfächer ohne Eigentümer werden übersprungen: bei denen wüsste
+   niemand, in wessen Posteingang sie gehören.
 5. Erst danach wird dem Proxy bestätigt, dass die Mails durch sind. Bricht
    etwas ab, kommen sie beim nächsten Lauf erneut — das ist Absicht.
 
@@ -59,26 +79,31 @@ Cloud-Scheduler-Aufgabe.
 
 ### 2. Email-Proxy verbinden
 
-Im Proxy einen Key anlegen, der abholen darf:
+Im Proxy einen Client anlegen und ihm genau zwei Befugnisse geben — mehr
+braucht HabMail nicht, und mehr soll es auch nicht haben:
 
 ```bash
 node scripts/emailproxy-admin.mjs client:create --id habmail
-node scripts/emailproxy-admin.mjs client:receive --id habmail
+node scripts/emailproxy-admin.mjs client:own-mailboxes --id habmail   # eigene Postfächer
+node scripts/emailproxy-admin.mjs client:receive --id habmail         # abholen
 ```
 
-Den Key und die Proxy-URL bei den Functions hinterlegen:
+`client:create` gibt den Key **einmalig** aus. Ihn bei den Functions und in
+Vercel hinterlegen:
 
 ```bash
 npx firebase functions:secrets:set EMAILPROXY_KEY
 npx firebase functions:secrets:set GEMINI_API_KEY
 ```
 
-`EMAILPROXY_URL`, `EMAILS_PATH` und `GEMINI_MODEL` sind gewöhnliche
+`EMAILPROXY_URL`, `ADMIN_UIDS` und `GEMINI_MODEL` sind gewöhnliche
 Umgebungsvariablen der Function.
 
-> **Wichtig:** `EMAILS_PATH` (Functions) und `VITE_FIREBASE_EMAILS_PATH`
-> (Oberfläche) müssen auf denselben Pfad zeigen. Sonst schreibt die Function
-> Mails dorthin, wo die App nicht hinsieht.
+### 2b. Ersten Administrator festlegen
+
+Ohne Administrator kommt niemand an die Benutzerverwaltung. Der erste kommt aus
+`ADMIN_UIDS` (kommagetrennte Firebase-UIDs) — oder das Migrationsskript unten
+trägt ihn für dich ein.
 
 ### 3. Vercel
 
@@ -88,23 +113,49 @@ Für die Serverless-Funktionen unter `api/`:
 FIREBASE_PROJECT_ID=...
 GEMINI_API_KEY=...
 EMAILPROXY_URL=https://dein-proxy.vercel.app
-EMAILPROXY_ADMIN_KEY=...        # nur hier, nie im Frontend
+EMAILPROXY_KEY=ep_...           # nur hier, nie im Frontend
 SMTP_HOST=...                   # für /api/send-mail (Antworten)
 SMTP_USER=...
 SMTP_PASS=...
 ```
 
-Der Admin-Key liegt ausschließlich auf dem Server: `api/mailboxes.ts` prüft das
-Firebase-Token des angemeldeten Nutzers und reicht die Anfrage erst dann an den
-Proxy weiter.
+`api/mailboxes.ts` prüft das Firebase-Token des angemeldeten Nutzers und
+schickt dessen UID als `subject` an den Proxy — genommen aus dem geprüften
+Token, nie aus dem Request-Body. Ein Angemeldeter kann deshalb nicht die
+Postfächer eines anderen anfragen.
 
-## Postfächer hinzufügen
+## Benutzer und Postfächer
 
-In der Oberfläche über **Postfächer verwalten**. Nötig sind Adresse, Passwort
-und der SMTP-Server; den IMAP-Server schlägt das Formular vor. Ohne IMAP-Server
-kann über das Postfach nur verschickt werden.
+**Benutzer verwalten** (nur für Administratoren sichtbar): Konten anlegen,
+Passwörter setzen, sperren, Adminrechte vergeben. Ein Konto zu löschen entfernt
+auch dessen Mails und Ordner — die Postfächer im Proxy bleiben bestehen.
+
+**Postfächer verwalten** (für jeden Benutzer, für seine eigenen): Adresse,
+Passwort und SMTP-Server eintragen; den IMAP-Server schlägt das Formular vor.
+Ohne IMAP-Server kann über das Postfach nur verschickt werden.
 
 Bei Gmail und GMX braucht es ein App-Passwort, nicht das Kontopasswort.
+
+## Bestand migrieren
+
+Wer HabMail schon vor der Benutzertrennung benutzt hat, hat Mails flach an der
+Wurzel der Datenbank liegen. Dieses Skript zieht sie um und trägt dich als
+Administrator ein:
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=/pfad/zum/service-account.json
+export FIREBASE_DATABASE_URL=https://<projekt>-default-rtdb.europe-west1.firebasedatabase.app
+
+node functions/scripts/migrate-to-users.mjs --email du@example.com --dry-run
+node functions/scripts/migrate-to-users.mjs --email du@example.com
+```
+
+Lagen die Mails in einem Unterordner, `--source emails` mitgeben. Kopiert wird
+zuerst, gelöscht erst danach — ein Abbruch mittendrin lässt den alten Stand
+unangetastet. `--keep-source` lässt ihn ohnehin liegen.
+
+> Der Benutzer muss vorher existieren. Bei einem leeren Projekt also erst über
+> `ADMIN_UIDS` anmelden und dann migrieren.
 
 ## Kategorien
 
@@ -130,7 +181,13 @@ werden.
 - **Das Monatsarchiv fehlt noch.** Das Feld `period` (YYYY-MM) wird bereits
   gefüllt, ausgewertet wird es noch nicht.
 - **Der Ingest-Endpunkt** (`ingest_k7mN9pQ2wR4xY8z`, für n8n) nimmt ohne
-  gesetztes `INGEST_TOKEN` weiterhin Daten von jedem an.
+  gesetztes `INGEST_TOKEN` weiterhin Daten von jedem an — und schreibt an die
+  alte, flache Stelle, die die App nicht mehr liest. Wer noch n8n benutzt,
+  sollte auf das Abholen über den Proxy umstellen.
+- **Das Kategorie-Schema steht doppelt** (`src/categories.ts` und
+  `functions/categories.js`), ebenso die Pfade (`src/paths.ts` und
+  `functions/paths.js`). Das ist die Deploy-Grenze zwischen App und Functions —
+  Änderungen gehören in beide Dateien.
 
 ## Skripte
 

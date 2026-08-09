@@ -1029,6 +1029,15 @@ button.ghost:hover:not(:disabled) {
   overflow-wrap: anywhere;
 }
 
+.user-admin-check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .mailbox-form {
   margin-top: 1rem;
   padding-top: 0.75rem;

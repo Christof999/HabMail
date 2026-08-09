@@ -47,6 +47,9 @@ import {
 } from './threading'
 import { ThemeAppearanceControl } from './ThemeProvider'
 import MailboxSettings from './MailboxSettings'
+import UserSettings from './UserSettings'
+import { whoAmI } from './usersApi'
+import { userEmailsPath, userFoldersPath } from './paths'
 import {
   CATEGORY_LABELS,
   EMAIL_CATEGORIES,
@@ -76,16 +79,6 @@ function sortKey(r: EmailRow): number {
   const t = Date.parse(r.receivedAt)
   return Number.isFinite(t) ? t : 0
 }
-
-/** Standard: Root (wie n8n push). Unterordner z. B. `emails` per Env setzen. */
-function emailsRefPath(): string {
-  const raw = import.meta.env.VITE_FIREBASE_EMAILS_PATH?.trim()
-  if (raw === undefined || raw === '') return ''
-  if (raw === '/' || raw === '.') return ''
-  return raw.replace(/^\/+|\/+$/g, '')
-}
-
-const EMAILS_PATH = emailsRefPath()
 
 /** dataTransfer-Typ + JSON-Payload für Thread-Verschieben per Drag and Drop */
 const HABMAIL_THREAD_DRAG_MIME = 'application/x-habmail-thread'
@@ -303,9 +296,15 @@ export default function App() {
   const [mailDropHighlightId, setMailDropHighlightId] = useState<
     string | null
   >(null)
+  // Jeder Benutzer hat seinen eigenen Zweig; ohne Anmeldung gibt es keinen.
+  const emailsPath = user ? userEmailsPath(user.uid) : ''
+  const foldersPath = user ? userFoldersPath(user.uid) : ''
+
   const [categoryFilter, setCategoryFilter] = useState<EmailCategory | null>(null)
   const [mailboxFilter, setMailboxFilter] = useState<string | null>(null)
   const [showMailboxSettings, setShowMailboxSettings] = useState(false)
+  const [showUserSettings, setShowUserSettings] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [isCompactLayout, setIsCompactLayout] = useState(() => {
     if (typeof globalThis.window === 'undefined') return false
     return globalThis.window.matchMedia('(max-width: 767px)').matches
@@ -327,12 +326,31 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (!user) {
+      setIsAdmin(false)
+      return
+    }
+    let active = true
+    whoAmI({})
+      .then(({ isAdmin: admin }) => {
+        if (active) setIsAdmin(admin)
+      })
+      .catch(() => {
+        // Kein Adminrecht oder Functions noch nicht ausgerollt — dann bleibt
+        // die Verwaltung schlicht verborgen.
+        if (active) setIsAdmin(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [user])
+
+  useEffect(() => {
     if (!user || configError) return
     setRtdbListenError(null)
     const db = getFirebaseDb()
-    const emailsRef = EMAILS_PATH ? ref(db, EMAILS_PATH) : ref(db)
     return onValue(
-      emailsRef,
+      ref(db, emailsPath),
       (snap) => {
         setRtdbListenError(null)
         const list = parseEmailsTree(snap.val())
@@ -344,13 +362,13 @@ export default function App() {
         setRows([])
       },
     )
-  }, [user, configError])
+  }, [user, configError, emailsPath])
 
   useEffect(() => {
     if (!user || configError) return
     const db = getFirebaseDb()
     return onValue(
-      ref(db, 'mailFolders'),
+      ref(db, foldersPath),
       (snap) => {
         setFolders(parseMailFoldersTree(snap.val()))
       },
@@ -358,7 +376,7 @@ export default function App() {
         /* optional: setFolders([]) */
       },
     )
-  }, [user, configError])
+  }, [user, configError, foldersPath])
 
   useEffect(() => {
     if (!user) {
@@ -485,7 +503,7 @@ export default function App() {
     const db = getFirebaseDb()
     const updates: Record<string, unknown> = {}
     for (const r of thread.membersAsc) {
-      updates[rtdbEmailFieldPath(EMAILS_PATH, r.id, 'userRead')] = true
+      updates[rtdbEmailFieldPath(emailsPath, r.id, 'userRead')] = true
     }
     try {
       await update(ref(db), updates)
@@ -502,7 +520,7 @@ export default function App() {
     const db = getFirebaseDb()
     const updates: Record<string, unknown> = {}
     for (const r of thread.membersAsc) {
-      updates[rtdbEmailFieldPath(EMAILS_PATH, r.id, 'userRead')] = false
+      updates[rtdbEmailFieldPath(emailsPath, r.id, 'userRead')] = false
     }
     try {
       await update(ref(db), updates)
@@ -597,7 +615,7 @@ export default function App() {
     const db = getFirebaseDb()
     const updates: Record<string, unknown> = {}
     for (const r of thread.membersAsc) {
-      const path = rtdbEmailFieldPath(EMAILS_PATH, r.id, 'folderId')
+      const path = rtdbEmailFieldPath(emailsPath, r.id, 'folderId')
       updates[path] = targetFolderId
     }
     try {
@@ -618,7 +636,7 @@ export default function App() {
     setFolderActionError(null)
     try {
       const db = getFirebaseDb()
-      await push(ref(db, 'mailFolders'), {
+      await push(ref(db, foldersPath), {
         name,
         parentId: newFolderParentId,
         createdAt: Date.now(),
@@ -642,7 +660,7 @@ export default function App() {
     try {
       const db = getFirebaseDb()
       await update(ref(db), {
-        [`mailFolders/${folderId}/name`]: name,
+        [`${foldersPath}/${folderId}/name`]: name,
       })
       setRenameFolderTarget(null)
     } catch (e) {
@@ -661,7 +679,7 @@ export default function App() {
     const db = getFirebaseDb()
     const updates: Record<string, unknown> = {}
     for (const r of thread.membersAsc) {
-      updates[rtdbEmailRecordPath(EMAILS_PATH, r.id)] = null
+      updates[rtdbEmailRecordPath(emailsPath, r.id)] = null
     }
     try {
       await update(ref(db), updates)
@@ -684,12 +702,12 @@ export default function App() {
     const idSet = new Set(toRemove)
     const updates: Record<string, unknown> = {}
     for (const id of toRemove) {
-      updates[`mailFolders/${id}`] = null
+      updates[`${foldersPath}/${id}`] = null
     }
     for (const r of rows) {
       const fid = r.folderId?.trim()
       if (fid && idSet.has(fid)) {
-        updates[rtdbEmailFieldPath(EMAILS_PATH, r.id, 'folderId')] = null
+        updates[rtdbEmailFieldPath(emailsPath, r.id, 'folderId')] = null
       }
     }
     try {
@@ -1005,13 +1023,13 @@ export default function App() {
                 {!isCompactLayout ? (
                   <>
                     {' '}
-                    · RTDB: <code>{EMAILS_PATH || '(root)'}</code>
+                    · RTDB: <code>{emailsPath}</code>
                   </>
                 ) : (
                   <>
                     {' '}
                     ·{' '}
-                    <code className="bar-meta-path">{EMAILS_PATH || 'root'}</code>
+                    <code className="bar-meta-path">{emailsPath}</code>
                   </>
                 )}
               </p>
@@ -1152,6 +1170,15 @@ export default function App() {
             >
               Postfächer verwalten
             </button>
+            {isAdmin ? (
+              <button
+                type="button"
+                className="ghost small-btn"
+                onClick={() => setShowUserSettings(true)}
+              >
+                Benutzer verwalten
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -1329,27 +1356,22 @@ export default function App() {
           ) : rows.length === 0 ? (
             <>
               <p>
-                <strong>Keine Einträge an diesem Pfad.</strong> Die App liest
-                unter: <code>{EMAILS_PATH || '(Root der Datenbank)'}</code>
-              </p>
-              <p>
-                In der Firebase Console unter <strong>Realtime Database</strong>{' '}
-                prüfen, <em>wo</em> deine Keys liegen. Standard in dieser App ist
-                die <strong>Root</strong> (Push-IDs wie <code>-O...</code>).
-                Liegen die Mails in einem Unterordner, musst du den Pfad setzen
-                (siehe unten).
+                <strong>Noch keine Mails.</strong> Dein Bereich in der Datenbank:{' '}
+                <code>{emailsPath}</code>
               </p>
               <ul className="hint-list">
                 <li>
-                  Liegen Einträge unter <code>emails</code> (oder anderem Namen),
-                  setze in Vercel{' '}
-                  <code>VITE_FIREBASE_EMAILS_PATH=emails</code> (ohne Slash).
+                  Noch kein Postfach hinterlegt? Über{' '}
+                  <strong>Postfächer verwalten</strong> eines anlegen. Ohne
+                  IMAP-Server wird von dort nicht abgeholt.
                 </li>
                 <li>
-                  <strong>Rules deployen:</strong> aktuelle Regeln im Repo
-                  erlauben angemeldeten Nutzern Lesen für jeden{' '}
-                  <strong>obersten</strong> Knoten. In der Console unter
-                  Realtime Database → <strong>Regeln</strong> einspielen oder{' '}
+                  Abgeholt wird alle fünf Minuten. Nach dem Anlegen dauert der
+                  erste Durchlauf also einen Moment.
+                </li>
+                <li>
+                  <strong>Regeln eingespielt?</strong> Ohne die aktuellen Regeln
+                  aus dem Repo darf niemand seinen eigenen Bereich lesen:{' '}
                   <code>firebase deploy --only database</code>.
                 </li>
               </ul>
@@ -1574,6 +1596,10 @@ export default function App() {
 
       {showMailboxSettings && user ? (
         <MailboxSettings user={user} onClose={() => setShowMailboxSettings(false)} />
+      ) : null}
+
+      {showUserSettings && user && isAdmin ? (
+        <UserSettings currentUser={user} onClose={() => setShowUserSettings(false)} />
       ) : null}
 
       <SendMailModal

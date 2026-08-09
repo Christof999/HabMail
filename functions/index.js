@@ -12,6 +12,17 @@ if (!admin.apps.length) {
 }
 
 const { pollAllMailboxes } = require("./poll");
+const users = require("./users");
+
+/**
+ * Benutzerverwaltung. Konten legt ein Administrator an — es gibt bewusst
+ * keine Selbstregistrierung.
+ */
+exports.createUser = users.createUser;
+exports.listUsers = users.listUsers;
+exports.updateUser = users.updateUser;
+exports.deleteUser = users.deleteUser;
+exports.whoAmI = users.whoAmI;
 
 const MAX_JSON_BYTES = 6 * 1024 * 1024;
 

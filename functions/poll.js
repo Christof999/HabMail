@@ -40,6 +40,7 @@ async function mapWithConcurrency(items, limit, worker) {
 async function pollMailbox(mailbox) {
   const summary = {
     mailbox: mailbox.id,
+    owner: mailbox.subject ?? null,
     fetched: 0,
     stored: 0,
     duplicates: 0,
@@ -48,6 +49,15 @@ async function pollMailbox(mailbox) {
     acked: false,
     hasMore: false,
   };
+
+  // Ohne Besitzer wüsste niemand, in wessen Posteingang die Mails gehören.
+  // Solche Postfächer stammen aus den Environment-Variablen oder vom
+  // Admin-Key des Proxys — die verwaltet HabMail nicht.
+  const ownerUid = typeof mailbox.subject === "string" ? mailbox.subject : "";
+  if (ownerUid === "") {
+    summary.skipped = "kein Besitzer hinterlegt";
+    return summary;
+  }
 
   const { messages, cursor, uidValidity, hasMore } = await fetchMessages(
     mailbox.id,
@@ -78,7 +88,7 @@ async function pollMailbox(mailbox) {
     }
 
     try {
-      const outcome = await storeMessage(mailbox.id, messages[i], analysis);
+      const outcome = await storeMessage(ownerUid, mailbox.id, messages[i], analysis);
       if (outcome === "stored") summary.stored += 1;
       else summary.duplicates += 1;
     } catch (error) {

@@ -1,37 +1,41 @@
 {
   "rules": {
-    "mailFolders": {
-      ".read": "auth != null",
-      "$folderId": {
-        ".write": "auth != null",
-        ".validate": "!newData.exists() || (newData.hasChild('name') && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 120)"
-      }
-    },
-    "emails": {
-      "$emailId": {
-        ".read": "auth != null",
-        ".write": "auth != null && !newData.exists()",
-        "folderId": {
-          ".write": "auth != null",
-          ".validate": "!newData.exists() || newData.isString() || newData.val() == null"
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+
+        "mailFolders": {
+          "$folderId": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "!newData.exists() || (newData.hasChild('name') && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 120)"
+          }
         },
-        "userRead": {
-          ".write": "auth != null",
-          ".validate": "newData.isBoolean()"
+
+        "emails": {
+          "$emailId": {
+            ".write": "auth != null && auth.uid === $uid && !newData.exists()",
+
+            "folderId": {
+              ".write": "auth != null && auth.uid === $uid",
+              ".validate": "!newData.exists() || newData.isString() || newData.val() == null"
+            },
+            "userRead": {
+              ".write": "auth != null && auth.uid === $uid",
+              ".validate": "newData.isBoolean()"
+            }
+          }
         }
       }
     },
-    "$entryId": {
-      ".read": "auth != null",
-      ".write": "auth != null && !newData.exists()",
-      "folderId": {
-        ".write": "auth != null",
-        ".validate": "!newData.exists() || newData.isString() || newData.val() == null"
-      },
-      "userRead": {
-        ".write": "auth != null",
-        ".validate": "newData.isBoolean()"
+
+    "admins": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid"
       }
+    },
+
+    "userDirectory": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true"
     }
   }
 }

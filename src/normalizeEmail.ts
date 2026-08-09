@@ -288,9 +288,9 @@ function isEmailCategoryField(o: Record<string, unknown>): boolean {
 }
 
 /**
- * Knoten auf gleicher Ebene, die keine Mails sind. `emails` steht hier, weil
- * die App wahlweise direkt auf der Wurzel oder auf einem Unterordner lauscht —
- * auf der Wurzel wäre der Unterordner sonst eine leere Geisterzeile.
+ * Knoten, die trotz gleicher Ebene keine Mails sind. Seit die App unter
+ * `users/<uid>/emails` lauscht, sollte das nicht mehr vorkommen — der Filter
+ * bleibt als Netz für Daten aus der Zeit davor.
  */
 const SKIP_ROOT_KEYS = new Set(['mailFolders', 'emails', 'mailboxes'])
 

@@ -10,6 +10,7 @@
 const { createHash } = require("node:crypto");
 const admin = require("firebase-admin");
 const { CATEGORY_LABELS, periodFromDate } = require("./categories");
+const { userEmailsPath } = require("./paths");
 
 /**
  * Anhänge über dieser Grenze werden nur mit Namen und Größe gespeichert.
@@ -22,13 +23,6 @@ const DEFAULT_MAX_INLINE_ATTACHMENT_BYTES = 1024 * 1024;
 function maxInlineAttachmentBytes() {
   const raw = Number.parseInt(process.env.MAX_INLINE_ATTACHMENT_BYTES || "", 10);
   return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_MAX_INLINE_ATTACHMENT_BYTES;
-}
-
-/** Der Pfad, unter dem die Mails liegen. Muss zu VITE_FIREBASE_EMAILS_PATH passen. */
-function emailsPath() {
-  const raw = (process.env.EMAILS_PATH || "emails").trim();
-  const trimmed = raw.replace(/^\/+|\/+$/g, "");
-  return trimmed === "" || trimmed === "." ? "" : trimmed;
 }
 
 /** Realtime-Database-Schlüssel dürfen . # $ [ ] / nicht enthalten. */
@@ -123,12 +117,9 @@ function buildRecord(mailboxId, message, analysis) {
  *
  * @returns {Promise<"stored"|"duplicate">}
  */
-async function storeMessage(mailboxId, message, analysis) {
-  const path = emailsPath();
+async function storeMessage(ownerUid, mailboxId, message, analysis) {
   const key = recordKey(mailboxId, message);
-  const ref = admin
-    .database()
-    .ref(path === "" ? key : `${path}/${key}`);
+  const ref = admin.database().ref(`${userEmailsPath(ownerUid)}/${key}`);
 
   const record = buildRecord(mailboxId, message, analysis);
   const result = await ref.transaction((current) =>
@@ -138,4 +129,4 @@ async function storeMessage(mailboxId, message, analysis) {
   return result.committed ? "stored" : "duplicate";
 }
 
-module.exports = { storeMessage, buildRecord, recordKey, emailsPath };
+module.exports = { storeMessage, buildRecord, recordKey };
