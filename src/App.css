@@ -442,6 +442,73 @@ h3 {
   margin: 0;
 }
 
+/* --- Kategorie- und Postfachfilter --- */
+
+.category-filter-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+button.category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--input-bg);
+  color: var(--text);
+  padding: 0.28rem 0.7rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+button.category-chip:hover {
+  background: var(--pre-bg);
+}
+
+button.category-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg, #fff);
+}
+
+.category-chip-count {
+  font-size: 0.72rem;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.mailbox-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mailbox-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.mailbox-filter select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+}
+
 .saved-filters-chips {
   display: flex;
   flex-wrap: wrap;
@@ -908,6 +975,80 @@ button.ghost:hover:not(:disabled) {
 .pill-prio {
   background: var(--pre-bg);
   color: var(--muted);
+}
+
+.pill-muted {
+  background: var(--pre-bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+/* --- Postfach-Verwaltung --- */
+
+.modal.card.modal-wide {
+  max-width: 560px;
+  max-height: min(85vh, 720px);
+  overflow-y: auto;
+}
+
+.mailbox-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.mailbox-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+}
+
+.mailbox-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.25rem;
+}
+
+.mailbox-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.mailbox-error {
+  color: var(--danger, #c0392b);
+  font-size: 0.85rem;
+  margin: 0.35rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.mailbox-form {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Server und Port gehören zusammen, brechen auf dem Handy aber sauber um. */
+.mailbox-form-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.mailbox-form-row > .folder-modal-label {
+  flex: 1 1 12rem;
+}
+
+.mailbox-form-row > .folder-modal-label.mailbox-port {
+  flex: 0 0 5.5rem;
 }
 
 .pill-thread {

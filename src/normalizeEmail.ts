@@ -1,4 +1,5 @@
-import type { EmailAttachment, EmailRow } from './types'
+import { normalizeCategory, periodFromDate } from './categories'
+import type { EmailAttachment, EmailRow, InvoiceDetails } from './types'
 
 function pickStr(o: Record<string, unknown>, keys: string[]): string {
   for (const k of keys) {
@@ -63,6 +64,49 @@ function pickBase64Payload(x: Record<string, unknown>): string {
   return ''
 }
 
+function pickNumber(o: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const k of keys) {
+    const v = o[k]
+    if (typeof v === 'number' && Number.isFinite(v)) return v
+    if (typeof v === 'string' && v.trim() !== '') {
+      const parsed = Number(v)
+      if (Number.isFinite(parsed)) return parsed
+    }
+  }
+  return undefined
+}
+
+/**
+ * Rechnungsdaten aus dem Datensatz. Fehlt alles, kommt undefined zurück —
+ * ein leeres Objekt würde in der Oberfläche eine Rechnung vortäuschen, zu der
+ * nichts bekannt ist.
+ */
+function parseInvoice(raw: unknown): InvoiceDetails | undefined {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const o = raw as Record<string, unknown>
+
+  const invoice: InvoiceDetails = {}
+  const invoiceNumber = pickStr(o, ['invoiceNumber', 'rechnungsnummer', 'nummer'])
+  if (invoiceNumber) invoice.invoiceNumber = invoiceNumber
+
+  const amountCents = pickNumber(o, ['amountCents', 'betrag_cent'])
+  if (amountCents !== undefined) invoice.amountCents = Math.round(amountCents)
+
+  const currency = pickStr(o, ['currency', 'waehrung', 'währung'])
+  if (currency) invoice.currency = currency.toUpperCase().slice(0, 3)
+
+  const issuedOn = pickStr(o, ['issuedOn', 'rechnungsdatum', 'datum'])
+  if (issuedOn) invoice.issuedOn = issuedOn
+
+  const dueOn = pickStr(o, ['dueOn', 'faelligkeit', 'fällig_am'])
+  if (dueOn) invoice.dueOn = dueOn
+
+  const vendor = pickStr(o, ['vendor', 'aussteller', 'lieferant'])
+  if (vendor) invoice.vendor = vendor
+
+  return Object.keys(invoice).length > 0 ? invoice : undefined
+}
+
 function normalizeOneAttachment(x: Record<string, unknown>): EmailAttachment {
   const filename = pickStr(x, [
     'filename',
@@ -85,7 +129,15 @@ function normalizeOneAttachment(x: Record<string, unknown>): EmailAttachment {
     const b = x.binary as Record<string, unknown>
     dataBase64 = pickBase64Payload(b)
   }
-  return { filename, mimeType, dataBase64 }
+  const size = pickNumber(x, ['size', 'groesse', 'größe', 'bytes'])
+  const omitted = pickStr(x, ['omitted', 'weggelassen'])
+  return {
+    filename,
+    mimeType,
+    dataBase64,
+    ...(size === undefined ? {} : { size }),
+    ...(omitted ? { omitted } : {}),
+  }
 }
 
 const ATTACHMENT_SHAPE_KEYS =
@@ -121,14 +173,20 @@ function coerceToAttachmentRecords(raw: unknown): Record<string, unknown>[] {
   return []
 }
 
+/**
+ * Anhänge ohne echte Nutzdaten werden verworfen — außer sie sagen selbst,
+ * warum der Inhalt fehlt (der Email-Proxy lässt zu große Dateien bewusst
+ * weg). Die soll die Oberfläche zeigen können statt sie zu verschlucken.
+ */
 function parseAttachmentsFromRaw(raw: unknown): EmailAttachment[] | undefined {
   const records = coerceToAttachmentRecords(raw)
   const list = records.map((x) => normalizeOneAttachment(x))
-  const withData = list.filter(
+  const usable = list.filter(
     (a) =>
-      a.dataBase64.length > 0 && looksLikeRealBase64Payload(a.dataBase64),
+      (a.dataBase64.length > 0 && looksLikeRealBase64Payload(a.dataBase64)) ||
+      (a.omitted !== undefined && a.filename.length > 0),
   )
-  return withData.length > 0 ? withData : undefined
+  return usable.length > 0 ? usable : undefined
 }
 
 function firstDefinedAttachmentArray(
@@ -184,12 +242,29 @@ export function normalizeEmailEntry(id: string, raw: unknown): EmailRow {
   const hasAttachment =
     explicitHat === true || Boolean(attachments && attachments.length > 0)
 
+  const mailboxId = pickStr(o, ['mailboxId', 'postfach', 'mailbox'])
+  const messageId = pickStr(o, ['messageId', 'message_id'])
+  const invoice = parseInvoice(o.invoice ?? o.rechnung)
+
+  // Kategorie kommt aus alten Datensätzen als Freitext; categoryId ist die
+  // Fassung, nach der gefiltert und archiviert wird.
+  const categoryId = normalizeCategory(
+    isEmailCategoryField(o) ? o.categoryId : category,
+  )
+
+  // Für das Monatsarchiv zählt das Rechnungsdatum, sonst der Eingang.
+  const period =
+    pickStr(o, ['period', 'zeitraum']) ||
+    periodFromDate(invoice?.issuedOn ?? receivedAt) ||
+    undefined
+
   return {
     id,
     sender,
     senderName: senderName || undefined,
     subject,
     category,
+    categoryId,
     summary,
     originalBody,
     receivedAt,
@@ -200,10 +275,24 @@ export function normalizeEmailEntry(id: string, raw: unknown): EmailRow {
     attachments,
     folderId: folderIdStr ? folderIdStr : undefined,
     userRead,
+    mailboxId: mailboxId || undefined,
+    messageId: messageId || undefined,
+    period,
+    invoice,
   }
 }
 
-const SKIP_ROOT_KEYS = new Set(['mailFolders'])
+/** Neu geschriebene Datensätze bringen categoryId schon fertig mit. */
+function isEmailCategoryField(o: Record<string, unknown>): boolean {
+  return typeof o.categoryId === 'string' && o.categoryId.trim().length > 0
+}
+
+/**
+ * Knoten auf gleicher Ebene, die keine Mails sind. `emails` steht hier, weil
+ * die App wahlweise direkt auf der Wurzel oder auf einem Unterordner lauscht —
+ * auf der Wurzel wäre der Unterordner sonst eine leere Geisterzeile.
+ */
+const SKIP_ROOT_KEYS = new Set(['mailFolders', 'emails', 'mailboxes'])
 
 function rowHasContent(r: EmailRow): boolean {
   return Boolean(

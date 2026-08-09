@@ -46,6 +46,12 @@ import {
   type EmailThread,
 } from './threading'
 import { ThemeAppearanceControl } from './ThemeProvider'
+import MailboxSettings from './MailboxSettings'
+import {
+  CATEGORY_LABELS,
+  EMAIL_CATEGORIES,
+  type EmailCategory,
+} from './categories'
 import './App.css'
 
 function AppLogoMark({ className }: { className?: string }) {
@@ -297,6 +303,9 @@ export default function App() {
   const [mailDropHighlightId, setMailDropHighlightId] = useState<
     string | null
   >(null)
+  const [categoryFilter, setCategoryFilter] = useState<EmailCategory | null>(null)
+  const [mailboxFilter, setMailboxFilter] = useState<string | null>(null)
+  const [showMailboxSettings, setShowMailboxSettings] = useState(false)
   const [isCompactLayout, setIsCompactLayout] = useState(() => {
     if (typeof globalThis.window === 'undefined') return false
     return globalThis.window.matchMedia('(max-width: 767px)').matches
@@ -392,26 +401,58 @@ export default function App() {
     query.trim().length > 0 ||
     (searchMode === 'gemini' && geminiOrderedIds !== null)
 
+  /**
+   * Kategorie und Postfach schränken schon vor dem Bilden der Unterhaltungen
+   * ein — sonst zöge eine passende Mail den ganzen Verlauf mit herein.
+   */
+  const visibleRows = useMemo(() => {
+    if (categoryFilter === null && mailboxFilter === null) return rows
+    return rows.filter(
+      (r) =>
+        (categoryFilter === null || r.categoryId === categoryFilter) &&
+        (mailboxFilter === null || (r.mailboxId ?? '') === mailboxFilter),
+    )
+  }, [rows, categoryFilter, mailboxFilter])
+
+  /** Postfächer, aus denen tatsächlich Mails da sind. */
+  const knownMailboxIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const r of rows) {
+      if (r.mailboxId) ids.add(r.mailboxId)
+    }
+    return [...ids].sort((a, b) => a.localeCompare(b, 'de'))
+  }, [rows])
+
+  /** Wie viele Mails je Kategorie — für die Zahlen an den Filterknöpfen. */
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<EmailCategory, number>()
+    for (const r of rows) {
+      if (mailboxFilter !== null && (r.mailboxId ?? '') !== mailboxFilter) continue
+      counts.set(r.categoryId, (counts.get(r.categoryId) ?? 0) + 1)
+    }
+    return counts
+  }, [rows, mailboxFilter])
+
   /** Unterhaltungen (nach Betreff / Re:/Fwd:/AW: zusammengefasst) */
   const displayThreads = useMemo(() => {
     if (searchMode === 'gemini') {
       if (geminiOrderedIds === null) {
-        return buildThreadsForKeys(rows, allThreadKeys(rows))
+        return buildThreadsForKeys(visibleRows, allThreadKeys(visibleRows))
       }
       if (geminiOrderedIds.length === 0) return []
-      const map = new Map(rows.map((r) => [r.id, r]))
+      const map = new Map(visibleRows.map((r) => [r.id, r]))
       const keys = new Set<string>()
       for (const id of geminiOrderedIds) {
         const r = map.get(id)
         if (r) keys.add(subjectThreadKey(r.subject, r.id))
       }
-      const threads = buildThreadsForKeys(rows, keys)
+      const threads = buildThreadsForKeys(visibleRows, keys)
       return orderThreadsByGeminiRank(threads, geminiOrderedIds)
     }
     const q = norm(query.trim())
-    const keys = threadKeysMatchingQuery(rows, q, norm)
-    return buildThreadsForKeys(rows, keys)
-  }, [searchMode, rows, query, geminiOrderedIds])
+    const keys = threadKeysMatchingQuery(visibleRows, q, norm)
+    return buildThreadsForKeys(visibleRows, keys)
+  }, [searchMode, visibleRows, query, geminiOrderedIds])
 
   const threadListTotalMessages = useMemo(
     () => displayThreads.reduce((n, t) => n + t.membersAsc.length, 0),
@@ -1057,6 +1098,63 @@ export default function App() {
           ) : null}
         </div>
 
+        <div className="category-filter-block">
+          <div
+            className="category-chips"
+            role="group"
+            aria-label="Nach Kategorie filtern"
+          >
+            <button
+              type="button"
+              className={`category-chip${categoryFilter === null ? ' active' : ''}`}
+              aria-pressed={categoryFilter === null}
+              onClick={() => setCategoryFilter(null)}
+            >
+              Alle
+            </button>
+            {EMAIL_CATEGORIES.filter(
+              (id) => (categoryCounts.get(id) ?? 0) > 0 || categoryFilter === id,
+            ).map((id) => (
+              <button
+                key={id}
+                type="button"
+                className={`category-chip${categoryFilter === id ? ' active' : ''}`}
+                aria-pressed={categoryFilter === id}
+                onClick={() => setCategoryFilter(categoryFilter === id ? null : id)}
+              >
+                {CATEGORY_LABELS[id]}
+                <span className="category-chip-count">{categoryCounts.get(id) ?? 0}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="mailbox-filter-row">
+            {knownMailboxIds.length > 1 ? (
+              <label className="muted small mailbox-filter">
+                Postfach
+                <select
+                  value={mailboxFilter ?? ''}
+                  onChange={(e) => setMailboxFilter(e.target.value || null)}
+                >
+                  <option value="">alle</option>
+                  {knownMailboxIds.map((id) => (
+                    <option key={id} value={id}>
+                      {id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <button
+              type="button"
+              className="ghost small-btn"
+              onClick={() => setShowMailboxSettings(true)}
+            >
+              Postfächer verwalten
+            </button>
+          </div>
+        </div>
+
         <div className="saved-filters-block">
           <div className="saved-filters-actions">
             <button
@@ -1474,6 +1572,10 @@ export default function App() {
         </div>
       ) : null}
 
+      {showMailboxSettings && user ? (
+        <MailboxSettings user={user} onClose={() => setShowMailboxSettings(false)} />
+      ) : null}
+
       <SendMailModal
         compose={compose}
         user={user}
@@ -1481,6 +1583,20 @@ export default function App() {
       />
     </div>
   )
+}
+
+/** Cent-Beträge als „1.234,50 €“ — die Währung kann fehlen. */
+function formatAmount(amountCents: number, currency?: string): string {
+  const value = amountCents / 100
+  try {
+    return new Intl.NumberFormat('de-DE', {
+      style: 'currency',
+      currency: currency || 'EUR',
+    }).format(value)
+  } catch {
+    // Ungültiger Währungscode aus der KI-Auswertung: lieber die nackte Zahl.
+    return `${value.toFixed(2)} ${currency ?? ''}`.trim()
+  }
 }
 
 function fromLineForRow(row: EmailRow): string {
@@ -1674,6 +1790,16 @@ function EmailCard({
             <span className="pill">{head.category || '—'}</span>
             {head.priority ? (
               <span className="pill pill-prio">{head.priority}</span>
+            ) : null}
+            {head.mailboxId ? (
+              <span className="pill pill-muted" title="Empfangendes Postfach">
+                {head.mailboxId}
+              </span>
+            ) : null}
+            {head.invoice?.amountCents !== undefined ? (
+              <span className="pill" title="Betrag laut Rechnung">
+                {formatAmount(head.invoice.amountCents, head.invoice.currency)}
+              </span>
             ) : null}
             <span className={`status status-${norm(head.status)}`}>
               {head.status}

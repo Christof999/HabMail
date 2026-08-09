@@ -1,7 +1,9 @@
 const { onRequest } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const admin = require("firebase-admin");
 const express = require("express");
+const { timingSafeEqual } = require("node:crypto");
 
 setGlobalOptions({ region: "europe-west1", maxInstances: 10 });
 
@@ -9,9 +11,29 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
+const { pollAllMailboxes } = require("./poll");
+
 const MAX_JSON_BYTES = 6 * 1024 * 1024;
 
 const emailish = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s).trim());
+
+/** Vergleich über gleich lange Puffer, damit die Laufzeit nichts verrät. */
+function tokenMatches(expected, provided) {
+  const a = Buffer.from(String(expected));
+  const b = Buffer.from(String(provided));
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+function bearerToken(req) {
+  const auth = req.headers.authorization;
+  if (typeof auth === "string") {
+    const match = /^Bearer\s+(.+)$/i.exec(auth.trim());
+    if (match) return match[1].trim();
+  }
+  const header = req.headers["x-habmail-token"];
+  return typeof header === "string" ? header.trim() : "";
+}
 
 const app = express();
 
@@ -29,6 +51,20 @@ app.use(express.json({ limit: MAX_JSON_BYTES }));
 
 app.post("/", async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
+
+  // Die Adresse allein war bisher der einzige Schutz. Sobald INGEST_TOKEN
+  // gesetzt ist, muss der Absender ihn mitschicken; ohne die Variable bleibt
+  // es beim alten Verhalten, damit ein laufendes n8n nicht abreißt.
+  const expected = (process.env.INGEST_TOKEN || "").trim();
+  if (expected !== "") {
+    if (!tokenMatches(expected, bearerToken(req))) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+  } else {
+    console.warn(
+      "INGEST_TOKEN ist nicht gesetzt — der Ingest-Endpunkt nimmt Daten von jedem an.",
+    );
+  }
 
   try {
     const body = req.body;
@@ -97,4 +133,61 @@ exports.ingest_k7mN9pQ2wR4xY8z = onRequest(
     invoker: "public",
   },
   app,
+);
+
+/**
+ * Regelmäßig neue Mails aus allen Postfächern des Email-Proxys holen,
+ * kategorisieren und ablegen.
+ *
+ * Alle fünf Minuten statt per IMAP-IDLE: der Proxy läuft serverless und kann
+ * keine dauerhafte Verbindung halten. Fünf Minuten sind der Kompromiss
+ * zwischen „fühlt sich sofort an" und der Zahl der Aufrufe.
+ */
+exports.pollMailboxes = onSchedule(
+  {
+    schedule: "every 5 minutes",
+    timeZone: "Europe/Berlin",
+    timeoutSeconds: 540,
+    memory: "512MiB",
+    // Zwei gleichzeitige Läufe würden dieselben Mails doppelt verarbeiten.
+    maxInstances: 1,
+  },
+  async () => {
+    const report = await pollAllMailboxes();
+    console.log("Abholen abgeschlossen:", JSON.stringify(report));
+  },
+);
+
+/**
+ * Denselben Lauf von Hand auslösen — zum Einrichten und Nachsehen, warum
+ * gerade nichts ankommt. Braucht POLL_TRIGGER_TOKEN, sonst wäre es ein
+ * offener Endpunkt, der fremde Postfächer leerpumpt.
+ */
+exports.pollMailboxesNow = onRequest(
+  { cors: false, invoker: "public", timeoutSeconds: 540, memory: "512MiB" },
+  async (req, res) => {
+    const expected = (process.env.POLL_TRIGGER_TOKEN || "").trim();
+    if (expected === "") {
+      res.status(503).json({
+        error: "not_configured",
+        hint: "POLL_TRIGGER_TOKEN setzen, um das manuelle Auslösen einzuschalten.",
+      });
+      return;
+    }
+    if (!tokenMatches(expected, bearerToken(req))) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+
+    try {
+      const report = await pollAllMailboxes();
+      res.status(200).json(report);
+    } catch (error) {
+      console.error("Manuelles Abholen fehlgeschlagen:", error);
+      res.status(500).json({
+        error: "poll_failed",
+        hint: error instanceof Error ? error.message.slice(0, 300) : "unbekannt",
+      });
+    }
+  },
 );

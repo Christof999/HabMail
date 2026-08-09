@@ -33,6 +33,7 @@ html[data-theme='system'] {
   --pre-bg: #f1f1f3;
   /* Logo-Nähe (#863bff), für UI leicht gedämpft */
   --accent: #6e3df5;
+  --accent-fg: #ffffff;
   --accent-soft: rgba(110, 61, 245, 0.12);
   --danger: #e11d48;
   --pill-bg: rgba(110, 61, 245, 0.1);
@@ -60,6 +61,7 @@ html[data-theme='system'] {
     --input-bg: #1e1e22;
     --pre-bg: #1e1e22;
     --accent: #a78bfa;
+    --accent-fg: #16161a;
     --accent-soft: rgba(167, 139, 250, 0.18);
     --danger: #fb7185;
     --pill-bg: rgba(167, 139, 250, 0.16);
@@ -83,6 +85,7 @@ html[data-theme='dark'] {
   --input-bg: #1e1e22;
   --pre-bg: #1e1e22;
   --accent: #a78bfa;
+  --accent-fg: #16161a;
   --accent-soft: rgba(167, 139, 250, 0.18);
   --danger: #fb7185;
   --pill-bg: rgba(167, 139, 250, 0.16);
