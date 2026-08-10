@@ -209,6 +209,29 @@ unangetastet. `--keep-source` lässt ihn ohnehin liegen.
 > Der Benutzer muss vorher existieren. Bei einem leeren Projekt also erst über
 > `ADMIN_UIDS` anmelden und dann migrieren.
 
+## Buchhaltung
+
+Zweite Ansicht neben dem Posteingang, oben rechts umschaltbar. Sie zeigt alles,
+was als **Rechnung** oder **Mahnung** einsortiert wurde — gruppiert nach Monat,
+mit Summe je Monat und dem laufenden Jahr.
+
+Maßgeblich für den Monat ist das **Rechnungsdatum**, nicht der Eingang der Mail
+(Feld `period`, aus `invoice.issuedOn` gebildet).
+
+**Alle Rechnungen drucken** erzeugt *eine* PDF-Datei: vorne die Aufstellung
+zum Abhaken, dahinter alle Belege. PDFs werden Seite für Seite übernommen,
+Bilder als ganze Seite eingebettet. Anhänge, die sich nicht lesen lassen,
+stehen danach als Hinweis da statt still zu fehlen.
+
+Beträge und die Monatszuordnung lassen sich **antippen und korrigieren**. Das
+ist Absicht: die KI liest nicht jede Rechnung richtig, und eine Summe, die man
+nicht richtigstellen kann, taugt für die Steuer nichts. Die Datenbankregeln
+erlauben deshalb Schreibzugriff auf `invoice` und `period` — aber nur im
+eigenen Bereich.
+
+`pdf-lib` wird erst beim Klick geladen (eigener Chunk, ~420 kB); der Start der
+App bleibt davon unberührt.
+
 ## Kategorien
 
 Definiert in [`src/categories.ts`](src/categories.ts) — und, weil die Functions
@@ -230,8 +253,10 @@ werden.
   schon jetzt nur mit Namen und Größe gespeichert
   (`MAX_INLINE_ATTACHMENT_BYTES`). Für ein echtes Belegarchiv gehören sie nach
   Firebase Storage.
-- **Das Monatsarchiv fehlt noch.** Das Feld `period` (YYYY-MM) wird bereits
-  gefüllt, ausgewertet wird es noch nicht.
+- **Anhänge über 1 MB fehlen im Sammel-PDF.** Sie liegen gar nicht erst in der
+  Datenbank (siehe oben). Bis die Dateien nach Firebase Storage umziehen, muss
+  man sie für den Steuerberater von Hand aus der Mail holen — das Deckblatt
+  weist darauf hin.
 - **Der Ingest-Endpunkt** (`ingest_k7mN9pQ2wR4xY8z`, für n8n) nimmt ohne
   gesetztes `INGEST_TOKEN` weiterhin Daten von jedem an — und schreibt an die
   alte, flache Stelle, die die App nicht mehr liest. Wer noch n8n benutzt,

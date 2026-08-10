@@ -1711,3 +1711,168 @@ code {
     background: rgba(0, 0, 0, 0.55);
   }
 }
+
+/* --- Buchhaltung --- */
+
+.view-switch button {
+  font-size: 0.8125rem;
+}
+
+.accounting {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.accounting-head h2 {
+  margin-bottom: 0.15rem;
+}
+
+.accounting-foot {
+  margin-top: 0.5rem;
+}
+
+.month-group {
+  padding: 0.85rem 1rem;
+}
+
+/* Der ganze Kopf ist die Schaltfläche zum Auf- und Zuklappen. */
+.month-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.month-caret {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.month-label {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.month-total {
+  margin-left: auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.month-warning {
+  margin: 0.5rem 0 0;
+  color: var(--danger);
+}
+
+.invoice-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.invoice-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.invoice-date {
+  flex: 0 0 4.8rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.invoice-vendor {
+  flex: 1 1 12rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.invoice-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invoice-attach {
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.invoice-amount {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.invoice-amount:hover {
+  border-color: var(--border);
+  background: var(--pre-bg);
+}
+
+.invoice-amount--missing {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.invoice-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.invoice-edit input {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--input-bg);
+  color: var(--text);
+  max-width: 8rem;
+}
+
+.month-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.month-actions .muted {
+  margin-right: auto;
+}

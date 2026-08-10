@@ -47,6 +47,7 @@ import {
 } from './threading'
 import { ThemeAppearanceControl } from './ThemeProvider'
 import MailboxSettings from './MailboxSettings'
+import AccountingView from './AccountingView'
 import UserSettings from './UserSettings'
 import { whoAmI } from './usersApi'
 import { userEmailsPath, userFoldersPath } from './paths'
@@ -304,6 +305,8 @@ export default function App() {
   const [mailboxFilter, setMailboxFilter] = useState<string | null>(null)
   const [showMailboxSettings, setShowMailboxSettings] = useState(false)
   const [showUserSettings, setShowUserSettings] = useState(false)
+  /** Posteingang oder Buchhaltung — zwei Sichten auf dieselben Daten. */
+  const [view, setView] = useState<'inbox' | 'accounting'>('inbox')
   const [isAdmin, setIsAdmin] = useState(false)
   const [isCompactLayout, setIsCompactLayout] = useState(() => {
     if (typeof globalThis.window === 'undefined') return false
@@ -1037,6 +1040,22 @@ export default function App() {
           </div>
         </div>
         <div className="bar-trail">
+          <div className="segmented view-switch" role="group" aria-label="Ansicht">
+            <button
+              type="button"
+              className={view === 'inbox' ? 'active' : ''}
+              onClick={() => setView('inbox')}
+            >
+              Posteingang
+            </button>
+            <button
+              type="button"
+              className={view === 'accounting' ? 'active' : ''}
+              onClick={() => setView('accounting')}
+            >
+              Buchhaltung
+            </button>
+          </div>
           <ThemeAppearanceControl />
           <button
             type="button"
@@ -1056,6 +1075,9 @@ export default function App() {
         />
       ) : null}
 
+      {view === 'accounting' ? (
+        <AccountingView rows={rows} uid={user.uid} emailsPath={emailsPath} />
+      ) : (
       <div className={`app-body${isCompactLayout ? ' app-body--compact' : ''}`}>
         {folderSidebar}
 
@@ -1386,6 +1408,7 @@ export default function App() {
 
         </div>
       </div>
+      )}
 
       {renameFolderTarget ? (
         <div
