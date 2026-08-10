@@ -18,6 +18,24 @@ function userFoldersPath(uid) {
   return `${userRootPath(uid)}/mailFolders`;
 }
 
+function userBankPath(uid) {
+  return `${userRootPath(uid)}/bank`;
+}
+
+/**
+ * Schlanker Auszug der Rechnungsdaten, ohne Anhänge.
+ *
+ * Der Bankabgleich braucht Betrag, Datum und Aussteller — aber niemals die
+ * angehängten PDFs. Die Mails komplett zu lesen würde bei jedem Lauf
+ * Megabytes bewegen; deshalb dieser Index.
+ */
+function userInvoiceIndexPath(uid) {
+  return `${userRootPath(uid)}/invoiceIndex`;
+}
+
+/** Zuordnung Rückkehr-Kennung → Benutzer. Nur serverseitig lesbar. */
+const BANK_REQUISITIONS_PATH = "bankRequisitions";
+
 const USER_DIRECTORY_PATH = "userDirectory";
 const ADMINS_PATH = "admins";
 
@@ -25,6 +43,9 @@ module.exports = {
   userRootPath,
   userEmailsPath,
   userFoldersPath,
+  userBankPath,
+  userInvoiceIndexPath,
+  BANK_REQUISITIONS_PATH,
   USER_DIRECTORY_PATH,
   ADMINS_PATH,
 };

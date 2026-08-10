@@ -232,6 +232,46 @@ eigenen Bereich.
 `pdf-lib` wird erst beim Klick geladen (eigener Chunk, ~420 kB); der Start der
 App bleibt davon unberührt.
 
+## Bankkonto verbinden
+
+Optional. Ohne Einrichtung bleibt die Buchhaltung voll nutzbar — nur der
+Abgleich meldet, dass er nicht konfiguriert ist.
+
+Angebunden ist **GoCardless Bank Account Data** (früher Nordigen): lesender
+Zugriff auf Bankumsätze über PSD2, kostenlos, über 2.000 europäische Banken.
+Überweisen kann HabMail nichts.
+
+1. Unter [bankaccountdata.gocardless.com](https://bankaccountdata.gocardless.com)
+   registrieren und *User Secrets* erzeugen.
+2. `GOCARDLESS_SECRET_ID` und `GOCARDLESS_SECRET_KEY` als GitHub-Secrets
+   anlegen, Workflow laufen lassen.
+3. In der App: **Buchhaltung → Bankkonto → Bankkonto verbinden**, Bank suchen,
+   bei der Bank anmelden. Danach landest du wieder in HabMail und die Umsätze
+   werden geholt.
+
+### Wie zugeordnet wird
+
+Der Betrag muss **exakt** stimmen, sonst gibt es gar keinen Kandidaten. Punkte
+vergeben nur die Belege dafür, dass es dieselbe Sache ist: Rechnungsnummer im
+Verwendungszweck (+3), passender Empfänger (+2), Zahlung innerhalb von 30 Tagen
+nach Rechnungsdatum (+1).
+
+**Automatisch** zugeordnet wird nur, wenn es genau einen Kandidaten mit
+mindestens 3 Punkten gibt und kein zweiter gleichauf liegt. Alles andere landet
+unter *Zahlungen prüfen* — eine falsche automatische Zuordnung ist in der
+Buchhaltung schlimmer als eine, die man selbst anklickt. Jede Zuordnung lässt
+sich wieder lösen.
+
+### Grenzen
+
+- **Vier Abrufe pro Konto und Tag** im kostenlosen Tarif. Einer geht an den
+  geplanten Lauf um 6:30 Uhr, drei bleiben für *Jetzt abgleichen*.
+- **Die Zustimmung läuft nach 90 Tagen ab** (PSD2). In der Kontoliste steht,
+  wie lange sie noch gilt; danach ist eine erneute Anmeldung bei der Bank nötig.
+- **Meist nur 90 Tage Historie** beim ersten Verbinden.
+- Umsätze und der Rechnungsindex sind für den Browser **nur lesbar**;
+  geschrieben wird ausschließlich serverseitig.
+
 ## Kategorien
 
 Definiert in [`src/categories.ts`](src/categories.ts) — und, weil die Functions

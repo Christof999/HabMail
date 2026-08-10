@@ -26,6 +26,10 @@ export type InvoiceDetails = {
   dueOn?: string
   /** Wer die Rechnung gestellt hat. */
   vendor?: string
+  /** YYYY-MM-DD der Zahlung — vom Bankabgleich gesetzt. */
+  paidAt?: string
+  /** Der zugeordnete Bankumsatz. */
+  paidTxId?: string
 }
 
 /** Normalisierte Ansicht (deutsche oder englische Quelle in RTDB) */

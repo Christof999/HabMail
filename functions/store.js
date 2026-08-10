@@ -11,6 +11,7 @@ const { createHash } = require("node:crypto");
 const admin = require("firebase-admin");
 const { CATEGORY_LABELS, periodFromDate } = require("./categories");
 const { userEmailsPath } = require("./paths");
+const { updateIndexEntry } = require("./invoices");
 
 /**
  * Anhänge über dieser Grenze werden nur mit Namen und Größe gespeichert.
@@ -125,6 +126,13 @@ async function storeMessage(ownerUid, mailboxId, message, analysis) {
   const result = await ref.transaction((current) =>
     current === null ? record : undefined,
   );
+
+  // Der Rechnungsindex trägt den Bankabgleich. Er wird nur für neu angelegte
+  // Mails geschrieben — bei einer Dublette steht dort schon alles, samt
+  // möglicherweise bereits zugeordneter Zahlung.
+  if (result.committed) {
+    await updateIndexEntry(ownerUid, key, record);
+  }
 
   return result.committed ? "stored" : "duplicate";
 }

@@ -104,6 +104,12 @@ function parseInvoice(raw: unknown): InvoiceDetails | undefined {
   const vendor = pickStr(o, ['vendor', 'aussteller', 'lieferant'])
   if (vendor) invoice.vendor = vendor
 
+  const paidAt = pickStr(o, ['paidAt', 'bezahlt_am'])
+  if (paidAt) invoice.paidAt = paidAt
+
+  const paidTxId = pickStr(o, ['paidTxId'])
+  if (paidTxId) invoice.paidTxId = paidTxId
+
   return Object.keys(invoice).length > 0 ? invoice : undefined
 }
 

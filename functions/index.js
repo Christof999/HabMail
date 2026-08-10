@@ -26,6 +26,23 @@ exports.migrateLegacy = users.migrateLegacy;
 exports.pollNow = users.pollNow;
 exports.whoAmI = users.whoAmI;
 
+/** Rechnungsdaten korrigieren — serverseitig, damit Mail und Index gleich bleiben. */
+exports.updateInvoice = require("./invoices").updateInvoice;
+
+/**
+ * Bankanbindung über GoCardless. Ohne GOCARDLESS_SECRET_ID/-KEY melden sich
+ * die Callables mit einem klaren Hinweis, statt still nichts zu tun.
+ */
+const bank = require("./bank");
+exports.listBanks = bank.listBanks;
+exports.startBankConnection = bank.startBankConnection;
+exports.finishBankConnection = bank.finishBankConnection;
+exports.disconnectBank = bank.disconnectBank;
+exports.syncBank = bank.syncBank;
+exports.confirmMatch = bank.confirmMatch;
+exports.unmatch = bank.unmatch;
+exports.syncBankDaily = bank.syncBankDaily;
+
 const MAX_JSON_BYTES = 6 * 1024 * 1024;
 
 const emailish = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s).trim());

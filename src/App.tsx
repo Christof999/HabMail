@@ -1076,7 +1076,7 @@ export default function App() {
       ) : null}
 
       {view === 'accounting' ? (
-        <AccountingView rows={rows} uid={user.uid} emailsPath={emailsPath} />
+        <AccountingView rows={rows} uid={user.uid} />
       ) : (
       <div className={`app-body${isCompactLayout ? ' app-body--compact' : ''}`}>
         {folderSidebar}

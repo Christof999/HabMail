@@ -20,6 +20,7 @@
 #   GEMINI_MODEL, POLL_MESSAGE_LIMIT, MAX_INLINE_ATTACHMENT_BYTES
 # Optional als Secrets:
 #   INGEST_TOKEN, POLL_TRIGGER_TOKEN
+#   GOCARDLESS_SECRET_ID, GOCARDLESS_SECRET_KEY  (Bankanbindung)
 #
 # Alle Werte landen in functions/.env.<projekt>, das der Workflow erzeugt und
 # das nicht im Repository liegt. Firebase liest diese Datei beim Ausrollen und
@@ -127,6 +128,8 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
           POLL_TRIGGER_TOKEN: ${{ secrets.POLL_TRIGGER_TOKEN }}
+          GOCARDLESS_SECRET_ID: ${{ secrets.GOCARDLESS_SECRET_ID }}
+          GOCARDLESS_SECRET_KEY: ${{ secrets.GOCARDLESS_SECRET_KEY }}
           # Nicht geheim
           EMAILPROXY_URL: ${{ vars.EMAILPROXY_URL }}
           ADMIN_UIDS: ${{ vars.ADMIN_UIDS }}
@@ -151,7 +154,8 @@ jobs:
           }
           for name in EMAILPROXY_URL EMAILPROXY_KEY GEMINI_API_KEY GEMINI_MODEL \
                       ADMIN_UIDS INGEST_TOKEN POLL_TRIGGER_TOKEN \
-                      POLL_MESSAGE_LIMIT MAX_INLINE_ATTACHMENT_BYTES; do
+                      POLL_MESSAGE_LIMIT MAX_INLINE_ATTACHMENT_BYTES \
+                      GOCARDLESS_SECRET_ID GOCARDLESS_SECRET_KEY; do
             write "$name"
           done
 

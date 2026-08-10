@@ -22,6 +22,8 @@ export type InvoiceEntry = {
   printableAttachments: number
   /** Anhänge, deren Inhalt fehlt (zu groß o.ä.). */
   missingAttachments: number
+  /** YYYY-MM-DD, wenn der Bankabgleich eine Zahlung zugeordnet hat. */
+  paidAt?: string
 }
 
 export type MonthGroup = {
@@ -38,6 +40,9 @@ export type MonthGroup = {
   printableAttachments: number
   missingAttachments: number
   currencies: string[]
+  /** Summe der bereits bezahlten Rechnungen — der Rest ist offen. */
+  paidCents: number
+  openCount: number
 }
 
 function isAccounting(row: EmailRow): boolean {
@@ -72,6 +77,7 @@ function toEntry(row: EmailRow): InvoiceEntry {
     date: entryDate(row),
     printableAttachments: attachments.filter((a) => a.dataBase64.length > 0).length,
     missingAttachments: attachments.filter((a) => a.dataBase64.length === 0).length,
+    ...(row.invoice?.paidAt === undefined ? {} : { paidAt: row.invoice.paidAt }),
   }
 }
 
@@ -102,6 +108,11 @@ export function groupInvoicesByMonth(rows: EmailRow[]): MonthGroup[] {
         withoutAmount: entries.filter((e) => e.amountCents === undefined).length,
         printableAttachments: entries.reduce((n, e) => n + e.printableAttachments, 0),
         missingAttachments: entries.reduce((n, e) => n + e.missingAttachments, 0),
+        paidCents: entries.reduce(
+          (sum, e) => sum + (e.paidAt !== undefined ? (e.amountCents ?? 0) : 0),
+          0,
+        ),
+        openCount: entries.filter((e) => e.paidAt === undefined).length,
         currencies: [...new Set(entries.map((e) => e.currency))].sort(),
       }
     })

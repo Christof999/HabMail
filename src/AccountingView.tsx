@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { ref, update } from 'firebase/database'
+import { useEffect, useMemo, useState } from 'react'
+import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
 import {
   formatCents,
@@ -9,6 +9,15 @@ import {
   type MonthGroup,
 } from './accounting'
 import { buildMonthPdf, downloadPdf, openPdf } from './invoicePdf'
+import BankSettings, { PaymentBadge } from './BankSettings'
+import {
+  confirmMatch,
+  toList,
+  unmatch,
+  updateInvoice,
+  type BankTransaction,
+  type MatchSuggestion,
+} from './bankApi'
 import type { EmailRow } from './types'
 
 /**
@@ -22,12 +31,11 @@ import type { EmailRow } from './types'
 type Props = {
   rows: EmailRow[]
   uid: string
-  emailsPath: string
 }
 
 type PdfState = { period: string; skipped: string[] } | null
 
-export default function AccountingView({ rows, uid, emailsPath }: Props) {
+export default function AccountingView({ rows, uid }: Props) {
   const groups = useMemo(() => groupInvoicesByMonth(rows), [rows])
   const [openPeriods, setOpenPeriods] = useState<Set<string>>(
     () => new Set(groups.slice(0, 1).map((g) => g.period)),
@@ -36,6 +44,32 @@ export default function AccountingView({ rows, uid, emailsPath }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [lastPdf, setLastPdf] = useState<PdfState>(null)
   const [editing, setEditing] = useState<string | null>(null)
+  const [showBank, setShowBank] = useState(false)
+  const [suggestions, setSuggestions] = useState<MatchSuggestion[]>([])
+  const [transactions, setTransactions] = useState<BankTransaction[]>([])
+
+  // Vorschläge und Umsätze schreibt nur der Server; hier wird zugehört.
+  useEffect(() => {
+    const db = getFirebaseDb()
+    const stop = [
+      onValue(ref(db, `users/${uid}/bank/suggestions`), (snap) =>
+        setSuggestions(toList<MatchSuggestion>(snap.val())),
+      ),
+      onValue(ref(db, `users/${uid}/bank/transactions`), (snap) =>
+        setTransactions(toList<BankTransaction>(snap.val())),
+      ),
+    ]
+    return () => stop.forEach((unsubscribe) => unsubscribe())
+  }, [uid])
+
+  const invoiceById = useMemo(
+    () => new Map(rows.map((row) => [row.id, row])),
+    [rows],
+  )
+  const transactionById = useMemo(
+    () => new Map(transactions.map((tx) => [tx.id, tx])),
+    [transactions],
+  )
 
   const yearTotal = useMemo(() => {
     const year = new Date().getFullYear().toString()
@@ -53,14 +87,37 @@ export default function AccountingView({ rows, uid, emailsPath }: Props) {
     })
   }
 
-  async function saveField(row: EmailRow, path: string, value: unknown) {
+  /**
+   * Korrekturen gehen über die Function, nicht direkt in die Datenbank: nur so
+   * bleiben Mail und der Index, mit dem der Bankabgleich arbeitet, gleich.
+   */
+  async function saveInvoice(
+    row: EmailRow,
+    patch: { amountCents?: number | null; period?: string },
+  ) {
     setError(null)
     try {
-      await update(ref(getFirebaseDb()), {
-        [`${emailsPath}/${row.id}/${path}`]: value,
-      })
+      await updateInvoice({ emailId: row.id, ...patch })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Speichern fehlgeschlagen')
+    }
+  }
+
+  async function acceptSuggestion(transactionId: string, emailId: string) {
+    setError(null)
+    try {
+      await confirmMatch({ transactionId, emailId })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Zuordnen fehlgeschlagen')
+    }
+  }
+
+  async function releaseMatch(transactionId: string) {
+    setError(null)
+    try {
+      await unmatch({ transactionId })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Lösen fehlgeschlagen')
     }
   }
 
@@ -104,9 +161,64 @@ export default function AccountingView({ rows, uid, emailsPath }: Props) {
             <strong>{formatCents(yearTotal)}</strong>
           </p>
         </div>
+        <button type="button" className="ghost small-btn" onClick={() => setShowBank(true)}>
+          Bankkonto
+        </button>
       </div>
 
       {error ? <p className="mailbox-error">{error}</p> : null}
+
+      {suggestions.length > 0 ? (
+        <section className="card suggestion-block">
+          <h3>Zahlungen prüfen</h3>
+          <p className="muted small">
+            Zu diesen Umsätzen passt der Betrag, aber nicht eindeutig genug für
+            eine automatische Zuordnung. Bei Geld entscheidest lieber du.
+          </p>
+          <ul className="suggestion-list">
+            {suggestions.map((suggestion) => {
+              const transaction = transactionById.get(suggestion.transactionId)
+              if (transaction === undefined) return null
+              return (
+                <li key={suggestion.transactionId} className="suggestion-row">
+                  <div className="suggestion-tx">
+                    <strong>
+                      {formatCents(Math.abs(transaction.amountCents), transaction.currency)}
+                    </strong>{' '}
+                    an {transaction.counterpartyName || 'unbekannt'} ·{' '}
+                    {formatDate(transaction.bookingDate)}
+                    {transaction.reference ? (
+                      <span className="muted small"> · {transaction.reference.slice(0, 80)}</span>
+                    ) : null}
+                  </div>
+                  <ul className="suggestion-candidates">
+                    {suggestion.candidates.map((candidate) => {
+                      const invoice = invoiceById.get(candidate.emailId)
+                      return (
+                        <li key={candidate.emailId}>
+                          <button
+                            type="button"
+                            className="ghost small-btn"
+                            onClick={() =>
+                              void acceptSuggestion(suggestion.transactionId, candidate.emailId)
+                            }
+                          >
+                            {invoice?.invoice?.vendor ?? invoice?.senderName ?? invoice?.sender ?? candidate.emailId}
+                            {invoice?.subject ? ` — ${invoice.subject.slice(0, 40)}` : ''}
+                          </button>
+                          {candidate.reasons.length > 0 ? (
+                            <span className="muted small"> {candidate.reasons.join(', ')}</span>
+                          ) : null}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       {groups.map((group) => {
         const isOpen = openPeriods.has(group.period)
@@ -123,6 +235,11 @@ export default function AccountingView({ rows, uid, emailsPath }: Props) {
               <span className="month-label">{group.label}</span>
               <span className="muted small">
                 {group.entries.length} Rechnung{group.entries.length === 1 ? '' : 'en'}
+              </span>
+              <span className="muted small">
+                {group.openCount === 0
+                  ? 'alles bezahlt'
+                  : `${group.openCount} offen`}
               </span>
               <span className="month-total">{formatCents(group.totalCents, group.currencies[0])}</span>
             </button>
@@ -146,11 +263,10 @@ export default function AccountingView({ rows, uid, emailsPath }: Props) {
                       onEdit={() => setEditing(entry.row.id)}
                       onCancel={() => setEditing(null)}
                       onSave={async (patch) => {
-                        for (const [path, value] of Object.entries(patch)) {
-                          await saveField(entry.row, path, value)
-                        }
+                        await saveInvoice(entry.row, patch)
                         setEditing(null)
                       }}
+                      onRelease={releaseMatch}
                     />
                   ))}
                 </ul>
@@ -192,8 +308,10 @@ export default function AccountingView({ rows, uid, emailsPath }: Props) {
 
       <p className="muted small accounting-foot">
         Das PDF enthält vorne die Aufstellung und dahinter alle Belege — eine
-        Datei für den Steuerberater. Uid: <code>{uid.slice(0, 6)}…</code>
+        Datei für den Steuerberater.
       </p>
+
+      {showBank ? <BankSettings uid={uid} onClose={() => setShowBank(false)} /> : null}
     </div>
   )
 }
@@ -203,25 +321,27 @@ type RowProps = {
   editing: boolean
   onEdit: () => void
   onCancel: () => void
-  onSave: (patch: Record<string, unknown>) => Promise<void>
+  onSave: (patch: { amountCents?: number | null; period?: string }) => Promise<void>
+  onRelease: (transactionId: string) => Promise<void>
 }
 
-function InvoiceRow({ entry, editing, onEdit, onCancel, onSave }: RowProps) {
+function InvoiceRow({ entry, editing, onEdit, onCancel, onSave, onRelease }: RowProps) {
   const [amount, setAmount] = useState(
     entry.amountCents === undefined ? '' : (entry.amountCents / 100).toFixed(2),
   )
   const [period, setPeriod] = useState(entry.row.period ?? '')
 
   async function save() {
-    const patch: Record<string, unknown> = {}
+    const patch: { amountCents?: number | null; period?: string } = {}
 
+    // „1.234,50" wie in Deutschland üblich — Punkt trennt Tausender.
     const normalized = amount.trim().replace(/\./g, '').replace(',', '.')
     if (normalized === '') {
-      patch['invoice/amountCents'] = null
+      patch.amountCents = null
     } else {
       const value = Number(normalized)
       if (Number.isFinite(value) && value >= 0) {
-        patch['invoice/amountCents'] = Math.round(value * 100)
+        patch.amountCents = Math.round(value * 100)
       }
     }
     if (/^\d{4}-\d{2}$/.test(period) && period !== entry.row.period) {
@@ -245,6 +365,22 @@ function InvoiceRow({ entry, editing, onEdit, onCancel, onSave }: RowProps) {
         {entry.printableAttachments > 0 ? `📎 ${entry.printableAttachments}` : ''}
         {entry.missingAttachments > 0 ? ' ⚠' : ''}
       </span>
+
+      <PaymentBadge
+        paidAt={entry.paidAt}
+        amountCents={entry.amountCents}
+        currency={entry.currency}
+      />
+      {entry.paidAt !== undefined && entry.row.invoice?.paidTxId ? (
+        <button
+          type="button"
+          className="ghost small-btn"
+          title="Zuordnung zur Zahlung wieder lösen"
+          onClick={() => void onRelease(entry.row.invoice!.paidTxId!)}
+        >
+          lösen
+        </button>
+      ) : null}
 
       {editing ? (
         <span className="invoice-edit">
