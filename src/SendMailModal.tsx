@@ -1,6 +1,7 @@
 import type { User } from 'firebase/auth'
 import { useEffect, useState, type FormEvent } from 'react'
 import type { EmailRow } from './types'
+import { listMailboxes, type Mailbox } from './mailboxesApi'
 import {
   fwdSubject,
   reSubject,
@@ -25,6 +26,8 @@ export function SendMailModal({ compose, user, onClose }: Props) {
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Nur zum Anzeigen, aus welchem Postfach die Mail rausgeht. */
+  const [mailbox, setMailbox] = useState<Mailbox | null>(null)
 
   useEffect(() => {
     if (!compose) return
@@ -38,7 +41,26 @@ export function SendMailModal({ compose, user, onClose }: Props) {
       setSubject(fwdSubject(compose.row.subject))
     }
     setBody('')
-  }, [compose])
+    setMailbox(null)
+
+    // Welches Postfach verschickt, entscheidet der Server. Hier wird es nur
+    // nachgeschlagen, damit im Formular steht, wer als Absender erscheint.
+    const mailboxId = compose.row.mailboxId
+    if (mailboxId === undefined || mailboxId === '') return
+
+    let active = true
+    void (async () => {
+      try {
+        const list = await listMailboxes(await user.getIdToken())
+        if (active) setMailbox(list.find((m) => m.id === mailboxId) ?? null)
+      } catch {
+        // Kein Beinbruch: dann steht eben nur die Postfach-Kennung da.
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [compose, user])
 
   if (!compose) return null
 
@@ -61,6 +83,7 @@ export function SendMailModal({ compose, user, onClose }: Props) {
         to: to.trim(),
         subject: subject.trim(),
         body,
+        mailboxId: active.row.mailboxId ?? '',
         context: {
           originalFrom: fromLine,
           originalSubject: active.row.subject || '(Ohne Betreff)',
@@ -101,8 +124,20 @@ export function SendMailModal({ compose, user, onClose }: Props) {
           </button>
         </div>
         <p className="muted small">
-          Versand über IONOS (SMTP). Der Originaltext wird der Mail als
-          Klartext angehängt (Zitat / Weiterleitung).
+          {active.row.mailboxId ? (
+            <>
+              Absender:{' '}
+              <strong>{mailbox?.from ?? mailbox?.user ?? active.row.mailboxId}</strong>
+              {mailbox?.from || mailbox?.user ? ` (Postfach ${active.row.mailboxId})` : ''}
+            </>
+          ) : (
+            <>
+              Zu dieser Mail ist <strong>kein Postfach hinterlegt</strong> — sie
+              stammt noch aus der Zeit vor der Anbindung. Der Versand wird
+              fehlschlagen.
+            </>
+          )}
+          {' '}Der Originaltext wird als Zitat angehängt.
         </p>
         <form className="send-mail-form" onSubmit={(e) => void handleSubmit(e)}>
           <label>

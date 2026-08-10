@@ -5,6 +5,8 @@ export type SendMailPayload = {
   to: string
   subject: string
   body: string
+  /** Aus welchem Postfach verschickt wird — das, in dem die Mail ankam. */
+  mailboxId: string
   context: {
     originalFrom: string
     originalSubject: string
@@ -29,10 +31,13 @@ export function sendMailApiUrl(): string {
   return `${base}/api/send-mail`
 }
 
+/** Was der Server tatsächlich benutzt hat — für die Rückmeldung im Formular. */
+export type SendMailResult = { mailbox?: string; from?: string }
+
 export async function requestSendMail(
   idToken: string,
   payload: SendMailPayload,
-): Promise<void> {
+): Promise<SendMailResult> {
   const res = await fetch(sendMailApiUrl(), {
     method: 'POST',
     headers: {
@@ -42,7 +47,7 @@ export async function requestSendMail(
     body: JSON.stringify(payload),
   })
   const raw = await res.text()
-  let data = {} as { error?: string; hint?: string }
+  let data = {} as { error?: string; hint?: string; mailbox?: string; from?: string }
   try {
     data = raw ? (JSON.parse(raw) as typeof data) : {}
   } catch {
@@ -60,4 +65,5 @@ export async function requestSendMail(
         : `HTTP ${res.status} (keine Antwort vom Server)`,
     )
   }
+  return { mailbox: data.mailbox, from: data.from }
 }

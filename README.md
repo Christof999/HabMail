@@ -159,10 +159,11 @@ FIREBASE_PROJECT_ID=...
 GEMINI_API_KEY=...
 EMAILPROXY_URL=https://dein-proxy.vercel.app
 EMAILPROXY_KEY=ep_...           # nur hier, nie im Frontend
-SMTP_HOST=...                   # für /api/send-mail (Antworten)
-SMTP_USER=...
-SMTP_PASS=...
 ```
+
+Eigene SMTP-Variablen braucht HabMail nicht mehr: Antworten und Weiterleiten
+gehen über den Proxy, aus dem Postfach, in dem die Mail ankam. Alte
+`SMTP_*`-Einträge in Vercel werden nicht mehr gelesen.
 
 `api/mailboxes.ts` prüft das Firebase-Token des angemeldeten Nutzers und
 schickt dessen UID als `subject` an den Proxy — genommen aus dem geprüften
