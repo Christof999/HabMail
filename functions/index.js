@@ -23,6 +23,7 @@ exports.listUsers = users.listUsers;
 exports.updateUser = users.updateUser;
 exports.deleteUser = users.deleteUser;
 exports.migrateLegacy = users.migrateLegacy;
+exports.pollNow = users.pollNow;
 exports.whoAmI = users.whoAmI;
 
 const MAX_JSON_BYTES = 6 * 1024 * 1024;

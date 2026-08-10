@@ -11,6 +11,7 @@ import {
   type Mailbox,
   type MailboxInput,
 } from './mailboxesApi'
+import { pollNow, type PollReport } from './usersApi'
 
 /**
  * Postfächer anlegen und ansehen.
@@ -87,6 +88,7 @@ export default function MailboxSettings({ user, onClose }: Props) {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [pollReport, setPollReport] = useState<PollReport | null>(null)
 
   const load = useCallback(
     async (verify: boolean) => {
@@ -217,6 +219,42 @@ export default function MailboxSettings({ user, onClose }: Props) {
     }
   }
 
+  /**
+   * Sofort abholen. Beim Einrichten ist die Frage „warum kommt nichts an“
+   * wichtiger als das Warten auf den nächsten Fünf-Minuten-Lauf — deshalb
+   * kommt der Bericht ungeschönt zurück.
+   */
+  async function fetchNow() {
+    setError(null)
+    setNotice(null)
+    setPollReport(null)
+    setBusy(true)
+    try {
+      const report = await pollNow({})
+      setPollReport(report)
+      if (report.error !== undefined) {
+        setError(`Der Email-Proxy meldet: ${report.error}`)
+      } else if (report.mailboxes.length === 0) {
+        setNotice(report.hint ?? 'Kein Postfach zum Abholen gefunden.')
+      } else {
+        const stored = report.mailboxes.reduce((n, m) => n + m.stored, 0)
+        const fetched = report.mailboxes.reduce((n, m) => n + m.fetched, 0)
+        setNotice(
+          stored > 0
+            ? `${stored} neue Mail${stored === 1 ? '' : 's'} übernommen.`
+            : fetched > 0
+              ? 'Alles schon vorhanden — nichts Neues dabei.'
+              : 'Der Server hat keine neuen Mails geliefert.',
+        )
+      }
+      await load(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const formValid =
     form.host.trim() !== '' && form.user.trim() !== '' && form.password !== ''
 
@@ -237,6 +275,27 @@ export default function MailboxSettings({ user, onClose }: Props) {
 
         {error ? <p className="mailbox-error">{error}</p> : null}
         {notice ? <p className="muted small">{notice}</p> : null}
+
+        {pollReport !== null && pollReport.mailboxes.length > 0 ? (
+          <ul className="poll-report">
+            {pollReport.mailboxes.map((m) => (
+              <li key={m.mailbox}>
+                <strong>{m.mailbox}</strong>{' '}
+                {m.error !== undefined ? (
+                  <span className="mailbox-error">{m.error}</span>
+                ) : m.skipped !== undefined ? (
+                  <span className="mailbox-error">übersprungen: {m.skipped}</span>
+                ) : (
+                  <>
+                    {m.fetched} geholt · {m.stored} neu · {m.duplicates} schon da
+                    {m.failed > 0 ? ` · ${m.failed} fehlgeschlagen` : ''}
+                    {m.hasMore ? ' · es liegt noch mehr bereit' : ''}
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : null}
 
         {loading ? (
           <p className="muted small">Wird geladen …</p>
@@ -463,6 +522,14 @@ export default function MailboxSettings({ user, onClose }: Props) {
               onClick={() => void load(true)}
             >
               {busy ? 'Prüfe …' : 'Verbindungen prüfen'}
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              disabled={busy || loading}
+              onClick={() => void fetchNow()}
+            >
+              {busy ? 'Hole …' : 'Jetzt abholen'}
             </button>
             <button type="button" onClick={() => setShowForm(true)}>
               Postfach hinzufügen

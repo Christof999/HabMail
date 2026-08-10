@@ -1040,6 +1040,23 @@ button.ghost:hover:not(:disabled) {
   border-radius: 10px;
 }
 
+.poll-report {
+  list-style: none;
+  padding: 0.5rem 0.7rem;
+  margin: 0.5rem 0 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.poll-report strong {
+  color: var(--text);
+}
+
 .user-admin-check {
   display: flex;
   align-items: center;

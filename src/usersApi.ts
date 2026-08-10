@@ -81,3 +81,35 @@ export const migrateLegacy = callable<
   { uid?: string; source?: string; dryRun?: boolean; keepSource?: boolean },
   MigrationResult
 >('migrateLegacy')
+
+/** Ergebnis eines Abholvorgangs, je Postfach. */
+export type PollMailboxReport = {
+  mailbox: string
+  owner: string | null
+  fetched: number
+  stored: number
+  duplicates: number
+  failed: number
+  analyzed: number
+  acked: boolean
+  hasMore: boolean
+  /** Gesetzt, wenn das Postfach übersprungen wurde. */
+  skipped?: string
+  /** Gesetzt, wenn genau dieses Postfach scheiterte. */
+  error?: string
+}
+
+export type PollReport = {
+  ok: boolean
+  mailboxes: PollMailboxReport[]
+  /** Erklärung, wenn gar kein Postfach abgefragt wurde. */
+  hint?: string
+  /** Gesetzt, wenn schon die Abfrage der Postfachliste scheiterte. */
+  error?: string
+}
+
+/**
+ * Sofort abholen, statt auf den nächsten Fünf-Minuten-Lauf zu warten.
+ * Betrifft nur die eigenen Postfächer.
+ */
+export const pollNow = callable<Record<string, never>, PollReport>('pollNow')

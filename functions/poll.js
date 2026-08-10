@@ -113,16 +113,34 @@ async function pollMailbox(mailbox) {
  * Alle empfangsfähigen Postfächer nacheinander abarbeiten. Nacheinander,
  * damit ein hängendes Postfach nicht das Zeitbudget der ganzen Funktion
  * verbrennt und die anderen mitreißt.
+ *
+ * @param {object} [options]
+ * @param {string} [options.onlySubject] nur die Postfächer dieses Benutzers —
+ *   für den Knopf „Jetzt abholen“, der niemandem in fremde Fächer sehen soll.
  */
-async function pollAllMailboxes() {
-  const mailboxes = await listReceivableMailboxes();
+async function pollAllMailboxes({ onlySubject } = {}) {
+  let all;
+  try {
+    all = await listReceivableMailboxes();
+  } catch (error) {
+    // Ein falscher oder nicht freigeschalteter Key scheitert hier, nicht erst
+    // beim einzelnen Postfach. Die Meldung des Proxys ist die aussagekräftigste.
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Postfächer konnten nicht abgefragt werden:", error);
+    return { ok: false, mailboxes: [], error: message };
+  }
+
+  const mailboxes =
+    onlySubject === undefined ? all : all.filter((box) => box.subject === onlySubject);
+
   if (mailboxes.length === 0) {
     return {
       ok: true,
       mailboxes: [],
       hint:
-        "Kein Postfach kann empfangen. Im Email-Proxy für mindestens ein Postfach " +
-        "imapHost hinterlegen.",
+        all.length === 0
+          ? "Der Email-Proxy meldet kein einziges empfangsfähiges Postfach. Fehlt der IMAP-Server?"
+          : "Für dich ist kein empfangsfähiges Postfach hinterlegt — die vorhandenen gehören jemand anderem.",
     };
   }
 

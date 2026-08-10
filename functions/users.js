@@ -15,6 +15,7 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const { USER_DIRECTORY_PATH, ADMINS_PATH, userRootPath } = require("./paths");
 const { migrateLegacyData } = require("./migrate");
+const { pollAllMailboxes } = require("./poll");
 
 /** Administratoren aus der Umgebung — der Startpunkt, bevor es Einträge gibt. */
 function bootstrapAdminUids() {
@@ -235,6 +236,24 @@ const migrateLegacy = onCall(async (request) => {
   }
 });
 
+/**
+ * Sofort abholen, statt auf den nächsten Fünf-Minuten-Lauf zu warten.
+ *
+ * Jeder Angemeldete darf das — aber nur für seine eigenen Postfächer. Der
+ * Bericht geht ungeschönt zurück: beim Einrichten ist die Frage „warum kommt
+ * nichts an“ wichtiger als eine schöne Antwort.
+ */
+const pollNow = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Nicht angemeldet.");
+
+  try {
+    return await pollAllMailboxes({ onlySubject: uid });
+  } catch (error) {
+    throw new HttpsError("internal", `Abholen fehlgeschlagen: ${error?.message}`);
+  }
+});
+
 /** Damit die Oberfläche weiß, ob sie die Verwaltung überhaupt anbieten soll. */
 const whoAmI = onCall(async (request) => {
   const uid = request.auth?.uid;
@@ -248,6 +267,7 @@ module.exports = {
   updateUser,
   deleteUser,
   migrateLegacy,
+  pollNow,
   whoAmI,
   isAdmin,
 };
