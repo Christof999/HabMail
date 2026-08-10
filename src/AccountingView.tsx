@@ -162,7 +162,7 @@ export default function AccountingView({ rows, uid }: Props) {
           </p>
         </div>
         <button type="button" className="ghost small-btn" onClick={() => setShowBank(true)}>
-          Bankkonto
+          Bankumsätze
         </button>
       </div>
 

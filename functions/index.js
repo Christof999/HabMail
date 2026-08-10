@@ -30,10 +30,17 @@ exports.whoAmI = users.whoAmI;
 exports.updateInvoice = require("./invoices").updateInvoice;
 
 /**
- * Bankanbindung über GoCardless. Ohne GOCARDLESS_SECRET_ID/-KEY melden sich
- * die Callables mit einem klaren Hinweis, statt still nichts zu tun.
+ * Bankumsätze. Zwei Wege zum selben Ziel:
+ *
+ *   importStatement  Kontoauszug hochladen (CSV, CAMT, MT940) — braucht nichts
+ *                    außer der Datei aus dem Online-Banking.
+ *   listBanks & Co.  automatisch über GoCardless — dafür sind
+ *                    GOCARDLESS_SECRET_ID/-KEY nötig. Fehlen sie, melden sich
+ *                    diese Callables mit einem Hinweis auf den Auszug-Weg,
+ *                    statt still nichts zu tun.
  */
 const bank = require("./bank");
+exports.importStatement = bank.importStatement;
 exports.listBanks = bank.listBanks;
 exports.startBankConnection = bank.startBankConnection;
 exports.finishBankConnection = bank.finishBankConnection;

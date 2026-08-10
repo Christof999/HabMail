@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
 import { formatCents } from './accounting'
@@ -8,22 +8,31 @@ import {
   disconnectBank,
   finishBankConnection,
   formatIban,
+  importStatement,
   listBanks,
   startBankConnection,
   syncBank,
   toList,
+  STATEMENT_FORMATS,
   type Bank,
   type BankAccount,
   type BankConnection,
+  type ImportReport,
   type SyncReport,
 } from './bankApi'
 
 /**
- * Bankkonto verbinden und den Stand sehen.
+ * Bankumsätze holen — auf zwei Wegen.
  *
- * Der Ablauf ist von PSD2 vorgegeben: Bank wählen → beim Kreditinstitut
- * anmelden → zurück in HabMail. Wir bekommen ausschließlich Lesezugriff auf
- * die Umsätze; überweisen kann die App nichts.
+ * Der einfache: den Kontoauszug im Online-Banking herunterladen und hier
+ * hochladen. Das geht bei jeder Bank, kostet nichts und braucht keinen
+ * Vertrag mit einem Datenanbieter.
+ *
+ * Der automatische: PSD2 über GoCardless — Bank wählen, beim Kreditinstitut
+ * anmelden, zurück in HabMail. Nur Lesezugriff, überweisen kann HabMail in
+ * keinem Fall etwas. Dieser Weg setzt hinterlegte Zugangsdaten voraus;
+ * GoCardless nimmt seit Juli 2025 keine neuen Konten mehr an, deshalb steht
+ * er hier hinten und nicht vorn.
  */
 
 type Props = {
@@ -41,7 +50,9 @@ export default function BankSettings({ uid, onClose }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [report, setReport] = useState<SyncReport | null>(null)
+  const [imported, setImported] = useState<ImportReport | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
 
   // Verbindungen und Konten kommen direkt aus der Datenbank — geschrieben
   // werden sie nur serverseitig.
@@ -146,19 +157,56 @@ export default function BankSettings({ uid, onClose }: Props) {
     }
   }
 
-  async function remove(connectionId: string) {
+  async function upload(file: File) {
+    setError(null)
+    setNotice(null)
+    setImported(null)
+    setBusy(true)
+    try {
+      const result = await importStatement(file)
+      setImported(result)
+      setNotice(
+        `${STATEMENT_FORMATS[result.format] ?? result.format} gelesen: ${result.read} Buchungen ` +
+          `vom ${formatDay(result.from)} bis ${formatDay(result.to)}. ` +
+          `${result.stored} neu` +
+          (result.duplicates > 0 ? `, ${result.duplicates} schon vorhanden` : '') +
+          `, ${result.matched} automatisch zugeordnet` +
+          (result.suggested > 0 ? `, ${result.suggested} zum Prüfen` : '') +
+          '.',
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Die Datei ließ sich nicht lesen')
+    } finally {
+      setBusy(false)
+      // Zurücksetzen, damit dieselbe Datei ein zweites Mal ausgewählt werden
+      // kann — sonst löst der Browser bei gleichem Namen kein change aus.
+      if (fileInput.current !== null) fileInput.current.value = ''
+    }
+  }
+
+  async function remove(account: BankAccount) {
     setError(null)
     setBusy(true)
     try {
-      await disconnectBank({ connectionId })
+      // Konten aus einem Auszug hängen an keiner Verbindung — die werden
+      // einzeln entfernt, nicht über die Verbindung.
+      await disconnectBank(
+        account.connectionId ? { connectionId: account.connectionId } : { accountId: account.id },
+      )
       setConfirmRemove(null)
-      setNotice('Verbindung getrennt. Die bereits geholten Umsätze bleiben erhalten.')
+      setNotice('Entfernt. Die bereits geholten Umsätze bleiben erhalten.')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Trennen fehlgeschlagen')
+      setError(e instanceof Error ? e.message : 'Entfernen fehlgeschlagen')
     } finally {
       setBusy(false)
     }
   }
+
+  /** Nur echte Bankverbindungen lassen sich abrufen — Auszug-Konten nicht. */
+  const hasConnected = useMemo(
+    () => accounts.some((account) => account.source !== 'import'),
+    [accounts],
+  )
 
   const filteredBanks = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -180,17 +228,22 @@ export default function BankSettings({ uid, onClose }: Props) {
       onClick={onClose}
     >
       <div className="modal card modal-wide" onClick={(e) => e.stopPropagation()}>
-        <h3 id="bank-settings-title">Bankkonto</h3>
+        <h3 id="bank-settings-title">Bankumsätze</h3>
         <p className="muted small">
-          Nur Lesezugriff auf die Umsätze — überweisen kann HabMail nichts. Die
-          Zustimmung gilt 90 Tage, danach ist eine erneute Anmeldung bei der
-          Bank nötig (so schreibt es PSD2 vor).
+          Umsätze werden nur gelesen und mit den Rechnungen abgeglichen —
+          überweisen kann HabMail nichts.
         </p>
 
         {error ? <p className="mailbox-error">{error}</p> : null}
         {notice ? <p className="muted small">{notice}</p> : null}
         {report !== null && report.skipped.length > 0 ? (
           <p className="muted small">Nicht abgefragt: {report.skipped.join('; ')}</p>
+        ) : null}
+        {imported !== null && imported.skippedRows > 0 ? (
+          <p className="muted small">
+            {imported.skippedRows} Zeile{imported.skippedRows === 1 ? '' : 'n'} ohne Datum oder
+            Betrag übersprungen (meist Saldo- oder Kopfzeilen).
+          </p>
         ) : null}
 
         {picking ? (
@@ -233,7 +286,7 @@ export default function BankSettings({ uid, onClose }: Props) {
         ) : (
           <>
             {accounts.length === 0 ? (
-              <p className="muted small">Noch kein Konto verbunden.</p>
+              <p className="muted small">Noch kein Konto hinterlegt.</p>
             ) : (
               <ul className="mailbox-list">
                 {accounts.map((account) => {
@@ -244,6 +297,11 @@ export default function BankSettings({ uid, onClose }: Props) {
                       <div className="mailbox-item-head">
                         <strong>{account.name || 'Konto'}</strong>
                         <span className="pill">{account.currency}</span>
+                        {account.source === 'import' ? (
+                          <span className="pill pill-muted" title="Umsätze kommen aus Auszügen">
+                            Auszug
+                          </span>
+                        ) : null}
                         {remaining !== null ? (
                           <span
                             className={`pill${remaining <= 14 ? '' : ' pill-muted'}`}
@@ -257,6 +315,16 @@ export default function BankSettings({ uid, onClose }: Props) {
                         {account.iban ? formatIban(account.iban) : account.id}
                         {account.ownerName ? ` · ${account.ownerName}` : ''}
                       </div>
+                      {account.lastImportAt ? (
+                        <div className="muted small">
+                          Zuletzt eingelesen:{' '}
+                          {new Date(account.lastImportAt).toLocaleString('de-DE')}
+                          {account.lastImportFile ? ` · ${account.lastImportFile}` : ''}
+                          {account.lastSyncedDate
+                            ? ` · Umsätze bis ${formatDay(account.lastSyncedDate)}`
+                            : ''}
+                        </div>
+                      ) : null}
                       {account.lastSyncAt ? (
                         <div className="muted small">
                           Zuletzt abgeglichen:{' '}
@@ -264,7 +332,7 @@ export default function BankSettings({ uid, onClose }: Props) {
                         </div>
                       ) : null}
                       <div className="mailbox-item-actions">
-                        {confirmRemove === account.connectionId ? (
+                        {confirmRemove === account.id ? (
                           <>
                             <button
                               type="button"
@@ -277,9 +345,9 @@ export default function BankSettings({ uid, onClose }: Props) {
                               type="button"
                               className="btn-danger"
                               disabled={busy}
-                              onClick={() => void remove(account.connectionId)}
+                              onClick={() => void remove(account)}
                             >
-                              Wirklich trennen
+                              Wirklich entfernen
                             </button>
                           </>
                         ) : (
@@ -287,9 +355,9 @@ export default function BankSettings({ uid, onClose }: Props) {
                             type="button"
                             className="ghost"
                             disabled={busy}
-                            onClick={() => setConfirmRemove(account.connectionId)}
+                            onClick={() => setConfirmRemove(account.id)}
                           >
-                            Verbindung trennen
+                            {account.source === 'import' ? 'Konto entfernen' : 'Verbindung trennen'}
                           </button>
                         )}
                       </div>
@@ -299,31 +367,69 @@ export default function BankSettings({ uid, onClose }: Props) {
               </ul>
             )}
 
+            <h4 className="bank-section">Kontoauszug einlesen</h4>
+            <p className="muted small">
+              Im Online-Banking die Umsätze herunterladen — als CSV, CAMT oder
+              MT940 — und die Datei hier auswählen. Derselbe Auszug lässt sich
+              gefahrlos noch einmal einlesen: schon vorhandene Buchungen werden
+              erkannt und nicht doppelt verbucht.
+            </p>
+            <input
+              ref={fileInput}
+              type="file"
+              accept=".csv,.xml,.txt,.sta,.940,.mt940,text/csv,text/xml,application/xml,text/plain"
+              disabled={busy}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) void upload(file)
+              }}
+            />
+
             <div className="modal-actions">
               <button type="button" className="ghost" onClick={onClose}>
                 Schließen
               </button>
-              {accounts.length > 0 ? (
+              {hasConnected ? (
                 <button type="button" className="ghost" disabled={busy} onClick={() => void sync()}>
                   {busy ? 'Gleiche ab …' : 'Jetzt abgleichen'}
                 </button>
               ) : null}
-              <button type="button" disabled={busy} onClick={() => void openBankPicker()}>
-                {busy ? 'Lade …' : 'Bankkonto verbinden'}
+              <button
+                type="button"
+                className="ghost"
+                disabled={busy}
+                onClick={() => void openBankPicker()}
+              >
+                {busy ? 'Lade …' : 'Bank automatisch verbinden'}
               </button>
             </div>
 
-            {accounts.length > 0 ? (
+            {hasConnected ? (
               <p className="muted small">
-                Abgeglichen wird täglich um 6:30 Uhr automatisch. Von Hand geht
-                es dreimal am Tag — mehr lässt der kostenlose Tarif nicht zu.
+                Verbundene Konten werden täglich um 6:30 Uhr automatisch
+                abgeglichen. Von Hand geht es dreimal am Tag — mehr lässt das
+                Tageslimit der Schnittstelle nicht zu. Die Zustimmung der Bank
+                gilt 90 Tage, danach ist eine erneute Anmeldung nötig (PSD2).
               </p>
-            ) : null}
+            ) : (
+              <p className="muted small">
+                Das automatische Verbinden läuft über GoCardless und setzt dort
+                hinterlegte Zugangsdaten voraus. GoCardless nimmt seit Juli 2025
+                keine neuen Konten mehr an — ohne Zugang bleibt der Weg über den
+                Auszug, der dieselben Daten liefert.
+              </p>
+            )}
           </>
         )}
       </div>
     </div>
   )
+}
+
+/** "2026-01-05" → "05.01.2026"; unbrauchbare Werte bleiben, wie sie sind. */
+function formatDay(iso: string): string {
+  const date = new Date(`${iso}T00:00:00Z`)
+  return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString('de-DE')
 }
 
 /** Zeigt an, ob und wie eine Rechnung bezahlt wurde. */

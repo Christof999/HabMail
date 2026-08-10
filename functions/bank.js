@@ -20,6 +20,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const gocardless = require("./gocardless");
 const { listOpenInvoices } = require("./invoices");
 const { matchTransactions, normalizeTransaction } = require("./matching");
+const { parseStatement } = require("./statement");
 const {
   BANK_REQUISITIONS_PATH,
   userBankPath,
@@ -47,9 +48,11 @@ function assertConfigured() {
   if (!gocardless.isConfigured()) {
     throw new HttpsError(
       "failed-precondition",
-      "Die Bankanbindung ist nicht eingerichtet. Es fehlen GOCARDLESS_SECRET_ID " +
-        "und GOCARDLESS_SECRET_KEY. Beide gibt es kostenlos unter " +
-        "bankaccountdata.gocardless.com.",
+      "Die automatische Bankanbindung ist nicht eingerichtet (es fehlen " +
+        "GOCARDLESS_SECRET_ID und GOCARDLESS_SECRET_KEY). GoCardless nimmt seit " +
+        "Juli 2025 keine neuen Konten mehr an — der Weg über den Kontoauszug " +
+        "funktioniert ohne all das: im Online-Banking die Umsätze als CSV, CAMT " +
+        "oder MT940 herunterladen und hier hochladen.",
     );
   }
 }
@@ -204,17 +207,32 @@ const finishBankConnection = onCall({ timeoutSeconds: 300 }, async (request) => 
   }
 });
 
+/**
+ * Ein Konto wieder entfernen — entweder die ganze Bankverbindung, oder ein
+ * einzelnes Konto aus einem Auszug, das keine Verbindung hat.
+ */
 const disconnectBank = onCall(async (request) => {
   const uid = requireUid(request);
   const connectionId = String(request.data?.connectionId ?? "").trim();
-  if (connectionId === "") throw new HttpsError("invalid-argument", "Es fehlt die Verbindung.");
+  const accountId = String(request.data?.accountId ?? "").trim();
+  if (connectionId === "" && accountId === "") {
+    throw new HttpsError("invalid-argument", "Es fehlt die Verbindung oder das Konto.");
+  }
 
   const bankRef = admin.database().ref(userBankPath(uid));
   const accounts = (await bankRef.child("accounts").get()).val() ?? {};
 
-  const updates = { [`connections/${safeKey(connectionId)}`]: null };
-  for (const [key, account] of Object.entries(accounts)) {
-    if (account?.connectionId === connectionId) updates[`accounts/${key}`] = null;
+  const updates = {};
+  if (connectionId !== "") {
+    updates[`connections/${safeKey(connectionId)}`] = null;
+    for (const [key, account] of Object.entries(accounts)) {
+      if (account?.connectionId === connectionId) updates[`accounts/${key}`] = null;
+    }
+  }
+  if (accountId !== "") {
+    for (const [key, account] of Object.entries(accounts)) {
+      if (account?.id === accountId) updates[`accounts/${key}`] = null;
+    }
   }
   await bankRef.update(updates);
 
@@ -282,46 +300,68 @@ async function syncUser(uid, { force = false } = {}) {
       syncCount: usedToday + 1,
     });
 
-    for (const entry of raw) {
-      const transaction = normalizeTransaction(entry, account.id);
-      if (transaction === null) continue;
-
-      const txKey = safeKey(transaction.id);
-      const txRef = bankRef.child(`transactions/${txKey}`);
-      // Nur neu anlegen: ein bereits zugeordneter Umsatz darf beim nächsten
-      // Abruf nicht seine Zuordnung verlieren.
-      const result = await txRef.transaction((current) =>
-        current === null ? { ...transaction, importedAt: Date.now() } : undefined,
-      );
-      if (result.committed) {
-        report.stored += 1;
-        fresh.push({ ...transaction, key: txKey });
-      }
-    }
+    const normalized = raw
+      .map((entry) => normalizeTransaction(entry, account.id))
+      .filter((entry) => entry !== null);
+    const { stored } = await storeTransactions(uid, normalized);
+    report.stored += stored.length;
+    fresh.push(...stored);
   }
 
-  if (fresh.length > 0) {
-    const invoices = await listOpenInvoices(uid);
-    const { automatic, suggestions } = matchTransactions(fresh, invoices);
-
-    for (const match of automatic) {
-      await applyMatch(uid, match.transactionId, match.emailId, {
-        automatic: true,
-        reasons: match.reasons,
-      });
-      report.matched += 1;
-    }
-
-    for (const suggestion of suggestions) {
-      await bankRef
-        .child(`suggestions/${safeKey(suggestion.transactionId)}`)
-        .set({ ...suggestion, createdAt: Date.now() });
-      report.suggested += 1;
-    }
-  }
+  const matchReport = await matchAgainstInvoices(uid, fresh);
+  report.matched = matchReport.matched;
+  report.suggested = matchReport.suggested;
 
   await bankRef.child("lastSync").set({ at: Date.now(), ...report, skipped: report.skipped });
   return report;
+}
+
+/**
+ * Umsätze ablegen und die zurückgeben, die wirklich neu waren.
+ *
+ * Bewusst nur anlegen, nie überschreiben: ein Umsatz, der schon einer Rechnung
+ * zugeordnet ist, darf diese Zuordnung nicht verlieren, bloß weil er im
+ * nächsten Abruf oder im nächsten Auszug noch einmal auftaucht.
+ */
+async function storeTransactions(uid, transactions) {
+  const bankRef = admin.database().ref(userBankPath(uid));
+  const stored = [];
+
+  for (const transaction of transactions) {
+    const txKey = safeKey(transaction.id);
+    const result = await bankRef
+      .child(`transactions/${txKey}`)
+      .transaction((current) =>
+        current === null ? { ...transaction, importedAt: Date.now() } : undefined,
+      );
+    if (result.committed) stored.push({ ...transaction, key: txKey });
+  }
+
+  return { stored };
+}
+
+/** Neue Umsätze den offenen Rechnungen zuordnen. */
+async function matchAgainstInvoices(uid, transactions) {
+  if (transactions.length === 0) return { matched: 0, suggested: 0 };
+
+  const bankRef = admin.database().ref(userBankPath(uid));
+  const invoices = await listOpenInvoices(uid);
+  const { automatic, suggestions } = matchTransactions(transactions, invoices);
+
+  for (const match of automatic) {
+    await applyMatch(uid, match.transactionId, match.emailId, {
+      automatic: true,
+      reasons: match.reasons,
+    });
+  }
+
+  for (const suggestion of suggestions) {
+    await bankRef
+      .child(`suggestions/${safeKey(suggestion.transactionId)}`)
+      .set({ ...suggestion, createdAt: Date.now() });
+  }
+
+  return { matched: automatic.length, suggested: suggestions.length };
 }
 
 /** Eine Zahlung einer Rechnung zuordnen — in Umsatz, Mail und Index zugleich. */
@@ -355,6 +395,76 @@ const syncBank = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (reques
   } catch (error) {
     throw toHttpsError(error);
   }
+});
+
+/**
+ * Einen heruntergeladenen Kontoauszug einlesen.
+ *
+ * Der Weg ohne Bankschnittstelle: im Online-Banking die Umsätze als CSV, CAMT
+ * oder MT940 exportieren und die Datei hier hochladen. Es sind dieselben
+ * Daten, sie werden genauso zugeordnet — nur ohne Anbieter dazwischen, ohne
+ * Vertrag und ohne Tageslimit. Deshalb steht hier auch kein assertConfigured():
+ * GoCardless wird für diesen Weg nicht gebraucht.
+ */
+const importStatement = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
+  const uid = requireUid(request);
+
+  const base64 = String(request.data?.fileBase64 ?? "");
+  if (base64 === "") throw new HttpsError("invalid-argument", "Es fehlt die Datei.");
+  const filename = String(request.data?.filename ?? "Kontoauszug").slice(0, 120);
+
+  let parsed;
+  try {
+    parsed = parseStatement(Buffer.from(base64, "base64"));
+  } catch (error) {
+    // Das sind Meldungen für den Nutzer ("keine Spalte Betrag gefunden"),
+    // keine Programmfehler — deshalb invalid-argument statt internal.
+    throw new HttpsError("invalid-argument", error?.message ?? "Die Datei ließ sich nicht lesen.");
+  }
+
+  if (parsed.transactions.length === 0) {
+    throw new HttpsError("invalid-argument", "In der Datei steht keine Buchung.");
+  }
+
+  const accountKey = safeKey(parsed.account);
+  const bankRef = admin.database().ref(userBankPath(uid));
+  const existing = (await bankRef.child(`accounts/${accountKey}`).get()).val();
+
+  const dates = parsed.transactions.map((entry) => entry.bookingDate).sort();
+  await bankRef.child(`accounts/${accountKey}`).update({
+    id: parsed.account,
+    iban: /^[A-Z]{2}\d{2}/.test(parsed.account) ? parsed.account : "",
+    name: existing?.name || "Kontoauszug",
+    ownerName: existing?.ownerName || "",
+    currency: parsed.transactions[0].currency,
+    // Kein connectionId: dieses Konto hängt an keiner Bankverbindung, es wird
+    // von Hand gefüttert. Daran erkennt die Oberfläche den Unterschied.
+    source: "import",
+    addedAt: existing?.addedAt ?? Date.now(),
+    lastImportAt: Date.now(),
+    lastImportFile: filename,
+    lastSyncedDate: dates[dates.length - 1],
+  });
+
+  const { stored } = await storeTransactions(uid, parsed.transactions);
+  const { matched, suggested } = await matchAgainstInvoices(uid, stored);
+
+  const report = {
+    format: parsed.format,
+    account: parsed.account,
+    from: dates[0],
+    to: dates[dates.length - 1],
+    read: parsed.transactions.length,
+    stored: stored.length,
+    // Wer denselben Auszug zweimal hochlädt, soll sehen, dass nichts verloren
+    // ging und nichts doppelt gebucht wurde.
+    duplicates: parsed.transactions.length - stored.length,
+    matched,
+    suggested,
+    skippedRows: parsed.skipped.length,
+  };
+  await bankRef.child("lastImport").set({ at: Date.now(), ...report });
+  return report;
 });
 
 /** Einen Vorschlag bestätigen. */
@@ -434,6 +544,7 @@ module.exports = {
   finishBankConnection,
   disconnectBank,
   syncBank,
+  importStatement,
   confirmMatch,
   unmatch,
   syncBankDaily,

@@ -2,11 +2,16 @@ import { getFunctions, httpsCallable } from 'firebase/functions'
 import { getFirebaseApp } from './firebase'
 
 /**
- * Bankanbindung über GoCardless Bank Account Data.
+ * Bankumsätze — auf zwei Wegen.
  *
- * Alles läuft über Callable Functions — die Zugangsdaten zu GoCardless liegen
- * ausschließlich serverseitig. Der Browser bekommt nur die Adresse, auf der
- * sich der Nutzer bei seiner Bank anmeldet.
+ * 1. Kontoauszug hochladen (importStatement). Braucht nichts außer der Datei
+ *    aus dem Online-Banking: CSV, CAMT.053 oder MT940.
+ * 2. Automatisch über GoCardless Bank Account Data. Setzt voraus, dass in den
+ *    Functions Zugangsdaten hinterlegt sind; GoCardless nimmt seit Juli 2025
+ *    keine neuen Konten mehr an, für Bestandszugänge läuft es weiter.
+ *
+ * Alles läuft über Callable Functions — Zugangsdaten und Dateien werden
+ * serverseitig verarbeitet. Zugeordnet wird in beiden Fällen gleich.
  */
 
 /** Muss zur Region in functions/index.js passen. */
@@ -29,9 +34,14 @@ export type BankAccount = {
   name: string
   ownerName: string
   currency: string
-  connectionId: string
+  /** Fehlt bei Konten, die aus einem Auszug stammen — die hängen an keiner Verbindung. */
+  connectionId?: string
+  /** 'import' heißt: die Umsätze kommen aus hochgeladenen Auszügen. */
+  source?: 'import'
   lastSyncAt?: number
   lastSyncedDate?: string
+  lastImportAt?: number
+  lastImportFile?: string
 }
 
 export type BankConnection = {
@@ -97,11 +107,69 @@ export const finishBankConnection = callable<
   { accounts: number; sync: SyncReport }
 >('finishBankConnection')
 
-export const disconnectBank = callable<{ connectionId: string }, { disconnected: string }>(
-  'disconnectBank',
-)
+export const disconnectBank = callable<
+  { connectionId?: string; accountId?: string },
+  { disconnected: string }
+>('disconnectBank')
 
 export const syncBank = callable<Record<string, never>, SyncReport>('syncBank')
+
+/** Was beim Einlesen eines Auszugs herauskam. */
+export type ImportReport = {
+  format: 'csv' | 'camt' | 'mt940'
+  account: string
+  from: string
+  to: string
+  read: number
+  stored: number
+  duplicates: number
+  matched: number
+  suggested: number
+  skippedRows: number
+}
+
+const importStatementCallable = callable<
+  { fileBase64: string; filename: string },
+  ImportReport
+>('importStatement')
+
+/** Rund 4/3 davon gehen als Base64 über die Leitung; eine Callable nimmt 10 MB. */
+export const MAX_STATEMENT_BYTES = 5 * 1024 * 1024
+
+/**
+ * Bytes zu Base64 — in Blöcken.
+ *
+ * `String.fromCharCode(...bytes)` mit einer ganzen Datei sprengt bei ein paar
+ * hunderttausend Zeichen den Aufrufstapel, und zwar erst beim Nutzer mit dem
+ * großen Auszug.
+ */
+function toBase64(bytes: Uint8Array): string {
+  const CHUNK = 0x8000
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+  }
+  return btoa(binary)
+}
+
+/** Einen heruntergeladenen Kontoauszug einlesen (CSV, CAMT.053 oder MT940). */
+export async function importStatement(file: File): Promise<ImportReport> {
+  if (file.size === 0) throw new Error('Die Datei ist leer.')
+  if (file.size > MAX_STATEMENT_BYTES) {
+    throw new Error(
+      `Die Datei ist zu groß (${Math.round(file.size / 1024 / 1024)} MB, erlaubt sind ` +
+        `${MAX_STATEMENT_BYTES / 1024 / 1024} MB). Bitte einen kürzeren Zeitraum exportieren.`,
+    )
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  return importStatementCallable({ fileBase64: toBase64(bytes), filename: file.name })
+}
+
+export const STATEMENT_FORMATS: Record<ImportReport['format'], string> = {
+  csv: 'CSV',
+  camt: 'CAMT.053',
+  mt940: 'MT940',
+}
 
 export const confirmMatch = callable<
   { transactionId: string; emailId: string },

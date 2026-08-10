@@ -232,24 +232,56 @@ eigenen Bereich.
 `pdf-lib` wird erst beim Klick geladen (eigener Chunk, ~420 kB); der Start der
 App bleibt davon unberührt.
 
-## Bankkonto verbinden
+## Bankumsätze
 
-Optional. Ohne Einrichtung bleibt die Buchhaltung voll nutzbar — nur der
-Abgleich meldet, dass er nicht konfiguriert ist.
+Optional — ohne bleibt die Buchhaltung voll nutzbar, es fehlt dann nur die
+Angabe, ob eine Rechnung bezahlt ist. Überweisen kann HabMail in keinem Fall
+etwas; Umsätze werden ausschließlich gelesen.
 
-Angebunden ist **GoCardless Bank Account Data** (früher Nordigen): lesender
-Zugriff auf Bankumsätze über PSD2, kostenlos, über 2.000 europäische Banken.
-Überweisen kann HabMail nichts.
+Es gibt zwei Wege zu denselben Daten.
 
-1. Unter [bankaccountdata.gocardless.com](https://bankaccountdata.gocardless.com)
-   registrieren und *User Secrets* erzeugen.
-2. `GOCARDLESS_SECRET_ID` und `GOCARDLESS_SECRET_KEY` als GitHub-Secrets
+### Weg 1: Kontoauszug einlesen (empfohlen)
+
+Braucht nichts außer der Datei aus dem Online-Banking. Kein Anbieter, kein
+Vertrag, kein Tageslimit, keine 90-Tage-Frist.
+
+1. Im Online-Banking die Umsätze exportieren — **CSV**, **CAMT.053 (XML)** oder
+   **MT940**. Jede deutsche Bank bietet mindestens eines davon an.
+2. In der App: **Buchhaltung → Bankumsätze → Datei auswählen**.
+
+Das Format wird am Inhalt erkannt, nicht an der Endung. Die Spaltennamen der
+gängigen deutschen Banken sind hinterlegt (Sparkasse, VR, DKB, Commerzbank,
+ING …); Vorspann-Zeilen vor der eigentlichen Tabelle werden übersprungen, ebenso
+ISO-8859-1 statt UTF-8 und Beträge in beiden Schreibweisen.
+
+Jede Buchung bekommt eine Kennung, die sich aus ihren Daten ergibt. **Denselben
+Auszug noch einmal einzulesen ist deshalb harmlos** — was schon da ist, wird
+erkannt und nicht doppelt verbucht; die Rückmeldung nennt die Zahl. Auch
+überlappende Zeiträume sind damit unproblematisch, und eine bereits bestätigte
+Zuordnung geht beim erneuten Einlesen nicht verloren.
+
+Der Leser steht in [`functions/statement.js`](functions/statement.js) und hängt
+weder an Firebase noch an einem Anbieter.
+
+### Weg 2: automatisch über GoCardless
+
+**GoCardless Bank Account Data nimmt seit Juli 2025 keine neuen Konten mehr
+an.** Wer bereits Zugangsdaten hat, kann sie weiter nutzen — für alle anderen
+ist Weg 1 der gangbare. Der Code bleibt vollständig erhalten.
+
+1. `GOCARDLESS_SECRET_ID` und `GOCARDLESS_SECRET_KEY` als GitHub-Secrets
    anlegen, Workflow laufen lassen.
-3. In der App: **Buchhaltung → Bankkonto → Bankkonto verbinden**, Bank suchen,
-   bei der Bank anmelden. Danach landest du wieder in HabMail und die Umsätze
-   werden geholt.
+2. In der App: **Buchhaltung → Bankumsätze → Bank automatisch verbinden**, Bank
+   suchen, bei der Bank anmelden. Danach landest du wieder in HabMail und die
+   Umsätze werden geholt, ab dann täglich um 6:30 Uhr.
+
+Ohne hinterlegte Zugangsdaten melden sich die betreffenden Aufrufe mit einem
+Hinweis auf Weg 1, statt still nichts zu tun.
 
 ### Wie zugeordnet wird
+
+Gleich, egal woher der Umsatz kam — ab dem Abgleich unterscheidet HabMail die
+beiden Wege nicht mehr.
 
 Der Betrag muss **exakt** stimmen, sonst gibt es gar keinen Kandidaten. Punkte
 vergeben nur die Belege dafür, dass es dieselbe Sache ist: Rechnungsnummer im
@@ -264,13 +296,30 @@ sich wieder lösen.
 
 ### Grenzen
 
-- **Vier Abrufe pro Konto und Tag** im kostenlosen Tarif. Einer geht an den
-  geplanten Lauf um 6:30 Uhr, drei bleiben für *Jetzt abgleichen*.
+Für beide Wege:
+
+- Umsätze und der Rechnungsindex sind für den Browser **nur lesbar**;
+  geschrieben wird ausschließlich serverseitig.
+- Nur **Ausgänge** können eine Rechnung bezahlen. Ein Zahlungseingang wird
+  gespeichert, aber nie einer Eingangsrechnung zugeordnet.
+
+Nur beim Auszug:
+
+- **Höchstens 5 MB je Datei** — die Datei geht Base64-kodiert durch eine
+  Callable, und die nimmt 10 MB. Ein Jahr Umsätze wiegt als CSV keine 300 kB.
+- Eingelesen wird, was im Auszug steht. Neue Umsätze kommen nicht von selbst
+  dazu; das ist der Preis dafür, dass es keinen Anbieter braucht.
+
+Nur bei GoCardless:
+
+- **Vier Abrufe pro Konto und Tag.** Einer geht an den geplanten Lauf um
+  6:30 Uhr, drei bleiben für *Jetzt abgleichen*.
 - **Die Zustimmung läuft nach 90 Tagen ab** (PSD2). In der Kontoliste steht,
   wie lange sie noch gilt; danach ist eine erneute Anmeldung bei der Bank nötig.
 - **Meist nur 90 Tage Historie** beim ersten Verbinden.
-- Umsätze und der Rechnungsindex sind für den Browser **nur lesbar**;
-  geschrieben wird ausschließlich serverseitig.
+- Bei einem **Firmenkonto** ist der Kontoinhaber die Firma, nicht die Person,
+  die HabMail bedient. Ein Zugang für fremde Konten setzt die Zustimmung der
+  Firma voraus — das ist keine technische, sondern eine rechtliche Grenze.
 
 ## Kategorien
 

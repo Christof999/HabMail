@@ -20,7 +20,10 @@
 #   GEMINI_MODEL, POLL_MESSAGE_LIMIT, MAX_INLINE_ATTACHMENT_BYTES
 # Optional als Secrets:
 #   INGEST_TOKEN, POLL_TRIGGER_TOKEN
-#   GOCARDLESS_SECRET_ID, GOCARDLESS_SECRET_KEY  (Bankanbindung)
+#   GOCARDLESS_SECRET_ID, GOCARDLESS_SECRET_KEY
+#     Nur für das automatische Abholen der Bankumsätze, und nur mit einem
+#     bestehenden GoCardless-Zugang (neue gibt es seit Juli 2025 nicht mehr).
+#     Der Weg über den hochgeladenen Kontoauszug braucht nichts davon.
 #
 # Alle Werte landen in functions/.env.<projekt>, das der Workflow erzeugt und
 # das nicht im Repository liegt. Firebase liest diese Datei beim Ausrollen und

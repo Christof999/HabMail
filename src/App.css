@@ -1937,6 +1937,40 @@ html[data-theme='dark'] .pill-paid {
   white-space: nowrap;
 }
 
+/* Trennt das Einlesen eines Auszugs sichtbar von der Kontoliste darüber. */
+.bank-section {
+  margin: 1.1rem 0 0.3rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.95rem;
+}
+
+/* Auf dem Handy ist die Standard-Dateiauswahl sonst kaum zu treffen. */
+.modal input[type='file'] {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.55rem;
+  font: inherit;
+  font-size: 0.85rem;
+  border: 1px dashed var(--border);
+  border-radius: 9px;
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+.modal input[type='file']::file-selector-button {
+  font: inherit;
+  font-size: 0.85rem;
+  margin-right: 0.6rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--pre-bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
 .suggestion-block {
   padding: 0.85rem 1rem;
 }
