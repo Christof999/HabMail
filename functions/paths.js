@@ -33,6 +33,14 @@ function userInvoiceIndexPath(uid) {
   return `${userRootPath(uid)}/invoiceIndex`;
 }
 
+/**
+ * Was der letzte Abhol-Lauf gebracht hat. Serverseitig geschrieben, für den
+ * Browser nur lesbar — dort steht, ob der geplante Lauf überhaupt stattfindet.
+ */
+function userPollStatusPath(uid) {
+  return `${userRootPath(uid)}/pollStatus`;
+}
+
 /** Zuordnung Rückkehr-Kennung → Benutzer. Nur serverseitig lesbar. */
 const BANK_REQUISITIONS_PATH = "bankRequisitions";
 
@@ -45,6 +53,7 @@ module.exports = {
   userFoldersPath,
   userBankPath,
   userInvoiceIndexPath,
+  userPollStatusPath,
   BANK_REQUISITIONS_PATH,
   USER_DIRECTORY_PATH,
   ADMINS_PATH,

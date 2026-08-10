@@ -29,6 +29,9 @@ exports.whoAmI = users.whoAmI;
 /** Rechnungsdaten korrigieren — serverseitig, damit Mail und Index gleich bleiben. */
 exports.updateInvoice = require("./invoices").updateInvoice;
 
+/** Bestehende Mails noch einmal auswerten, jetzt samt der angehängten PDFs. */
+exports.reanalyzeInvoices = require("./reanalyze").reanalyzeInvoices;
+
 /**
  * Bankumsätze. Zwei Wege zum selben Ziel:
  *
@@ -190,7 +193,7 @@ exports.pollMailboxes = onSchedule(
     maxInstances: 1,
   },
   async () => {
-    const report = await pollAllMailboxes();
+    const report = await pollAllMailboxes({ trigger: "geplant" });
     console.log("Abholen abgeschlossen:", JSON.stringify(report));
   },
 );

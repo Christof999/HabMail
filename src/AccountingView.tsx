@@ -18,6 +18,7 @@ import {
   type BankTransaction,
   type MatchSuggestion,
 } from './bankApi'
+import { reanalyzeInvoices } from './usersApi'
 import type { EmailRow } from './types'
 
 /**
@@ -34,6 +35,7 @@ type Props = {
 }
 
 type PdfState = { period: string; skipped: string[] } | null
+type ReanalyzeState = { checked: number; updated: number; amountsFound: number } | null
 
 export default function AccountingView({ rows, uid }: Props) {
   const groups = useMemo(() => groupInvoicesByMonth(rows), [rows])
@@ -47,6 +49,14 @@ export default function AccountingView({ rows, uid }: Props) {
   const [showBank, setShowBank] = useState(false)
   const [suggestions, setSuggestions] = useState<MatchSuggestion[]>([])
   const [transactions, setTransactions] = useState<BankTransaction[]>([])
+  const [reanalyzing, setReanalyzing] = useState<ReanalyzeState>(null)
+  const [reanalyzed, setReanalyzed] = useState<string | null>(null)
+
+  /** Wie viele Rechnungen ohne Betrag dastehen — der Anlass zum Nachauswerten. */
+  const missingAmounts = useMemo(
+    () => groups.reduce((sum, group) => sum + group.withoutAmount, 0),
+    [groups],
+  )
 
   // Vorschläge und Umsätze schreibt nur der Server; hier wird zugehört.
   useEffect(() => {
@@ -121,6 +131,49 @@ export default function AccountingView({ rows, uid }: Props) {
     }
   }
 
+  /**
+   * Bestehende Rechnungen noch einmal auswerten.
+   *
+   * Die Kategorisierung hat anfangs nur den Mailtext an die KI geschickt, nicht
+   * die angehängten PDFs — daher die vielen Beträge von 0,00 €. Der Fehler ist
+   * behoben, aber der Bestand rechnet sich nicht von selbst neu.
+   *
+   * Die Function arbeitet seitenweise, damit sie an Speicher und Zeitbudget
+   * nicht scheitert; hier wird so lange nachgefragt, bis sie fertig meldet.
+   */
+  async function reanalyze() {
+    setError(null)
+    setReanalyzing({ checked: 0, updated: 0, amountsFound: 0 })
+    try {
+      let cursor: string | null = null
+      const total = { checked: 0, updated: 0, amountsFound: 0 }
+      const problems: string[] = []
+
+      for (;;) {
+        const page = await reanalyzeInvoices({ cursor })
+        total.checked += page.checked
+        total.updated += page.updated
+        total.amountsFound += page.amountsFound
+        for (const reason of page.reasons) {
+          if (!problems.includes(reason) && problems.length < 3) problems.push(reason)
+        }
+        setReanalyzing({ ...total })
+        if (page.done || page.cursor === null) break
+        cursor = page.cursor
+      }
+
+      setReanalyzed(
+        `${total.checked} Mails geprüft, ${total.updated} neu ausgewertet, ` +
+          `bei ${total.amountsFound} einen Betrag gefunden.` +
+          (problems.length > 0 ? ` Probleme: ${problems.join('; ')}` : ''),
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Neu auswerten fehlgeschlagen')
+    } finally {
+      setReanalyzing(null)
+    }
+  }
+
   async function exportMonth(group: MonthGroup, action: 'print' | 'download') {
     setError(null)
     setLastPdf(null)
@@ -146,6 +199,25 @@ export default function AccountingView({ rows, uid }: Props) {
           <strong>Mahnung</strong> einsortiert wird, taucht sie hier auf — nach
           Monat gruppiert.
         </p>
+        {/* Auch hier erreichbar: sind Rechnungen als „Sonstiges“ gelandet,
+            weil die KI nur den Mailtext sah, ist diese Liste leer — und
+            genau dann wird der Knopf gebraucht. */}
+        <p className="muted small">
+          Liegen Rechnungen als PDF im Posteingang, ohne hier aufzutauchen, hilft
+          ein zweiter Durchgang: früher gingen die Anhänge nicht an die KI.
+        </p>
+        {error ? <p className="mailbox-error">{error}</p> : null}
+        {reanalyzed ? <p className="muted small">{reanalyzed}</p> : null}
+        <button
+          type="button"
+          className="ghost"
+          disabled={reanalyzing !== null}
+          onClick={() => void reanalyze()}
+        >
+          {reanalyzing === null
+            ? 'Mails neu auswerten'
+            : `Werte aus … ${reanalyzing.checked} geprüft`}
+        </button>
       </div>
     )
   }
@@ -167,6 +239,37 @@ export default function AccountingView({ rows, uid }: Props) {
       </div>
 
       {error ? <p className="mailbox-error">{error}</p> : null}
+      {reanalyzed ? <p className="muted small">{reanalyzed}</p> : null}
+
+      {missingAmounts > 0 || reanalyzing !== null ? (
+        <section className="card reanalyze-block">
+          <p className="small">
+            <strong>
+              {missingAmounts} Rechnung{missingAmounts === 1 ? '' : 'en'} ohne Betrag.
+            </strong>{' '}
+            Steht der Betrag im angehängten PDF und nicht im Mailtext, hatte die
+            Auswertung ihn früher nicht gesehen — die Anhänge gingen nicht an die
+            KI. Das ist behoben; hier wird der Bestand nachgeholt.
+          </p>
+          <div className="mailbox-item-actions">
+            <button
+              type="button"
+              className="ghost"
+              disabled={reanalyzing !== null}
+              onClick={() => void reanalyze()}
+            >
+              {reanalyzing === null
+                ? 'Rechnungen neu auswerten'
+                : `Werte aus … ${reanalyzing.checked} geprüft, ${reanalyzing.amountsFound} Beträge gefunden`}
+            </button>
+          </div>
+          <p className="muted small">
+            Läuft über alle Mails mit lesbarem Anhang und dauert je nach Menge
+            ein paar Minuten. Bereits erkannte Beträge und von Hand korrigierte
+            Werte bleiben unangetastet, ebenso zugeordnete Zahlungen.
+          </p>
+        </section>
+      ) : null}
 
       {suggestions.length > 0 ? (
         <section className="card suggestion-block">

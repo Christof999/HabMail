@@ -22,6 +22,14 @@ export function userFoldersPath(uid: string): string {
   return `${userRootPath(uid)}/mailFolders`
 }
 
+/**
+ * Was der letzte Abhol-Lauf gebracht hat. Schreibt nur der Server; hier wird
+ * nur gelesen — daran ist zu sehen, ob der geplante Lauf überhaupt stattfindet.
+ */
+export function userPollStatusPath(uid: string): string {
+  return `${userRootPath(uid)}/pollStatus`
+}
+
 /** Verzeichnis aller Benutzer — nur für Administratoren lesbar. */
 export const USER_DIRECTORY_PATH = 'userDirectory'
 

@@ -113,3 +113,41 @@ export type PollReport = {
  * Betrifft nur die eigenen Postfächer.
  */
 export const pollNow = callable<Record<string, never>, PollReport>('pollNow')
+
+/**
+ * Was der letzte Lauf gebracht hat — geschrieben von den Functions, für den
+ * Browser nur lesbar. Steht hier nie ein „geplant“, läuft der Fünf-Minuten-Lauf
+ * nicht, und die Ursache liegt außerhalb dieses Codes (Cloud Scheduler).
+ */
+export type PollStatus = {
+  at: number
+  trigger: 'geplant' | 'manuell'
+  ok: boolean
+  mailboxes?: number
+  fetched?: number
+  stored?: number
+  analyzed?: number
+  failed?: number
+  error?: string
+}
+
+/** Ergebnis einer Seite beim Neu-Auswerten. */
+export type ReanalyzeReport = {
+  checked: number
+  candidates: number
+  updated: number
+  amountsFound: number
+  failed: number
+  cursor: string | null
+  done: boolean
+  reasons: string[]
+}
+
+/**
+ * Bestehende Mails noch einmal auswerten, jetzt samt der angehängten PDFs.
+ * Arbeitet seitenweise — der Aufrufer wiederholt mit `cursor`, bis `done`.
+ */
+export const reanalyzeInvoices = callable<
+  { cursor?: string | null; all?: boolean },
+  ReanalyzeReport
+>('reanalyzeInvoices')

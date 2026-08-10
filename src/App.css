@@ -1971,8 +1971,17 @@ html[data-theme='dark'] .pill-paid {
   cursor: pointer;
 }
 
+.reanalyze-block,
 .suggestion-block {
   padding: 0.85rem 1rem;
+}
+
+.reanalyze-block p:first-child {
+  margin-top: 0;
+}
+
+.reanalyze-block p:last-child {
+  margin-bottom: 0;
 }
 
 .suggestion-block h3 {

@@ -46,7 +46,9 @@ einen gewöhnlichen Client-Key, der auf seine eigenen Postfächer beschränkt is
 2. Sie fragt den Email-Proxy, welche Postfächer empfangen können, und holt je
    Postfach die neuen Mails über `GET /api/receive`.
 3. Jede Mail geht an Gemini: Kategorie, Zusammenfassung, Priorität — bei
-   Rechnungen zusätzlich Nummer, Betrag, Datum und Fälligkeit.
+   Rechnungen zusätzlich Nummer, Betrag, Datum und Fälligkeit. **Angehängte
+   PDFs und Bilder gehen mit** (bis zu drei je Mail, siehe unten): bei „anbei
+   unsere Rechnung" steht der Betrag dort und in keiner Zeile Mailtext.
 4. Der Datensatz landet unter `users/<uid>/emails` — welcher Benutzer gemeint
    ist, sagt der Proxy über den Eigentümer des Postfachs. Der Schlüssel wird
    aus der Message-ID abgeleitet, dieselbe Mail kann also nicht doppelt
@@ -321,6 +323,71 @@ Nur bei GoCardless:
   die HabMail bedient. Ein Zugang für fremde Konten setzt die Zustimmung der
   Firma voraus — das ist keine technische, sondern eine rechtliche Grenze.
 
+## Was die KI zu sehen bekommt
+
+[`functions/categorize.js`](functions/categorize.js) schickt an Gemini: Absender,
+Betreff, Mailtext (6.000 Zeichen) **und die lesbaren Anhänge als Datei**.
+
+Ohne die Anhänge geht es nicht. Eine typische Rechnungsmail lautet „anbei unsere
+Rechnung, mit freundlichen Grüßen" — Betrag, Nummer und Datum stehen
+ausschließlich im PDF. Wer nur den Text schickt, bekommt keinen Betrag zurück,
+und die Buchhaltung zeigt 0,00 €.
+
+Mitgeschickt werden PDF, PNG, JPEG, WebP, HEIC und HEIF. Ist der Anhang als
+`application/octet-stream` deklariert — das machen viele Mailprogramme —,
+entscheidet die Dateiendung. Grenzen: höchstens **3 Anhänge** je Mail, **4 MB**
+je Stück, **8 MB** zusammen. Word- und Excel-Dateien gehen nicht mit; sie werden
+gespeichert, aber nicht ausgewertet.
+
+Bei Widersprüchen zwischen Mailtext und Anhang zählt der Anhang. Als Betrag ist
+ausdrücklich der **Bruttogesamtbetrag** verlangt, nicht netto und nicht eine
+einzelne Position.
+
+### Bestand nachträglich auswerten
+
+Bis August 2026 gingen die Anhänge **nicht** mit — daher Rechnungen ohne Betrag.
+Der Fehler ist behoben, aber alte Datensätze rechnen sich nicht von selbst neu.
+
+**Buchhaltung → Rechnungen neu auswerten.** Der Knopf erscheint, sobald es
+Rechnungen ohne Betrag gibt, und steht auch in der leeren Buchhaltung — sind
+Rechnungen als *Sonstiges* gelandet, ist die Liste ja gerade leer.
+
+Angefasst wird nur, was einen lesbaren Anhang hat **und** bei dem etwas fehlt:
+als Rechnung erkannt, aber ohne Betrag; oder nicht als Rechnung erkannt und ohne
+Betrag. Eine vollständige Rechnung wird nicht noch einmal durchgerechnet — das
+kostet nur Geld und würde von Hand korrigierte Zahlen überschreiben. Zugeordnete
+Zahlungen bleiben ebenfalls unangetastet: `invoice` wird feldweise ergänzt, nicht
+ersetzt.
+
+[`functions/reanalyze.js`](functions/reanalyze.js) arbeitet **seitenweise** (8
+Mails je Aufruf) und gibt einen Cursor zurück; die Oberfläche ruft so lange auf,
+bis `done` kommt. Eine Mail mit PDF wiegt schnell ein Megabyte — ein Jahr
+Posteingang passt weder in den Speicher der Function noch in ihr Zeitbudget.
+
+Anhänge über `MAX_INLINE_ATTACHMENT_BYTES` (Standard 1 MB) liegen gar nicht in
+der Datenbank und lassen sich deshalb auch nicht nachträglich auswerten. Für die
+kommen die Beträge nur über *Betrag korrigieren* herein.
+
+## Läuft das automatische Abholen?
+
+Jeder Lauf hinterlässt seinen Stand unter `users/<uid>/pollStatus` — Zeitpunkt,
+Auslöser (`geplant` oder `manuell`), Zahlen, Fehler. Serverseitig geschrieben,
+für den Browser nur lesbar.
+
+Zu sehen ist er unter **Postfächer**, oben. Damit ist die Frage „kommen die Mails
+nur, wenn ich sie von Hand hole?" in einem Blick beantwortet:
+
+- Steht dort ein **automatisch** von vor wenigen Minuten: alles in Ordnung.
+- Steht dort nur **von Hand** oder ein alter Zeitpunkt: `pollMailboxes` wird
+  nicht ausgelöst. Die Ursache liegt dann nicht im Code hier, sondern beim
+  Zeitplan in Google Cloud. Nachsehen unter
+  *Cloud Scheduler* → Job `firebase-schedule-pollMailboxes-europe-west1`:
+  existiert er, ist er aktiviert, was meldet der letzte Lauf? Fehlt der Job,
+  wurde beim Ausrollen `cloudscheduler.googleapis.com` nicht aktiviert — der
+  Link dafür steht im Fehlerschritt des Workflows.
+- Steht dort ein **Fehler**: die Meldung kommt vom Email-Proxy und sagt, woran
+  es liegt (falscher Key, IMAP-Anmeldung, Zeitüberschreitung).
+
 ## Kategorien
 
 Definiert in [`src/categories.ts`](src/categories.ts) — und, weil die Functions
@@ -342,10 +409,12 @@ werden.
   schon jetzt nur mit Namen und Größe gespeichert
   (`MAX_INLINE_ATTACHMENT_BYTES`). Für ein echtes Belegarchiv gehören sie nach
   Firebase Storage.
-- **Anhänge über 1 MB fehlen im Sammel-PDF.** Sie liegen gar nicht erst in der
-  Datenbank (siehe oben). Bis die Dateien nach Firebase Storage umziehen, muss
-  man sie für den Steuerberater von Hand aus der Mail holen — das Deckblatt
-  weist darauf hin.
+- **Anhänge über 1 MB fehlen im Sammel-PDF** und lassen sich auch nicht
+  nachträglich auswerten. Sie liegen gar nicht erst in der Datenbank (siehe
+  oben). Beim Abholen sieht die KI sie noch — der Proxy liefert bis 2 MB —, aber
+  ein zweiter Durchgang findet sie nicht mehr. Bis die Dateien nach Firebase
+  Storage umziehen, muss man sie für den Steuerberater von Hand aus der Mail
+  holen; das Deckblatt weist darauf hin.
 - **Der Ingest-Endpunkt** (`ingest_k7mN9pQ2wR4xY8z`, für n8n) nimmt ohne
   gesetztes `INGEST_TOKEN` weiterhin Daten von jedem an — und schreibt an die
   alte, flache Stelle, die die App nicht mehr liest. Wer noch n8n benutzt,

@@ -11,7 +11,71 @@ import {
   type Mailbox,
   type MailboxInput,
 } from './mailboxesApi'
-import { pollNow, type PollReport } from './usersApi'
+import { onValue, ref } from 'firebase/database'
+import { getFirebaseDb } from './firebase'
+import { userPollStatusPath } from './paths'
+import { pollNow, type PollReport, type PollStatus } from './usersApi'
+
+/**
+ * Der Stand des automatischen Abholens.
+ *
+ * Ohne diese Zeile ist „die Mails kommen nur, wenn ich sie von Hand hole“
+ * nicht von „der geplante Lauf startet gar nicht“ zu unterscheiden. Steht hier
+ * nie ein geplanter Lauf, liegt es nicht am Abholen selbst, sondern daran,
+ * dass der Cloud Scheduler die Funktion nicht auslöst.
+ */
+function AutomaticPollStatus({ uid }: { uid: string }) {
+  const [status, setStatus] = useState<PollStatus | null>(null)
+  // Die Uhr gehört in den Zustand, nicht in den Render: „vor 12 Minuten“ soll
+  // von selbst weiterzählen, während das Fenster offen ist.
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(
+    () =>
+      onValue(ref(getFirebaseDb(), userPollStatusPath(uid)), (snap) => {
+        const value = snap.val()
+        setStatus(value !== null && typeof value === 'object' ? (value as PollStatus) : null)
+      }),
+    [uid],
+  )
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(timer)
+  }, [])
+
+  if (status === null) {
+    return (
+      <p className="muted small">
+        Bisher ist kein Lauf verzeichnet. Nach dem nächsten Abholen steht hier,
+        wann es zuletzt lief.
+      </p>
+    )
+  }
+
+  const when = new Date(status.at).toLocaleString('de-DE')
+  const minutesAgo = Math.round((now - status.at) / 60_000)
+  // Alle fünf Minuten soll ein geplanter Lauf kommen. Eine Viertelstunde ohne
+  // ist der Punkt, an dem es sich lohnt, nachzusehen.
+  const stale = status.trigger !== 'geplant' || minutesAgo > 15
+
+  return (
+    <p className={stale ? 'mailbox-error' : 'muted small'}>
+      Zuletzt {status.trigger === 'geplant' ? 'automatisch' : 'von Hand'} abgeholt: {when}
+      {status.ok
+        ? `${status.stored ? ` · ${status.stored} neu` : ''}`
+        : ` · fehlgeschlagen${status.error ? `: ${status.error}` : ''}`}
+      {stale && status.ok ? (
+        <>
+          {' '}
+          — ein geplanter Lauf sollte alle fünf Minuten kommen. Bleibt er aus,
+          fehlt der Zeitplan in Google Cloud (Cloud Scheduler), nicht die
+          Einstellung hier.
+        </>
+      ) : null}
+    </p>
+  )
+}
 
 /**
  * Postfächer anlegen und ansehen.
@@ -275,6 +339,8 @@ export default function MailboxSettings({ user, onClose }: Props) {
 
         {error ? <p className="mailbox-error">{error}</p> : null}
         {notice ? <p className="muted small">{notice}</p> : null}
+
+        <AutomaticPollStatus uid={user.uid} />
 
         {pollReport !== null && pollReport.mailboxes.length > 0 ? (
           <ul className="poll-report">
