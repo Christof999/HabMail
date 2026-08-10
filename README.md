@@ -370,23 +370,53 @@ kommen die Beträge nur über *Betrag korrigieren* herein.
 
 ## Läuft das automatische Abholen?
 
+**Der Deploy-Workflow hat damit nichts zu tun.** Er rollt Code aus. Wer ihn
+laufen lassen muss, damit Mails ankommen, hat kein Deploy-Problem, sondern einen
+fehlenden Zeitplan — beim Ausrollen werden die Functions neu gestartet, und
+dabei läuft das Abholen einmal nebenbei mit. Das ist ein Nebeneffekt, kein Weg.
+
 Jeder Lauf hinterlässt seinen Stand unter `users/<uid>/pollStatus` — Zeitpunkt,
-Auslöser (`geplant` oder `manuell`), Zahlen, Fehler. Serverseitig geschrieben,
-für den Browser nur lesbar.
+Auslöser, Zahlen, Fehler. Serverseitig geschrieben, für den Browser nur lesbar.
+Zu sehen unter **Postfächer**, oben:
 
-Zu sehen ist er unter **Postfächer**, oben. Damit ist die Frage „kommen die Mails
-nur, wenn ich sie von Hand hole?" in einem Blick beantwortet:
+| Anzeige | Bedeutung |
+| --- | --- |
+| **automatisch**, vor wenigen Minuten | Der Cloud Scheduler läuft. Alles gut. |
+| **automatisch (GitHub)** | Der Ersatztakt läuft (siehe unten). Auch gut. |
+| nur **von Hand**, oder alt | Es taktet nichts. Ursache unten. |
+| **fehlgeschlagen** | Die Meldung kommt vom Email-Proxy und nennt den Grund. |
 
-- Steht dort ein **automatisch** von vor wenigen Minuten: alles in Ordnung.
-- Steht dort nur **von Hand** oder ein alter Zeitpunkt: `pollMailboxes` wird
-  nicht ausgelöst. Die Ursache liegt dann nicht im Code hier, sondern beim
-  Zeitplan in Google Cloud. Nachsehen unter
-  *Cloud Scheduler* → Job `firebase-schedule-pollMailboxes-europe-west1`:
-  existiert er, ist er aktiviert, was meldet der letzte Lauf? Fehlt der Job,
-  wurde beim Ausrollen `cloudscheduler.googleapis.com` nicht aktiviert — der
-  Link dafür steht im Fehlerschritt des Workflows.
-- Steht dort ein **Fehler**: die Meldung kommt vom Email-Proxy und sagt, woran
-  es liegt (falscher Key, IMAP-Anmeldung, Zeitüberschreitung).
+### Wenn nichts taktet
+
+Der Zeitplan heißt `firebase-schedule-pollMailboxes-europe-west1` und liegt in
+der Google Cloud Console unter *Cloud Scheduler*. Der Deploy-Workflow prüft im
+Schritt **„Zeitplan prüfen"** selbst nach und sagt, was er vorfindet.
+
+Fehlt der Job oder scheitert jeder Lauf, ist die Ursache fast immer eine fehlende
+Rolle des Dienstkontos — und zwar eine, die das Ausrollen **nicht** scheitern
+lässt: Functions der 2. Generation laufen auf Cloud Run, und der Zeitplan ruft
+sie über HTTP auf. Dafür muss beim Ausrollen dem Dienstkonto des Zeitplans das
+Recht *Cloud Run-Aufrufer* eingetragen werden, und das darf nur, wer selbst
+**Cloud Run-Administrator** ist. Fehlt die Rolle, geht das Deployment durch und
+jeder geplante Lauf scheitert still mit 403.
+
+Also in der Cloud Console unter IAM dem Dienstkonto zusätzlich geben:
+**Cloud Run-Administrator** und **Cloud Scheduler-Administrator**. Danach den
+Deploy-Workflow einmal laufen lassen.
+
+### Ersatztakt ohne Google-Rechte
+
+Lassen sich die Rollen nicht vergeben, taktet
+[`.github/workflows/poll-mailboxes.yml`](.github/workflows/poll-mailboxes.yml)
+das Abholen von GitHub aus: alle fünf Minuten ein Aufruf von
+`pollMailboxesNow`. Einschalten heißt, `POLL_TRIGGER_TOKEN` als Secret zu setzen
+und einmal auszurollen — mehr nicht.
+
+Zwei Einschränkungen, die der Cloud Scheduler nicht hat: GitHub hält Zeitpläne
+nicht genau ein (aus fünf Minuten werden unter Last auch zwanzig), und **es
+schaltet sie ab, wenn 60 Tage lang niemand etwas ins Repository schiebt** —
+danach genügt ein Klick auf *Enable workflow*. Der zweitbeste Weg, aber ein
+funktionierender.
 
 ## Kategorien
 

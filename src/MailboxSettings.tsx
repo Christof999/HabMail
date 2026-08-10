@@ -55,22 +55,30 @@ function AutomaticPollStatus({ uid }: { uid: string }) {
 
   const when = new Date(status.at).toLocaleString('de-DE')
   const minutesAgo = Math.round((now - status.at) / 60_000)
-  // Alle fünf Minuten soll ein geplanter Lauf kommen. Eine Viertelstunde ohne
-  // ist der Punkt, an dem es sich lohnt, nachzusehen.
-  const stale = status.trigger !== 'geplant' || minutesAgo > 15
+  const automatic = status.trigger === 'geplant' || status.trigger === 'extern'
+  // Der GitHub-Takt kommt oft verspätet; beim Cloud Scheduler sind fünf
+  // Minuten verlässlich. Erst danach ist ein Hinweis mehr als Panikmache.
+  const overdue = minutesAgo > (status.trigger === 'extern' ? 40 : 15)
+  const label =
+    status.trigger === 'geplant'
+      ? 'automatisch'
+      : status.trigger === 'extern'
+        ? 'automatisch (GitHub)'
+        : 'von Hand'
 
   return (
-    <p className={stale ? 'mailbox-error' : 'muted small'}>
-      Zuletzt {status.trigger === 'geplant' ? 'automatisch' : 'von Hand'} abgeholt: {when}
+    <p className={!automatic || overdue ? 'mailbox-error' : 'muted small'}>
+      Zuletzt {label} abgeholt: {when}
       {status.ok
         ? `${status.stored ? ` · ${status.stored} neu` : ''}`
         : ` · fehlgeschlagen${status.error ? `: ${status.error}` : ''}`}
-      {stale && status.ok ? (
+      {(!automatic || overdue) && status.ok ? (
         <>
           {' '}
-          — ein geplanter Lauf sollte alle fünf Minuten kommen. Bleibt er aus,
-          fehlt der Zeitplan in Google Cloud (Cloud Scheduler), nicht die
-          Einstellung hier.
+          — von selbst kommt gerade nichts. Das liegt nicht an den Einstellungen
+          hier, sondern am Zeitplan: entweder fehlt der Cloud-Scheduler-Job in
+          Google Cloud, oder er scheitert. Der Ersatzweg ist der Workflow
+          „Mails abholen“ unter Actions, der keine Google-Rechte braucht.
         </>
       ) : null}
     </p>

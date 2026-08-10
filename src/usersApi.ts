@@ -121,7 +121,11 @@ export const pollNow = callable<Record<string, never>, PollReport>('pollNow')
  */
 export type PollStatus = {
   at: number
-  trigger: 'geplant' | 'manuell'
+  /**
+   * `geplant` = Cloud Scheduler, `extern` = der GitHub-Takt als Ersatz dafür,
+   * `manuell` = jemand hat „Jetzt abholen“ gedrückt.
+   */
+  trigger: 'geplant' | 'extern' | 'manuell'
   ok: boolean
   mailboxes?: number
   fetched?: number

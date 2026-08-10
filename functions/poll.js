@@ -146,7 +146,8 @@ async function allUserUids() {
  * @param {object} [options]
  * @param {string} [options.onlySubject] nur die Postfächer dieses Benutzers —
  *   für den Knopf „Jetzt abholen“, der niemandem in fremde Fächer sehen soll.
- * @param {"geplant"|"manuell"} [options.trigger] was den Lauf ausgelöst hat.
+ * @param {"geplant"|"extern"|"manuell"} [options.trigger] was den Lauf ausgelöst
+ *   hat: der Cloud Scheduler, ein Takt von außen (GitHub) oder ein Klick.
  */
 async function pollAllMailboxes({ onlySubject, trigger = "manuell" } = {}) {
   const startedAt = Date.now();

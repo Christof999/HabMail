@@ -19,7 +19,11 @@
 # Optional, ebenfalls als Variables:
 #   GEMINI_MODEL, POLL_MESSAGE_LIMIT, MAX_INLINE_ATTACHMENT_BYTES
 # Optional als Secrets:
-#   INGEST_TOKEN, POLL_TRIGGER_TOKEN
+#   INGEST_TOKEN
+#   POLL_TRIGGER_TOKEN
+#     Ein selbst ausgedachtes langes Passwort. Schaltet pollMailboxesNow frei
+#     und damit den Ersatztakt in .github/workflows/poll-mailboxes.yml, falls
+#     der Cloud Scheduler nicht läuft.
 #   GOCARDLESS_SECRET_ID, GOCARDLESS_SECRET_KEY
 #     Nur für das automatische Abholen der Bankumsätze, und nur mit einem
 #     bestehenden GoCardless-Zugang (neue gibt es seit Juli 2025 nicht mehr).
@@ -41,9 +45,26 @@
 #   Dienstkontonutzer          (Service Account User)
 #   Cloud Build-Bearbeiter     (Cloud Build Editor)
 #   Artifact Registry-Administrator
+#   Cloud Run-Administrator    (Cloud Run Admin)
+#   Cloud Scheduler-Administrator
 #
-# Fehlt eine davon, bricht das Ausrollen mit „Permission denied“ oder
+# Fehlt eine der ersten fünf, bricht das Ausrollen mit „Permission denied“ oder
 # „missing required permission“ ab und nennt die fehlende Berechtigung.
+#
+# Die letzten beiden sind die tückischen: **ohne sie geht das Ausrollen durch,
+# aber die geplanten Läufe finden nie statt.** Functions der 2. Generation
+# laufen auf Cloud Run, und der Zeitplan ruft sie über HTTP auf. Damit das
+# klappt, muss beim Ausrollen dem Dienstkonto des Zeitplans das Recht
+# „Cloud Run-Aufrufer“ eingetragen werden — und genau das darf nur, wer
+# Cloud Run-Administrator ist. Fehlt die Rolle, entsteht der Zeitplan (oder
+# auch nicht) und jeder seiner Läufe scheitert still mit 403.
+#
+# Zu sehen ist das in der Cloud Console unter Cloud Scheduler: der Job
+# firebase-schedule-pollMailboxes-europe-west1 fehlt entweder ganz, oder in der
+# Spalte „Ergebnis des letzten Laufs“ steht dauerhaft ein Fehler.
+#
+# Wenn sich die Rollen nicht vergeben lassen: .github/workflows/poll-mailboxes.yml
+# taktet das Abholen von GitHub aus und braucht dafür keine Google-Rechte.
 
 name: Firebase ausrollen
 
@@ -194,6 +215,51 @@ jobs:
             --non-interactive \
             --force
 
+      # Das Ausrollen kann durchgehen und der Zeitplan trotzdem fehlen — dann
+      # kommen keine Mails mehr von selbst, ohne dass irgendwo ein Fehler steht.
+      # Deshalb hier ausdrücklich nachsehen.
+      - name: Zeitplan prüfen
+        env:
+          PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: |
+          job="firebase-schedule-pollMailboxes-europe-west1"
+          # google-auth-library kommt mit firebase-admin mit; installiert ist
+          # das nur unter functions/, deshalb der Suchpfad.
+          export NODE_PATH="$PWD/functions/node_modules"
+          token=$(node -e '
+            const { GoogleAuth } = require("google-auth-library");
+            new GoogleAuth({ scopes: "https://www.googleapis.com/auth/cloud-platform" })
+              .getAccessToken().then((t) => console.log(t), () => process.exit(1));
+          ' 2>/dev/null) || token=""
+
+          if [ -z "$token" ]; then
+            echo "::notice::Zeitplan konnte nicht geprüft werden. Von Hand nachsehen: https://console.cloud.google.com/cloudscheduler?project=$PROJECT_ID"
+            exit 0
+          fi
+
+          url="https://cloudscheduler.googleapis.com/v1/projects/$PROJECT_ID/locations/europe-west1/jobs/$job"
+          body=$(curl -sS -H "Authorization: Bearer $token" "$url" || echo '{}')
+
+          state=$(printf '%s' "$body" | node -e '
+            let raw = "";
+            process.stdin.on("data", (c) => (raw += c));
+            process.stdin.on("end", () => {
+              try { console.log(JSON.parse(raw).state ?? ""); } catch { console.log(""); }
+            });
+          ')
+
+          if [ "$state" = "ENABLED" ]; then
+            echo "Zeitplan aktiv: $job — die Mails kommen alle fünf Minuten von selbst."
+          elif [ -z "$state" ]; then
+            echo "::warning::Der Zeitplan $job existiert nicht. Die Mails kommen dann NICHT von selbst."
+            echo "Ursache ist fast immer eine fehlende Rolle des Dienstkontos (Cloud Run-Administrator, Cloud Scheduler-Administrator) oder eine nicht aktivierte API."
+            echo "  Rechte:     https://console.cloud.google.com/iam-admin/iam?project=$PROJECT_ID"
+            echo "  Zeitpläne:  https://console.cloud.google.com/cloudscheduler?project=$PROJECT_ID"
+            echo "Ersatzweg ohne Google-Rechte: Actions → \"Mails abholen\" einschalten (.github/workflows/poll-mailboxes.yml)."
+          else
+            echo "::warning::Der Zeitplan $job steht auf $state statt ENABLED. In der Konsole wieder einschalten: https://console.cloud.google.com/cloudscheduler?project=$PROJECT_ID"
+          fi
+
       # Läuft nur, wenn oben etwas schiefging: die häufigste Ursache sind
       # Google-APIs, die im Projekt noch nicht aktiviert sind. Das Dienstkonto
       # darf sie standardmäßig nicht selbst einschalten.
@@ -212,4 +278,5 @@ jobs:
           echo "  https://console.cloud.google.com/iam-admin/iam?project=$PROJECT_ID"
           echo ""
           echo "Nötige Rollen: Firebase Admin, Cloud Functions Admin, Dienstkontonutzer,"
-          echo "Cloud Build-Bearbeiter, Artifact Registry-Administrator."
+          echo "Cloud Build-Bearbeiter, Artifact Registry-Administrator,"
+          echo "Cloud Run-Administrator, Cloud Scheduler-Administrator."

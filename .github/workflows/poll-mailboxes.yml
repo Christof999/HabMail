@@ -1,0 +1,130 @@
+# Ersatztakt für das Abholen der Mails.
+#
+# Normalerweise erledigt das der Cloud Scheduler in Google Cloud: er ruft alle
+# fünf Minuten die Function `pollMailboxes` auf. Wenn der Zeitplan dort nicht
+# angelegt wurde oder ohne die nötigen Rechte scheitert, kommen keine Mails
+# mehr von selbst — und man merkt es nur daran, dass nichts passiert.
+#
+# Dieser Workflow übernimmt dann denselben Takt von hier aus. Er braucht keine
+# Google-Berechtigungen: er ruft nur den öffentlichen Endpunkt
+# `pollMailboxesNow` auf, der sich mit einem Token ausweist.
+#
+# ---------------------------------------------------------------------------
+# Einschalten (einmalig, geht im Browser auf dem Handy)
+# ---------------------------------------------------------------------------
+#
+# 1. Settings → Secrets and variables → Actions → Reiter „Secrets“:
+#      POLL_TRIGGER_TOKEN   ein selbst ausgedachtes langes Passwort
+#    Denselben Wert braucht auch der Deploy-Workflow, damit die Function ihn
+#    kennt — er steht dort schon in der Liste der optionalen Secrets.
+# 2. „Firebase ausrollen“ einmal laufen lassen, damit die Function das Token
+#    bekommt. Ohne das antwortet sie mit 503.
+# 3. Fertig. Dieser Workflow läuft ab dann von selbst.
+#
+# Zum Abschalten: Actions → „Mails abholen“ → „…“ → „Disable workflow“.
+#
+# ---------------------------------------------------------------------------
+# Was dieser Weg nicht kann
+# ---------------------------------------------------------------------------
+#
+# - GitHub hält Zeitpläne nicht auf die Minute genau ein. Fünf Minuten sind das
+#   Minimum, und unter Last werden daraus auch mal zwanzig. Für Mail reicht das,
+#   für nichts Zeitkritisches.
+# - **Zeitpläne werden abgeschaltet, wenn 60 Tage lang niemand etwas in das
+#   Repository schiebt.** GitHub schickt vorher eine Mail. Danach genügt ein
+#   Klick auf „Enable workflow“.
+#
+# Der Cloud Scheduler kennt beide Einschränkungen nicht. Dieser Workflow ist
+# deshalb der zweitbeste Weg — aber ein funktionierender zweitbester.
+
+name: Mails abholen
+
+on:
+  schedule:
+    # Fünf Minuten ist das kürzeste, was GitHub zulässt.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+# Ein hängender Lauf soll den nächsten nicht aufstauen; die Function selbst
+# lässt ohnehin nur eine Instanz gleichzeitig zu.
+concurrency:
+  group: poll-mailboxes
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Abholen auslösen
+        env:
+          TOKEN: ${{ secrets.POLL_TRIGGER_TOKEN }}
+          PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          # Nur nötig, wenn die Function woanders liegt als im Standardfall.
+          POLL_URL: ${{ vars.POLL_URL }}
+        run: |
+          set -u
+
+          if [ -z "$TOKEN" ]; then
+            echo "::error::POLL_TRIGGER_TOKEN fehlt. Siehe Kommentar oben in dieser Datei."
+            exit 1
+          fi
+
+          url="$POLL_URL"
+          if [ -z "$url" ]; then
+            if [ -z "$PROJECT_ID" ]; then
+              echo "::error::Ohne FIREBASE_PROJECT_ID lässt sich die Adresse nicht bilden. Entweder das Secret setzen oder die Variable POLL_URL."
+              exit 1
+            fi
+            url="https://europe-west1-$PROJECT_ID.cloudfunctions.net/pollMailboxesNow"
+          fi
+          echo "Rufe auf: $url"
+
+          # Bis zu drei Versuche: ein kalter Start dauert manchmal länger als
+          # das Zeitlimit, und ein Fehlschlag alle fünf Minuten wäre nur Lärm.
+          attempt=1
+          while [ "$attempt" -le 3 ]; do
+            code=$(curl -sS -o response.json -w '%{http_code}' \
+              --max-time 540 \
+              -X POST "$url" \
+              -H "Authorization: Bearer $TOKEN" || echo "000")
+
+            if [ "$code" = "200" ]; then
+              # Nur die Zahlen ins Protokoll — Betreffzeilen gehören nicht in
+              # ein Build-Log, das mehr Leute sehen als den Posteingang.
+              node -e '
+                const r = JSON.parse(require("node:fs").readFileSync("response.json", "utf8"));
+                const boxes = Array.isArray(r.mailboxes) ? r.mailboxes : [];
+                const sum = (f) => boxes.reduce((n, b) => n + (b[f] ?? 0), 0);
+                console.log(`Postfächer: ${boxes.length} · geholt: ${sum("fetched")} · neu: ${sum("stored")} · ausgewertet: ${sum("analyzed")}`);
+                for (const b of boxes) {
+                  if (b.error) console.log(`::warning::${b.mailbox}: ${b.error}`);
+                  else if (b.skipped) console.log(`${b.mailbox}: übersprungen (${b.skipped})`);
+                }
+                if (r.hint) console.log(`Hinweis: ${r.hint}`);
+                if (r.error) { console.log(`::error::${r.error}`); process.exit(1); }
+              '
+              exit $?
+            fi
+
+            if [ "$code" = "503" ]; then
+              echo "::error::Die Function kennt POLL_TRIGGER_TOKEN nicht. Das Secret setzen und „Firebase ausrollen“ einmal laufen lassen."
+              exit 1
+            fi
+            if [ "$code" = "401" ]; then
+              echo "::error::Das Token stimmt nicht mit dem überein, das die Function kennt. Beide Stellen tragen dasselbe Secret — nach dem Ändern neu ausrollen."
+              exit 1
+            fi
+            if [ "$code" = "404" ]; then
+              echo "::error::Unter $url liegt keine Function. Stimmen Projekt-ID und Region? Sonst POLL_URL als Variable setzen."
+              exit 1
+            fi
+
+            echo "Versuch $attempt: HTTP $code"
+            head -c 300 response.json 2>/dev/null || true
+            echo ""
+            attempt=$((attempt + 1))
+            [ "$attempt" -le 3 ] && sleep $((attempt * 5))
+          done
+
+          echo "::error::Abholen nach drei Versuchen fehlgeschlagen (zuletzt HTTP $code)."
+          exit 1

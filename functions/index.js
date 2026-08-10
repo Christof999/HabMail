@@ -199,9 +199,15 @@ exports.pollMailboxes = onSchedule(
 );
 
 /**
- * Denselben Lauf von Hand auslösen — zum Einrichten und Nachsehen, warum
- * gerade nichts ankommt. Braucht POLL_TRIGGER_TOKEN, sonst wäre es ein
- * offener Endpunkt, der fremde Postfächer leerpumpt.
+ * Denselben Lauf von außen auslösen. Zwei Zwecke:
+ *
+ *   - beim Einrichten nachsehen, warum gerade nichts ankommt;
+ *   - als Ersatztakt, wenn der Cloud Scheduler nicht läuft. Genau dafür gibt
+ *     es .github/workflows/poll-mailboxes.yml — der Zeitplan von GitHub
+ *     braucht keine Google-Rechte und lässt sich vom Handy einschalten.
+ *
+ * Braucht POLL_TRIGGER_TOKEN, sonst wäre es ein offener Endpunkt, der fremde
+ * Postfächer leerpumpt.
  */
 exports.pollMailboxesNow = onRequest(
   {
@@ -225,7 +231,9 @@ exports.pollMailboxesNow = onRequest(
     }
 
     try {
-      const report = await pollAllMailboxes();
+      // Wer von außen taktet, taktet automatisch — aber als eigener Auslöser,
+      // damit in der Oberfläche zu sehen ist, ob Google oder GitHub ihn treibt.
+      const report = await pollAllMailboxes({ trigger: "extern" });
       res.status(200).json(report);
     } catch (error) {
       console.error("Manuelles Abholen fehlgeschlagen:", error);
