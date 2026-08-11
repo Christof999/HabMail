@@ -386,27 +386,48 @@ Zu sehen unter **Postfächer**, oben:
 | nur **von Hand**, oder alt | Es taktet nichts. Ursache unten. |
 | **fehlgeschlagen** | Die Meldung kommt vom Email-Proxy und nennt den Grund. |
 
-### Wenn nichts taktet
+### Wer den Zeitplan anlegt
 
-Der Zeitplan heißt `firebase-schedule-pollMailboxes-europe-west1` und liegt in
-der Google Cloud Console unter *Cloud Scheduler*. Der Deploy-Workflow prüft im
-Schritt **„Zeitplan prüfen"** selbst nach und sagt, was er vorfindet.
+`firebase deploy --only functions` **soll** für jede `onSchedule`-Function einen
+Cloud-Scheduler-Job anlegen. Von Hand ist da nichts zu tun. Nur misslingt das
+still, wenn dem Dienstkonto Rechte fehlen: das Ausrollen meldet Erfolg, der Job
+fehlt, und zu merken ist es allein daran, dass keine Mails ankommen.
 
-Fehlt der Job oder scheitert jeder Lauf, ist die Ursache fast immer eine fehlende
-Rolle des Dienstkontos — und zwar eine, die das Ausrollen **nicht** scheitern
-lässt: Functions der 2. Generation laufen auf Cloud Run, und der Zeitplan ruft
-sie über HTTP auf. Dafür muss beim Ausrollen dem Dienstkonto des Zeitplans das
-Recht *Cloud Run-Aufrufer* eingetragen werden, und das darf nur, wer selbst
-**Cloud Run-Administrator** ist. Fehlt die Rolle, geht das Deployment durch und
-jeder geplante Lauf scheitert still mit 403.
+Der Grund liegt in der 2. Generation der Functions: die laufen auf Cloud Run, und
+der Zeitplan ruft sie über HTTP auf. Damit er das darf, muss beim Ausrollen dem
+Dienstkonto des Zeitplans das Recht *Cloud Run-Aufrufer* eingetragen werden — und
+das darf nur, wer selbst **Cloud Run-Administrator** ist. Fehlt die Rolle, wird
+der Job nicht angelegt, ohne dass irgendwo ein Fehler steht.
 
-Also in der Cloud Console unter IAM dem Dienstkonto zusätzlich geben:
-**Cloud Run-Administrator** und **Cloud Scheduler-Administrator**. Danach den
-Deploy-Workflow einmal laufen lassen.
+Deshalb prüft der Deploy-Workflow im Schritt **„Zeitplan sicherstellen"** nach
+und **legt den Job notfalls selbst an**
+([`.github/scripts/ensure-schedule.mjs`](.github/scripts/ensure-schedule.mjs)).
+Er nimmt dabei bewusst einen anderen Weg als Firebase: statt auf `pollMailboxes`
+zu zeigen — was *Cloud Run-Aufrufer* voraussetzt — zeigt er auf
+`pollMailboxesNow` und weist sich über `POLL_TRIGGER_TOKEN` aus. Damit genügt die
+Rolle **Cloud Scheduler-Administrator**, und die fehlende Cloud-Run-Rolle spielt
+keine Rolle mehr.
 
-### Ersatztakt ohne Google-Rechte
+Was der Schritt im Protokoll sagt:
 
-Lassen sich die Rollen nicht vergeben, taktet
+| Meldung | Bedeutung |
+| --- | --- |
+| `Zeitplan aktiv: …` | Alles in Ordnung, nichts zu tun. |
+| `Zeitplan … angelegt` | Firebase hatte ihn nicht angelegt, der Workflow schon. Erledigt. |
+| `Zum Anlegen fehlt POLL_TRIGGER_TOKEN` | Das Secret setzen und noch einmal ausrollen. |
+| `dem Dienstkonto fehlt die Rolle Cloud Scheduler-Administrator` | Rolle vergeben, oder den Ersatztakt unten nehmen. |
+
+Ein pausierter Job wird wieder gestartet, und gesucht wird in allen Regionen —
+nicht nur in `europe-west1`, damit „ich finde ihn nicht" keine falsche Diagnose
+wird.
+
+Wer beide Rollen vergeben kann, sollte es trotzdem tun (**Cloud
+Run-Administrator** und **Cloud Scheduler-Administrator** unter IAM): dann legt
+Firebase den Job wieder selbst an, und der Umweg entfällt.
+
+### Ersatztakt ganz ohne Google
+
+Scheitert auch das Anlegen, taktet
 [`.github/workflows/poll-mailboxes.yml`](.github/workflows/poll-mailboxes.yml)
 das Abholen von GitHub aus: alle fünf Minuten ein Aufruf von
 `pollMailboxesNow`. Einschalten heißt, `POLL_TRIGGER_TOKEN` als Secret zu setzen

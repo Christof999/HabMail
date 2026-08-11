@@ -63,8 +63,12 @@
 # firebase-schedule-pollMailboxes-europe-west1 fehlt entweder ganz, oder in der
 # Spalte „Ergebnis des letzten Laufs“ steht dauerhaft ein Fehler.
 #
-# Wenn sich die Rollen nicht vergeben lassen: .github/workflows/poll-mailboxes.yml
-# taktet das Abholen von GitHub aus und braucht dafür keine Google-Rechte.
+# Der Schritt „Zeitplan sicherstellen“ fängt das ab: er legt den Job dann selbst
+# an, auf einem Weg, der ohne die Cloud-Run-Rolle auskommt. Dafür braucht er das
+# Secret POLL_TRIGGER_TOKEN.
+#
+# Wenn auch das nicht geht: .github/workflows/poll-mailboxes.yml taktet das
+# Abholen von GitHub aus und braucht überhaupt keine Google-Rechte.
 
 name: Firebase ausrollen
 
@@ -217,48 +221,21 @@ jobs:
 
       # Das Ausrollen kann durchgehen und der Zeitplan trotzdem fehlen — dann
       # kommen keine Mails mehr von selbst, ohne dass irgendwo ein Fehler steht.
-      # Deshalb hier ausdrücklich nachsehen.
-      - name: Zeitplan prüfen
+      # Genau das ist passiert, deshalb wird hier nicht nur nachgesehen, sondern
+      # der Zeitplan notfalls selbst angelegt. Siehe das Skript für den Grund,
+      # warum es dabei einen anderen Weg nimmt als Firebase.
+      - name: Zeitplan sicherstellen
         env:
           PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          POLL_TRIGGER_TOKEN: ${{ secrets.POLL_TRIGGER_TOKEN }}
+          POLL_URL: ${{ vars.POLL_URL }}
         run: |
-          job="firebase-schedule-pollMailboxes-europe-west1"
-          # google-auth-library kommt mit firebase-admin mit; installiert ist
-          # das nur unter functions/, deshalb der Suchpfad.
-          export NODE_PATH="$PWD/functions/node_modules"
-          token=$(node -e '
-            const { GoogleAuth } = require("google-auth-library");
-            new GoogleAuth({ scopes: "https://www.googleapis.com/auth/cloud-platform" })
-              .getAccessToken().then((t) => console.log(t), () => process.exit(1));
-          ' 2>/dev/null) || token=""
-
-          if [ -z "$token" ]; then
-            echo "::notice::Zeitplan konnte nicht geprüft werden. Von Hand nachsehen: https://console.cloud.google.com/cloudscheduler?project=$PROJECT_ID"
-            exit 0
-          fi
-
-          url="https://cloudscheduler.googleapis.com/v1/projects/$PROJECT_ID/locations/europe-west1/jobs/$job"
-          body=$(curl -sS -H "Authorization: Bearer $token" "$url" || echo '{}')
-
-          state=$(printf '%s' "$body" | node -e '
-            let raw = "";
-            process.stdin.on("data", (c) => (raw += c));
-            process.stdin.on("end", () => {
-              try { console.log(JSON.parse(raw).state ?? ""); } catch { console.log(""); }
-            });
-          ')
-
-          if [ "$state" = "ENABLED" ]; then
-            echo "Zeitplan aktiv: $job — die Mails kommen alle fünf Minuten von selbst."
-          elif [ -z "$state" ]; then
-            echo "::warning::Der Zeitplan $job existiert nicht. Die Mails kommen dann NICHT von selbst."
-            echo "Ursache ist fast immer eine fehlende Rolle des Dienstkontos (Cloud Run-Administrator, Cloud Scheduler-Administrator) oder eine nicht aktivierte API."
-            echo "  Rechte:     https://console.cloud.google.com/iam-admin/iam?project=$PROJECT_ID"
-            echo "  Zeitpläne:  https://console.cloud.google.com/cloudscheduler?project=$PROJECT_ID"
-            echo "Ersatzweg ohne Google-Rechte: Actions → \"Mails abholen\" einschalten (.github/workflows/poll-mailboxes.yml)."
-          else
-            echo "::warning::Der Zeitplan $job steht auf $state statt ENABLED. In der Konsole wieder einschalten: https://console.cloud.google.com/cloudscheduler?project=$PROJECT_ID"
-          fi
+          # google-auth-library kommt mit firebase-admin mit und liegt nur unter
+          # functions/node_modules. ESM sucht Pakete vom Ort der Datei aus, nicht
+          # vom Arbeitsverzeichnis — deshalb muss das Skript dort liegen. Das
+          # Ausrollen ist zu diesem Zeitpunkt durch, die Kopie ändert daran nichts.
+          cp .github/scripts/ensure-schedule.mjs functions/ensure-schedule.mjs
+          node functions/ensure-schedule.mjs
 
       # Läuft nur, wenn oben etwas schiefging: die häufigste Ursache sind
       # Google-APIs, die im Projekt noch nicht aktiviert sind. Das Dienstkonto
@@ -269,7 +246,8 @@ jobs:
           PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: |
           apis="cloudfunctions.googleapis.com,cloudbuild.googleapis.com,artifactregistry.googleapis.com,run.googleapis.com,eventarc.googleapis.com,pubsub.googleapis.com,cloudscheduler.googleapis.com,storage.googleapis.com"
-          echo "::error::Ausrollen fehlgeschlagen. Bei \"Permissions denied enabling …\" fehlen die Google-APIs — der Link unten schaltet alle nötigen auf einmal ein."
+          echo "::error::Ein Schritt ist fehlgeschlagen. Die Meldung dort oben nennt die Ursache; hier stehen die Links, die man dafür meistens braucht."
+          echo "Bei \"Permissions denied enabling …\" fehlen die Google-APIs — der erste Link schaltet alle nötigen auf einmal ein."
           echo ""
           echo "APIs aktivieren (einmalig, als Projektinhaber):"
           echo "  https://console.cloud.google.com/flows/enableapi?apiid=$apis&project=$PROJECT_ID"
