@@ -57,6 +57,13 @@ export default function AccountingView({ rows, uid }: Props) {
     () => groups.reduce((sum, group) => sum + group.withoutAmount, 0),
     [groups],
   )
+  const openTotal = useMemo(
+    () => groups.reduce((sum, group) => sum + group.openCount, 0),
+    [groups],
+  )
+  // Als Startwert, nicht im Render: die Uhr während des Zeichnens zu lesen ist
+  // unrein, und über den Jahreswechsel hinweg bleibt die App ohnehin nicht offen.
+  const [currentYear] = useState(() => new Date().getFullYear())
 
   // Vorschläge und Umsätze schreibt nur der Server; hier wird zugehört.
   useEffect(() => {
@@ -224,16 +231,21 @@ export default function AccountingView({ rows, uid }: Props) {
 
   return (
     <div className="accounting">
-      <div className="accounting-head">
-        <div>
-          <h2>Buchhaltung</h2>
-          <p className="muted small">
-            {groups.length} Monat{groups.length === 1 ? '' : 'e'} ·{' '}
-            {new Date().getFullYear()} bisher{' '}
-            <strong>{formatCents(yearTotal)}</strong>
-          </p>
+      {/*
+        Kopf der Buchhaltung. Die Jahressumme ist die Zahl, für die man
+        herkommt — sie steht deshalb groß da und nicht als Kleingedrucktes
+        neben der Monatszahl.
+      */}
+      <div className="accounting-head card">
+        <div className="accounting-sum">
+          <span className="accounting-sum-label">Rechnungen {currentYear}</span>
+          <strong className="accounting-sum-value">{formatCents(yearTotal)}</strong>
+          <span className="muted small">
+            {groups.length} Monat{groups.length === 1 ? '' : 'e'}
+            {openTotal > 0 ? ` · ${openTotal} offen` : ' · alles bezahlt'}
+          </span>
         </div>
-        <button type="button" className="ghost small-btn" onClick={() => setShowBank(true)}>
+        <button type="button" className="ghost" onClick={() => setShowBank(true)}>
           Bankumsätze
         </button>
       </div>
@@ -328,23 +340,29 @@ export default function AccountingView({ rows, uid }: Props) {
         const busy = busyPeriod === group.period
         return (
           <section key={group.period} className="month-group card">
+            {/*
+              Zwei Zeilen statt fünf nebeneinander: vorher brachen Monat, Anzahl,
+              Offenstand und Summe auf schmalen Schirmen wild um. Jetzt steht
+              oben Monat und Summe, darunter das Kleingedruckte.
+            */}
             <button
               type="button"
               className="month-head"
               aria-expanded={isOpen}
               onClick={() => toggle(group.period)}
             >
-              <span className="month-caret">{isOpen ? '▾' : '▸'}</span>
+              <span className="month-caret" aria-hidden>
+                {isOpen ? '▾' : '▸'}
+              </span>
               <span className="month-label">{group.label}</span>
-              <span className="muted small">
+              <span className="month-total">
+                {formatCents(group.totalCents, group.currencies[0])}
+              </span>
+              <span className="month-sub muted small">
                 {group.entries.length} Rechnung{group.entries.length === 1 ? '' : 'en'}
+                {' · '}
+                {group.openCount === 0 ? 'alles bezahlt' : `${group.openCount} offen`}
               </span>
-              <span className="muted small">
-                {group.openCount === 0
-                  ? 'alles bezahlt'
-                  : `${group.openCount} offen`}
-              </span>
-              <span className="month-total">{formatCents(group.totalCents, group.currencies[0])}</span>
             </button>
 
             {group.withoutAmount > 0 ? (
@@ -457,33 +475,43 @@ function InvoiceRow({ entry, editing, onEdit, onCancel, onSave, onRelease }: Row
     <li className="invoice-row">
       <span className="invoice-date">{formatDate(entry.date) || '—'}</span>
       <span className="invoice-vendor">
-        {entry.vendor}
-        {entry.invoiceNumber ? (
-          <span className="muted small"> · {entry.invoiceNumber}</span>
+        <span className="invoice-vendor-name">{entry.vendor}</span>
+        {/* Rechnungsnummer vor den Betreff, nicht hinter den Aussteller: hinten
+            rutschte sie beim Umbruch auf eine eigene Zeile und fing dort mit
+            einem Trennpunkt an. */}
+        <span className="muted small invoice-subject">
+          {entry.invoiceNumber ? `${entry.invoiceNumber} · ` : ''}
+          {entry.row.subject}
+        </span>
+      </span>
+
+      {/* Zweite Zeile: Anhänge, Bezahlstatus und das Lösen einer Zuordnung.
+          Zusammengefasst, damit sie auf schmalen Schirmen als Gruppe
+          umbrechen statt einzeln durch die Zeile zu wandern. */}
+      <span className="invoice-meta">
+        {entry.printableAttachments > 0 || entry.missingAttachments > 0 ? (
+          <span className="invoice-attach" title="Belege im Anhang">
+            {entry.printableAttachments > 0 ? `📎 ${entry.printableAttachments}` : ''}
+            {entry.missingAttachments > 0 ? ' ⚠' : ''}
+          </span>
         ) : null}
-        <span className="muted small invoice-subject">{entry.row.subject}</span>
-      </span>
 
-      <span className="invoice-attach" title="Belege im Anhang">
-        {entry.printableAttachments > 0 ? `📎 ${entry.printableAttachments}` : ''}
-        {entry.missingAttachments > 0 ? ' ⚠' : ''}
+        <PaymentBadge
+          paidAt={entry.paidAt}
+          amountCents={entry.amountCents}
+          currency={entry.currency}
+        />
+        {entry.paidAt !== undefined && entry.row.invoice?.paidTxId ? (
+          <button
+            type="button"
+            className="ghost small-btn"
+            title="Zuordnung zur Zahlung wieder lösen"
+            onClick={() => void onRelease(entry.row.invoice!.paidTxId!)}
+          >
+            lösen
+          </button>
+        ) : null}
       </span>
-
-      <PaymentBadge
-        paidAt={entry.paidAt}
-        amountCents={entry.amountCents}
-        currency={entry.currency}
-      />
-      {entry.paidAt !== undefined && entry.row.invoice?.paidTxId ? (
-        <button
-          type="button"
-          className="ghost small-btn"
-          title="Zuordnung zur Zahlung wieder lösen"
-          onClick={() => void onRelease(entry.row.invoice!.paidTxId!)}
-        >
-          lösen
-        </button>
-      ) : null}
 
       {editing ? (
         <span className="invoice-edit">

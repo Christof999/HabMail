@@ -45,7 +45,7 @@ import {
   threadKeysMatchingQuery,
   type EmailThread,
 } from './threading'
-import { ThemeAppearanceControl } from './ThemeProvider'
+import AccountMenu from './AccountMenu'
 import MailboxSettings from './MailboxSettings'
 import AccountingView from './AccountingView'
 import UserSettings from './UserSettings'
@@ -1017,29 +1017,12 @@ export default function App() {
         <div className="bar-text">
           <div className="app-brand app-brand--bar">
             <AppLogoMark className="app-logo--bar" />
-            <div className="app-brand-text">
-              <h1>HabMail</h1>
-              <p
-                className={`muted bar-meta${isCompactLayout ? ' bar-meta--compact' : ''}`}
-              >
-                <span className="bar-meta-email">{user.email}</span>
-                {!isCompactLayout ? (
-                  <>
-                    {' '}
-                    · RTDB: <code>{emailsPath}</code>
-                  </>
-                ) : (
-                  <>
-                    {' '}
-                    ·{' '}
-                    <code className="bar-meta-path">{emailsPath}</code>
-                  </>
-                )}
-              </p>
-            </div>
+            <h1>HabMail</h1>
           </div>
         </div>
         <div className="bar-trail">
+          {/* Auf breiten Schirmen neben dem Titel, auf dem Handy darunter in
+              voller Breite — dort ist es die meistbenutzte Schaltfläche. */}
           <div className="segmented view-switch" role="group" aria-label="Ansicht">
             <button
               type="button"
@@ -1056,14 +1039,14 @@ export default function App() {
               Buchhaltung
             </button>
           </div>
-          <ThemeAppearanceControl />
-          <button
-            type="button"
-            className={`ghost${isCompactLayout ? ' bar-logout-compact' : ''}`}
-            onClick={handleLogout}
-          >
-            Abmelden
-          </button>
+          <AccountMenu
+            email={user.email ?? ''}
+            databasePath={emailsPath}
+            isAdmin={isAdmin}
+            onOpenMailboxes={() => setShowMailboxSettings(true)}
+            onOpenUsers={() => setShowUserSettings(true)}
+            onLogout={handleLogout}
+          />
         </div>
       </header>
 
@@ -1168,8 +1151,14 @@ export default function App() {
             ))}
           </div>
 
-          <div className="mailbox-filter-row">
-            {knownMailboxIds.length > 1 ? (
+          {/*
+            Nur bei mehreren Postfächern. „Postfächer verwalten“ und „Benutzer
+            verwalten“ standen früher daneben und stehen jetzt im Kontomenü
+            oben rechts — dort sind sie aus jeder Ansicht erreichbar, statt
+            hier zwischen den Filtern Platz zu belegen.
+          */}
+          {knownMailboxIds.length > 1 ? (
+            <div className="mailbox-filter-row">
               <label className="muted small mailbox-filter">
                 Postfach
                 <select
@@ -1184,24 +1173,8 @@ export default function App() {
                   ))}
                 </select>
               </label>
-            ) : null}
-            <button
-              type="button"
-              className="ghost small-btn"
-              onClick={() => setShowMailboxSettings(true)}
-            >
-              Postfächer verwalten
-            </button>
-            {isAdmin ? (
-              <button
-                type="button"
-                className="ghost small-btn"
-                onClick={() => setShowUserSettings(true)}
-              >
-                Benutzer verwalten
-              </button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="saved-filters-block">
@@ -1383,9 +1356,9 @@ export default function App() {
               </p>
               <ul className="hint-list">
                 <li>
-                  Noch kein Postfach hinterlegt? Über{' '}
-                  <strong>Postfächer verwalten</strong> eines anlegen. Ohne
-                  IMAP-Server wird von dort nicht abgeholt.
+                  Noch kein Postfach hinterlegt? Oben rechts über das
+                  Kontozeichen → <strong>Postfächer verwalten</strong> eines
+                  anlegen. Ohne IMAP-Server wird von dort nicht abgeholt.
                 </li>
                 <li>
                   Abgeholt wird alle fünf Minuten. Nach dem Anlegen dauert der

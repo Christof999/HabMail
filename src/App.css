@@ -349,6 +349,10 @@ h3 {
   border: none;
   border-radius: 9px;
   background: transparent;
+  /* Der Grundstil für button legt einen farbigen Ring an. In einem Segment
+     bekäme damit jeder einzelne Knopf eine eigene Umrandung — es soll aber
+     wie ein Bauteil aussehen, in dem nur die Auswahl hervorsticht. */
+  box-shadow: none;
   color: var(--muted);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -1328,7 +1332,7 @@ code {
 }
 
 .bar--app {
-  align-items: flex-start;
+  align-items: center;
 }
 
 .bar-text {
@@ -1336,12 +1340,148 @@ code {
   min-width: 0;
 }
 
-.bar-meta {
-  word-break: break-word;
+.bar--app .app-brand--bar {
+  align-items: center;
 }
 
-.bar-meta code {
-  word-break: break-all;
+.bar--app h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+/* --- Kontomenü --- */
+
+/* Rund, mit dem Anfangsbuchstaben: nimmt den Platz einer Zeile Text nicht ein
+   und ist trotzdem groß genug für einen Daumen. */
+.account-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.account-btn:hover {
+  background: var(--pre-bg);
+}
+
+.account-sheet {
+  width: 100%;
+  max-width: 22rem;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.account-avatar {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg, #fff);
+  font-weight: 600;
+}
+
+.account-identity {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.account-email {
+  overflow-wrap: anywhere;
+}
+
+.account-close {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.account-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.account-section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+/* Hier ist Platz — die drei Knöpfe teilen sich die volle Breite, statt sich
+   wie vorher in der Kopfzeile auf 0,68rem zu quetschen. */
+.account-section .theme-segmented {
+  display: flex;
+  width: 100%;
+}
+
+.account-section .theme-segmented button {
+  flex: 1;
+  font-size: 0.85rem;
+  padding: 0.5rem 0.4rem;
+}
+
+.account-actions {
+  gap: 0.4rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border);
+}
+
+.account-actions button {
+  width: 100%;
+  text-align: left;
+  min-height: 2.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: none;
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+.account-actions button:hover {
+  background: var(--pre-bg);
+}
+
+/* Mit der Klasse der Zeile darüber, sonst gewinnt „.account-actions button“
+   und das Abmelden bliebe schwarz wie alles andere. */
+.account-actions .account-logout {
+  color: var(--danger);
+}
+
+.account-path {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.account-path code {
+  overflow-wrap: anywhere;
 }
 
 .bar-menu-btn {
@@ -1438,13 +1578,21 @@ code {
     width: 100%;
   }
 
+  /*
+   * Zwei Zeilen statt einer gequetschten:
+   *   [☰] [HabMail]            [Konto]
+   *   [ Posteingang | Buchhaltung ]
+   *
+   * Der Ansichtswechsel bekommt die volle Breite — er wird am häufigsten
+   * angetippt. Alles Übrige steckt im Kontomenü.
+   */
   .bar--app.bar--compact {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto 1fr auto;
     grid-template-rows: auto auto;
-    align-items: start;
-    column-gap: 0.65rem;
-    row-gap: 0.55rem;
+    align-items: center;
+    column-gap: 0.6rem;
+    row-gap: 0.7rem;
     padding-bottom: 0.85rem;
     border-bottom-color: var(--bar-separator, var(--border));
   }
@@ -1452,7 +1600,6 @@ code {
   .bar--compact .bar-menu-btn {
     grid-column: 1;
     grid-row: 1;
-    margin-top: 0.15rem;
   }
 
   .bar--compact .bar-text {
@@ -1461,42 +1608,44 @@ code {
     min-width: 0;
   }
 
+  /* Der Umschlag löst sich auf, damit seine beiden Kinder auf verschiedene
+     Zeilen des Rasters dürfen. */
   .bar--compact .bar-trail {
+    display: contents;
+  }
+
+  .bar--compact .account-btn {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .bar--compact .view-switch {
     grid-column: 1 / -1;
     grid-row: 2;
-    justify-content: space-between;
+    display: flex;
     width: 100%;
   }
 
-  .bar--compact .theme-segmented {
+  .bar--compact .view-switch button {
     flex: 1;
-    min-width: 0;
-    max-width: 100%;
+    min-height: 2.5rem;
+    font-size: 0.875rem;
   }
 
   .bar--compact h1 {
     font-size: 1.2rem;
-    margin-bottom: 0.15rem;
   }
 
-  .bar-meta--compact {
-    font-size: 0.78rem;
-    line-height: 1.4;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    overflow: hidden;
+  /* Auf dem Handy als Blatt von unten: dort ist der Daumen. */
+  .account-overlay {
+    align-items: flex-end;
+    padding: 0;
   }
 
-  .bar-meta-email {
-    font-weight: 500;
-    color: var(--text);
-  }
-
-  .bar-logout-compact {
-    padding: 0.5rem 0.6rem;
-    font-size: 0.8rem;
-    white-space: nowrap;
+  .account-sheet {
+    max-width: none;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
   }
 
   .mode-switch.segmented button {
@@ -1508,10 +1657,22 @@ code {
     font-size: 0.8rem;
   }
 
-  .theme-segmented button {
-    font-size: 0.68rem;
-    padding-left: 0.35rem;
-    padding-right: 0.35rem;
+  /* Die 0,68rem von früher gibt es nicht mehr: das Erscheinungsbild sitzt
+     jetzt im Kontomenü und hat dort die volle Breite. */
+
+  /* Die Regeln für die Buchhaltung stehen am Ende der Datei — die Grundregeln
+     dafür kommen erst weiter unten und würden hier gesetzte Werte sonst
+     wieder überschreiben. Ein Media Query erhöht die Spezifität nicht. */
+
+  /* Auch in den Fenstern: gestapelt statt rechtsbündig gedrängt. */
+  .modal-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .modal-actions button {
+    width: 100%;
+    min-height: 2.75rem;
   }
 
   .toolbar .search-row {
@@ -1736,14 +1897,27 @@ code {
   padding: 0.85rem 1rem;
 }
 
-/* Der ganze Kopf ist die Schaltfläche zum Auf- und Zuklappen. */
+/*
+ * Der ganze Kopf ist die Schaltfläche zum Auf- und Zuklappen.
+ *
+ * Als Raster, nicht als umbrechende Zeile: Monat und Summe stehen oben auf
+ * einer Höhe, das Kleingedruckte darunter. Vorher rutschte auf schmalen
+ * Schirmen die Summe unter den Monatsnamen und die Spalte verlor jede Ordnung.
+ */
 .month-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: baseline;
-  gap: 0.6rem;
+  column-gap: 0.55rem;
+  row-gap: 0.15rem;
   width: 100%;
-  padding: 0;
+  padding: 0.15rem 0;
   border: none;
+  /* Der Grundstil für button legt Radius und einen farbigen box-shadow an.
+     Beides muss hier weg, sonst liegt eine Pille um den Monatskopf — die
+     Klappfläche soll wie Text aussehen, nicht wie eine Schaltfläche. */
+  border-radius: 0;
+  box-shadow: none;
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -1760,13 +1934,18 @@ code {
   font-size: 1.05rem;
   font-weight: 600;
   letter-spacing: -0.01em;
+  min-width: 0;
 }
 
 .month-total {
-  margin-left: auto;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* Zweite Zeile, unter Monat und Summe — bündig mit dem Monatsnamen. */
+.month-sub {
+  grid-column: 2 / -1;
 }
 
 .month-warning {
@@ -1782,24 +1961,33 @@ code {
   flex-direction: column;
 }
 
+/*
+ * Eine Rechnungszeile als Raster:
+ *
+ *   [Datum] [Aussteller / Betreff]        [Betrag]
+ *           [Anhänge · bezahlt · lösen]
+ *
+ * Vorher lief alles in einer umbrechenden Zeile. Auf dem Handy landete dann
+ * der Betrag irgendwo in der Mitte und die Spalte hatte keine Kante mehr.
+ */
 .invoice-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: baseline;
-  gap: 0.6rem;
-  padding: 0.5rem 0;
+  column-gap: 0.6rem;
+  row-gap: 0.2rem;
+  padding: 0.55rem 0;
   border-top: 1px solid var(--border);
-  flex-wrap: wrap;
 }
 
 .invoice-date {
-  flex: 0 0 4.8rem;
   font-size: 0.85rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .invoice-vendor {
-  flex: 1 1 12rem;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1812,15 +2000,25 @@ code {
   white-space: nowrap;
 }
 
+/* Bündig unter dem Aussteller, nicht unter dem Datum. */
+.invoice-meta {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .invoice-attach {
-  flex: 0 0 auto;
   font-size: 0.8rem;
   color: var(--muted);
 }
 
+/* Ein antippbarer Betrag, aber keine Schaltfläche im Vollornat: derselbe
+   Grundstil würde sonst auch hier eine gefüllte Pille zeichnen. */
 .invoice-amount {
-  flex: 0 0 auto;
-  margin-left: auto;
+  justify-self: end;
+  box-shadow: none;
   font: inherit;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
@@ -1838,28 +2036,38 @@ code {
   background: var(--pre-bg);
 }
 
+/* Ohne erkannten Betrag ist das Feld eine Aufforderung, keine Anzeige — die
+   gestrichelte Linie sagt „hier tippen“, ohne wie ein Knopf zu schreien. */
 .invoice-amount--missing {
   color: var(--danger);
   font-weight: 500;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
 }
 
+/* Die Korrekturfelder bekommen die ganze Zeilenbreite — mit zwei Eingaben und
+   zwei Knöpfen ist daneben ohnehin kein Platz. */
 .invoice-edit {
+  grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
-  margin-left: auto;
+  margin-top: 0.35rem;
 }
 
 .invoice-edit input {
+  flex: 1 1 7rem;
   font: inherit;
   font-size: 0.85rem;
-  padding: 0.3rem 0.4rem;
+  padding: 0.4rem 0.5rem;
+  min-height: 2.5rem;
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--input-bg);
   color: var(--text);
-  max-width: 8rem;
+  min-width: 0;
+  max-width: 10rem;
 }
 
 .month-actions {
@@ -1879,11 +2087,43 @@ code {
 
 /* --- Bankanbindung --- */
 
+/*
+ * Der Kopf der Buchhaltung. Die Jahressumme ist die Zahl, für die man
+ * herkommt — sie steht groß da, nicht als Kleingedrucktes neben dem Titel.
+ */
 .accounting-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+  padding: 0.9rem 1rem;
+}
+
+.accounting-sum {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.accounting-sum-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.accounting-sum-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.accounting-head .ghost {
+  flex-shrink: 0;
 }
 
 .pill-paid {
@@ -2010,4 +2250,110 @@ html[data-theme='dark'] .pill-paid {
   flex-direction: column;
   gap: 0.25rem;
   padding-left: 0.5rem;
+}
+
+/*
+ * --- Buchhaltung auf schmalen Schirmen ---
+ *
+ * Am Ende der Datei, nicht im großen Handy-Block weiter oben: die Grundregeln
+ * der Buchhaltung stehen dazwischen, und ein Media Query erhöht die
+ * Spezifität nicht. Dort gesetzte Werte wären wirkungslos gewesen.
+ */
+@media (max-width: 767px) {
+  .accounting-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.85rem;
+  }
+
+  .accounting-head .ghost {
+    width: 100%;
+    min-height: 2.75rem;
+  }
+
+  .accounting-sum-value {
+    font-size: 1.75rem;
+  }
+
+  .month-group {
+    padding: 0.75rem 0.85rem;
+  }
+
+  /*
+   * Die Rechnungszeile bekommt eine eigene Ordnung:
+   *
+   *   [Datum]                        [Betrag]
+   *   Aussteller · Rechnungsnummer
+   *   Betreff
+   *   [Anhänge] [bezahlt] [lösen]
+   *
+   * Nebeneinander blieben dem Aussteller keine 12 Zeichen, und ein Firmenname
+   * brach über drei Zeilen um, während der Betrag oben rechts allein stand.
+   */
+  .invoice-row {
+    grid-template-columns: auto 1fr;
+    row-gap: 0.25rem;
+    padding: 0.7rem 0;
+  }
+
+  .invoice-date {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .invoice-amount {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 2.25rem;
+  }
+
+  .invoice-vendor,
+  .invoice-meta {
+    grid-column: 1 / -1;
+  }
+
+  /* Der Betreff darf hier zwei Zeilen nehmen — abgeschnitten nach einer Zeile
+     bleibt auf dem Handy zu wenig übrig, um die Rechnung zu erkennen. */
+  .invoice-subject {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+
+  /* Untereinander und über die volle Breite: nebeneinander wären es drei
+     Knöpfe mit je zwei Zeilen Text. */
+  .month-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .month-actions button {
+    width: 100%;
+    min-height: 2.75rem;
+  }
+
+  .month-actions .muted {
+    margin-right: 0;
+    margin-bottom: 0.15rem;
+  }
+}
+
+/* Der Hinweisblock „Rechnungen ohne Betrag“ hat genau eine Handlung — die
+   soll man treffen, ohne zu zielen. */
+@media (max-width: 767px) {
+  .reanalyze-block .mailbox-item-actions button {
+    width: 100%;
+    min-height: 2.75rem;
+  }
+
+  .mailbox-item-actions {
+    justify-content: stretch;
+  }
+
+  .mailbox-item-actions button {
+    flex: 1 1 8rem;
+    min-height: 2.5rem;
+  }
 }
