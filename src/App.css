@@ -1196,8 +1196,11 @@ h3.attachment-list-title {
 }
 
 .attachment-meta {
-  flex: 1;
+  flex: 1 1 10rem;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
   word-break: break-word;
   overflow-wrap: anywhere;
 }
@@ -1210,17 +1213,15 @@ h3.attachment-list-title {
 
 .attachment-actions {
   flex-shrink: 0;
+  display: flex;
+  gap: 0.35rem;
 }
 
-a.attachment-download {
-  font-size: 0.85rem;
-  color: var(--accent);
-  text-decoration: none;
-  font-weight: 500;
-}
-
-a.attachment-download:hover {
-  text-decoration: underline;
+/* Warum ein einzelner Anhang fehlt — steht statt der Knöpfe da. */
+.attachment-missing {
+  flex: 1 1 100%;
+  color: var(--danger);
+  line-height: 1.4;
 }
 
 .attachment-nodata {
@@ -2354,6 +2355,22 @@ html[data-theme='dark'] .pill-paid {
 
   .mailbox-item-actions button {
     flex: 1 1 8rem;
+    min-height: 2.5rem;
+  }
+}
+
+/* Anhänge auf dem Handy: Name über den Knöpfen, die Knöpfe daumenbreit. */
+@media (max-width: 767px) {
+  .attachment-list li {
+    align-items: stretch;
+  }
+
+  .attachment-actions {
+    width: 100%;
+  }
+
+  .attachment-actions button {
+    flex: 1;
     min-height: 2.5rem;
   }
 }

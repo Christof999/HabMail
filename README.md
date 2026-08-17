@@ -455,17 +455,20 @@ werden.
 
 ## Bekannte Baustellen
 
-- **Anhänge liegen als Base64 in der Realtime Database.** Das trägt nicht weit:
+- **Anhänge liegen als Base64 in der Realtime Database.** Zum Öffnen und
+  Speichern baut [`src/attachments.ts`](src/attachments.ts) daraus einen Blob;
+  `data:`-Adressen gingen auf dem Handy nicht (siehe Kommentar dort). Das trägt
+  aber nicht weit:
   der Client lädt beim Start den ganzen Baum. Dateien über 1 MB werden deshalb
   schon jetzt nur mit Namen und Größe gespeichert
   (`MAX_INLINE_ATTACHMENT_BYTES`). Für ein echtes Belegarchiv gehören sie nach
   Firebase Storage.
-- **Anhänge über 1 MB fehlen im Sammel-PDF** und lassen sich auch nicht
-  nachträglich auswerten. Sie liegen gar nicht erst in der Datenbank (siehe
-  oben). Beim Abholen sieht die KI sie noch — der Proxy liefert bis 2 MB —, aber
-  ein zweiter Durchgang findet sie nicht mehr. Bis die Dateien nach Firebase
-  Storage umziehen, muss man sie für den Steuerberater von Hand aus der Mail
-  holen; das Deckblatt weist darauf hin.
+- **Anhänge über 1 MB fehlen im Sammel-PDF**, lassen sich nicht öffnen und auch
+  nicht nachträglich auswerten. Sie liegen gar nicht erst in der Datenbank
+  (siehe oben). Beim Abholen sieht die KI sie noch — der Proxy liefert bis 2 MB
+  —, aber danach findet sie niemand mehr. In der Mail steht dann, warum; bis die
+  Dateien nach Firebase Storage umziehen, muss man sie von Hand aus dem Postfach
+  holen.
 - **Der Ingest-Endpunkt** (`ingest_k7mN9pQ2wR4xY8z`, für n8n) nimmt ohne
   gesetztes `INGEST_TOKEN` weiterhin Daten von jedem an — und schreibt an die
   alte, flache Stelle, die die App nicht mehr liest. Wer noch n8n benutzt,

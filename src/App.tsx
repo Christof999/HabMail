@@ -45,6 +45,17 @@ import {
   threadKeysMatchingQuery,
   type EmailThread,
 } from './threading'
+import {
+  attachmentBytes,
+  attachmentIsUsable,
+  attachmentIsViewable,
+  attachmentMimeType,
+  attachmentName,
+  downloadAttachment,
+  formatBytes,
+  omittedReason,
+  openAttachment,
+} from './attachments'
 import AccountMenu from './AccountMenu'
 import MailboxSettings from './MailboxSettings'
 import AccountingView from './AccountingView'
@@ -1627,26 +1638,26 @@ function fromLineForRow(row: EmailRow): string {
     : row.sender || row.senderName || '—'
 }
 
-function attachmentHasPayload(row: EmailRow): boolean {
-  return Boolean(
-    row.attachments?.some((a) => {
-      const d = (a.dataBase64?.trim?.() ?? '').replace(/\s/g, '')
-      return d.length >= 32 && /^[A-Za-z0-9+/]+=*$/.test(d)
-    }),
-  )
-}
-
-/** Hinweis, wenn nur hat_anhang / hasAttachment gesetzt ist, aber keine Bytes in RTDB. */
+/**
+ * Hinweis, wenn eine Mail als „hat Anhang“ markiert ist, aber kein einziger
+ * Anhang Inhalt hat.
+ *
+ * Früher stand hier eine Anleitung für n8n. Die Mails kommen inzwischen über
+ * den Email-Proxy, und dort hat das genau einen Grund: die Datei war größer
+ * als MAX_INLINE_ATTACHMENT_BYTES und wurde deshalb nicht in die Datenbank
+ * geschrieben. Im Postfach liegt sie weiterhin.
+ */
 function AttachmentMissingDataHint({ row }: { row: EmailRow }) {
-  if (!row.hasAttachment || attachmentHasPayload(row)) return null
+  const list = row.attachments ?? []
+  if (!row.hasAttachment) return null
+  if (list.some((a) => attachmentIsUsable(a))) return null
+
+  const reason = list.length > 0 ? omittedReason(list[0]) : null
   return (
     <p className="muted small attachment-nodata">
-      <strong>Anhang markiert</strong>, aber es fehlen echte Base64-Daten. Wenn
-      in Firebase <code>dataBase64: &quot;filesystem-v2&quot;</code> steht,
-      nutzt n8n den Binary-Modus „Filesystem“: dann in der Code-Node echtes
-      Base64 mit <code>this.helpers.getBinaryDataBuffer(…)</code> erzeugen (siehe
-      n8n-Doku). Alternativ: pro Datei echten Base64-String (nicht die interne
-      Referenz) nach <code>anhaenge[].dataBase64</code> schreiben.
+      <strong>Anhang vorhanden, aber nicht gespeichert.</strong>{' '}
+      {reason ?? 'Zu dieser Mail liegen keine Anhangdaten in der Datenbank.'} Zum
+      Öffnen bleibt der Weg über das Postfach selbst.
     </p>
   )
 }
@@ -1668,28 +1679,43 @@ function AttachmentList({
       <TitleTag className="attachment-list-title">{heading}</TitleTag>
       <ul className="attachment-list">
         {attachments.map((a, i) => {
-          const mime = (a.mimeType || 'application/octet-stream').trim()
-          const name = (a.filename || 'Anhang').trim() || 'Anhang'
-          const href = `data:${mime};base64,${a.dataBase64}`
-          const approxKb = Math.round((a.dataBase64.length * 3) / 4 / 1024)
+          const name = attachmentName(a)
+          const usable = attachmentIsUsable(a)
+          const missing = usable ? null : omittedReason(a)
+          const size = formatBytes(attachmentBytes(a))
           return (
             <li key={`${idPrefix}-${name}-${i}`}>
               <span className="attachment-meta">
-                <strong>{name}</strong>{' '}
-                <span className="muted">({mime})</span>
-                {approxKb > 0 ? (
-                  <span className="muted small"> · ca. {approxKb} KB</span>
-                ) : null}
+                <strong>{name}</strong>
+                <span className="muted small">
+                  {attachmentMimeType(a)}
+                  {size === '' ? '' : ` · ${size}`}
+                </span>
               </span>
-              <div className="attachment-actions">
-                <a
-                  className="attachment-download"
-                  href={href}
-                  download={name}
-                >
-                  Herunterladen
-                </a>
-              </div>
+              {missing === null ? (
+                <div className="attachment-actions">
+                  {/* Ansehen zuerst: eine Rechnung will man meist lesen, nicht
+                      auf dem Gerät ablegen. */}
+                  {attachmentIsViewable(a) ? (
+                    <button
+                      type="button"
+                      className="ghost small-btn"
+                      onClick={() => openAttachment(a)}
+                    >
+                      Öffnen
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="ghost small-btn"
+                    onClick={() => downloadAttachment(a)}
+                  >
+                    Speichern
+                  </button>
+                </div>
+              ) : (
+                <span className="muted small attachment-missing">{missing}</span>
+              )}
             </li>
           )
         })}
