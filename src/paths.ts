@@ -38,6 +38,31 @@ export function userSignaturesPath(uid: string): string {
   return `${userRootPath(uid)}/signatures`
 }
 
+/** Was ein Schlüssel in der Realtime Database nicht enthalten darf. */
+const FORBIDDEN_IN_KEY = /[.#$/[\]]/g
+
+/**
+ * Eine Postfach-Kennung als Datenbankschlüssel.
+ *
+ * Der Email-Proxy baut Kennungen wie
+ * `habmail-5be30464-info-fliesen-reisloehner.de` — mit Punkt, weil er aus der
+ * Mailadresse stammt. Die Realtime Database verbietet in Schlüsseln aber
+ * `. # $ / [ ]`. Ohne Umschrift scheitert schon das Speichern:
+ *
+ *   child failed: path argument was an invalid path
+ *
+ * Die Kennung im Proxy zu ändern kam nicht in Frage — das würde bestehende
+ * Postfächer verwaisen lassen. Also wird hier umgeschrieben, prozentkodiert
+ * wie in einer Adresse. Das `%` wird zuerst verdoppelt, damit die Abbildung
+ * eindeutig bleibt: zwei verschiedene Kennungen können nie denselben
+ * Schlüssel ergeben.
+ */
+export function mailboxKey(mailboxId: string): string {
+  return mailboxId
+    .replace(/%/g, '%25')
+    .replace(FORBIDDEN_IN_KEY, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+}
+
 /**
  * Was der letzte Abhol-Lauf gebracht hat. Schreibt nur der Server; hier wird
  * nur gelesen — daran ist zu sehen, ob der geplante Lauf überhaupt stattfindet.

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { User } from 'firebase/auth'
 import { onValue, ref, remove, set } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
-import { userSignaturesPath } from './paths'
+import { mailboxKey, userSignaturesPath } from './paths'
 import { listMailboxes, mailboxLabel, type Mailbox } from './mailboxesApi'
 
 /**
@@ -68,7 +68,7 @@ export default function SignatureSettings({ user, onClose }: Props) {
   async function save(mailboxId: string, text: string) {
     setError(null)
     try {
-      const target = ref(getFirebaseDb(), `${userSignaturesPath(user.uid)}/${mailboxId}`)
+      const target = ref(getFirebaseDb(), `${userSignaturesPath(user.uid)}/${mailboxKey(mailboxId)}`)
       // Leer heißt: keine Signatur. Ein leerer Eintrag wäre nur Ballast.
       await (text.trim() === '' ? remove(target) : set(target, text.slice(0, MAX_SIGNATURE_CHARS)))
       setSaved(mailboxId)
@@ -115,11 +115,11 @@ export default function SignatureSettings({ user, onClose }: Props) {
                   className="signature-text"
                   rows={5}
                   maxLength={MAX_SIGNATURE_CHARS}
-                  value={signatures[box.id] ?? ''}
+                  value={signatures[mailboxKey(box.id)] ?? ''}
                   placeholder={`Mit freundlichen Grüßen\n\n${box.from || mailboxLabel(box.id)}\nTelefon …`}
                   aria-label={`Signatur für ${mailboxLabel(box.id)}`}
                   onChange={(e) =>
-                    setSignatures((s) => ({ ...s, [box.id]: e.target.value }))
+                    setSignatures((s) => ({ ...s, [mailboxKey(box.id)]: e.target.value }))
                   }
                   // Beim Verlassen des Feldes speichern, nicht bei jedem
                   // Tastendruck: sonst ginge für jede Zeile ein Schreibvorgang
@@ -127,7 +127,7 @@ export default function SignatureSettings({ user, onClose }: Props) {
                   onBlur={(e) => void save(box.id, e.target.value)}
                 />
                 <span className="muted small">
-                  {(signatures[box.id] ?? '').length} von {MAX_SIGNATURE_CHARS} Zeichen ·
+                  {(signatures[mailboxKey(box.id)] ?? '').length} von {MAX_SIGNATURE_CHARS} Zeichen ·
                   wird beim Verlassen des Feldes gespeichert
                 </span>
               </li>

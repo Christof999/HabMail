@@ -195,15 +195,28 @@ export const MAIL_PROVIDER_PRESETS: MailProvider[] = [
  */
 export function mailboxLabel(id: string): string {
   const parts = id.split('-')
-  const rest =
-    parts.length > 2 && /^[0-9a-f]{8}$/.test(parts[1]) ? parts.slice(2) : parts
+  const rest = parts.length > 2 && /^[0-9a-f]{8}$/.test(parts[1]) ? parts.slice(2) : parts
   if (rest.length === 0) return id
+  const slug = rest.join('-')
 
-  // Die letzte Silbe ist die Top-Level-Domain, davor der Name des Postfachs.
-  const local = rest[0]
-  const domain = rest.slice(1)
-  if (domain.length < 2) return rest.join('-')
-  return `${local}@${domain.slice(0, -1).join('-')}.${domain[domain.length - 1]}`
+  /*
+   * Der Proxy ersetzt beim Bilden der Kennung nur, was kein Buchstabe, keine
+   * Ziffer und kein . _ - ist. Ein Punkt bleibt also stehen — aus
+   * `info@fliesen-reisloehner.de` wird `info-fliesen-reisloehner.de`, und
+   * ersetzt wurde allein das @.
+   *
+   * Steht ein Punkt drin, ist der erste Bindestrich deshalb genau die Stelle
+   * des @. Das trifft auch `max.mustermann@firma.de` richtig — dort gehört
+   * der Punkt in den vorderen Teil.
+   */
+  const dash = slug.indexOf('-')
+  if (slug.includes('.') && dash > 0) {
+    return `${slug.slice(0, dash)}@${slug.slice(dash + 1)}`
+  }
+
+  // Ohne Punkt: die letzte Silbe ist die Top-Level-Domain.
+  if (rest.length < 3) return slug
+  return `${rest[0]}@${rest.slice(1, -1).join('-')}.${rest[rest.length - 1]}`
 }
 
 /** Vorauswahl im Formular. */

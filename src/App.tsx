@@ -1882,8 +1882,8 @@ function EmailCard({
               <span className="pill pill-prio">{head.priority}</span>
             ) : null}
             {head.mailboxId ? (
-              <span className="pill pill-muted" title="Empfangendes Postfach">
-                {head.mailboxId}
+              <span className="pill pill-muted" title={`Empfangen über ${head.mailboxId}`}>
+                {mailboxLabel(head.mailboxId)}
               </span>
             ) : null}
             {head.invoice?.amountCents !== undefined ? (

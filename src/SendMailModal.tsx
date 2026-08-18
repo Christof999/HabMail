@@ -2,7 +2,7 @@ import type { User } from 'firebase/auth'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
-import { userSignaturesPath } from './paths'
+import { mailboxKey, userSignaturesPath } from './paths'
 import type { EmailRow } from './types'
 import { listMailboxes, mailboxLabel, type Mailbox } from './mailboxesApi'
 import { formatBytes } from './attachments'
@@ -87,7 +87,7 @@ export function SendMailModal({ compose, user, onClose }: Props) {
    */
   const appliedSignature = useRef('')
   useEffect(() => {
-    const next = (signatures[fromId] ?? '').trim()
+    const next = (signatures[mailboxKey(fromId)] ?? '').trim()
     const previous = appliedSignature.current
     if (next === previous) return
 

@@ -5,6 +5,7 @@ import {
   DEFAULT_PROVIDER,
   deleteMailbox,
   listMailboxes,
+  mailboxLabel,
   MAIL_PROVIDER_PRESETS,
   suggestImapHost,
   updateMailbox,
@@ -380,7 +381,10 @@ export default function MailboxSettings({ user, onClose }: Props) {
             {mailboxes.map((box) => (
               <li key={box.id} className="mailbox-item">
                 <div className="mailbox-item-head">
-                  <strong>{box.id}</strong>
+                  {/* Die Kennung des Proxys ist unlesbar; die Adresse ist das,
+                      woran man das Postfach erkennt. Die Kennung bleibt als
+                      Hinweistext, sie wird bei der Fehlersuche gebraucht. */}
+                  <strong title={box.id}>{box.from || mailboxLabel(box.id)}</strong>
                   <span className="pill">{box.user}</span>
                   {box.imap ? (
                     <span className="pill">empfängt</span>
