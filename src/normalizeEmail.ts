@@ -247,6 +247,7 @@ export function normalizeEmailEntry(id: string, raw: unknown): EmailRow {
       'files_list',
     ]) ?? undefined
 
+  const attachmentsAnalyzed = pickNumber(o, ['attachmentsAnalyzed'])
   const explicitHat = pickBool(o, ['hat_anhang', 'hasAttachment', 'hatAnhang'])
   const hasAttachment =
     explicitHat === true || Boolean(attachments && attachments.length > 0)
@@ -280,6 +281,7 @@ export function normalizeEmailEntry(id: string, raw: unknown): EmailRow {
     status,
     priority: priority || undefined,
     hasAttachment,
+    ...(attachmentsAnalyzed === undefined ? {} : { attachmentsAnalyzed }),
     ingestedAt,
     attachments,
     folderId: folderIdStr ? folderIdStr : undefined,

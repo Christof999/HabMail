@@ -154,6 +154,9 @@ const reanalyzeInvoices = onCall(
         category: CATEGORY_LABELS[analysis.categoryId] ?? analysis.categoryId,
         summary: analysis.summary,
         priority: analysis.priority,
+        // Auch hier festhalten, wie viele Anhänge gelesen wurden — sonst
+        // stünde nach dem zweiten Durchgang eine Zahl aus dem ersten da.
+        attachmentsAnalyzed: analysis.attachmentsAnalyzed ?? 0,
         reanalyzedAt: Date.now(),
       };
       if (Object.keys(invoice).length > 0) updates.invoice = invoice;

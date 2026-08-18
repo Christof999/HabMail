@@ -1957,6 +1957,18 @@ function EmailCard({
       >
         <span className="summary">{head.summary || '—'}</span>
       </button>
+      {/* Woher die Zusammenfassung stammt. Ohne das bleibt es Vertrauenssache,
+          ob sie den Beleg kennt oder nur den Mailtext — und genau das ist die
+          Frage, wenn im Text bloß „anbei unsere Rechnung" steht. */}
+      {head.hasAttachment && head.attachmentsAnalyzed !== undefined ? (
+        <p className="muted small summary-source">
+          {head.attachmentsAnalyzed > 0
+            ? `Zusammenfassung samt ${head.attachmentsAnalyzed} Anhang${
+                head.attachmentsAnalyzed === 1 ? '' : 'ängen'
+              }`
+            : 'Zusammenfassung nur aus dem Mailtext — kein Anhang war lesbar.'}
+        </p>
+      ) : null}
       <p className="muted small">
         Zuletzt: {head.receivedAt || '—'}
         {multi ? (

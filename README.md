@@ -411,6 +411,17 @@ entscheidet die Dateiendung. Grenzen: höchstens **3 Anhänge** je Mail, **4 MB*
 je Stück, **8 MB** zusammen. Word- und Excel-Dateien gehen nicht mit; sie werden
 gespeichert, aber nicht ausgewertet.
 
+**Der Inhalt der Anhänge geht auch in die Zusammenfassung**, nicht nur in die
+Rechnungsfelder. Die Leitfrage lautet: „muss ich das PDF öffnen?" — wer die
+Zusammenfassung liest, soll Beträge, Mengen und Fristen kennen. Steht im
+Mailtext nur „anbei unsere Rechnung", kommt die Zusammenfassung vollständig aus
+dem Anhang; „im Anhang befindet sich eine Rechnung" ist ausdrücklich untersagt.
+
+Ob das geklappt hat, steht an jeder Mail unter der Zusammenfassung:
+*„Zusammenfassung samt 2 Anhängen"* oder *„nur aus dem Mailtext — kein Anhang
+war lesbar"*. Bei Mails von vor dieser Zählung steht dort nichts, statt etwas
+Falsches zu behaupten.
+
 Bei Widersprüchen zwischen Mailtext und Anhang zählt der Anhang. Als Betrag ist
 ausdrücklich der **Bruttogesamtbetrag** verlangt, nicht netto und nicht eine
 einzelne Position. Neben dem Aussteller (`vendor`) wird auch der

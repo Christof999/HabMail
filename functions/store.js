@@ -102,6 +102,19 @@ function buildRecord(mailboxId, message, analysis) {
 
   if (senderName !== "") record.senderName = senderName;
   if (attachments.length > 0) record.attachments = attachments;
+  /*
+   * Wie viele Anhänge die KI wirklich gelesen hat. Ohne diese Zahl bleibt es
+   * Vertrauenssache, ob die Zusammenfassung den Beleg kennt oder nur den
+   * Mailtext — und das ist genau die Frage, die man sich stellt.
+   *
+   * Auch die 0 wird geschrieben, nicht nur Werte darüber: nur so lässt sich
+   * "es wurde nichts gelesen" von "diese Mail ist älter als diese Zählung"
+   * unterscheiden. Sonst stünde bei Altbestand fälschlich, die Anhänge seien
+   * übergangen worden.
+   */
+  if (typeof analysis.attachmentsAnalyzed === "number") {
+    record.attachmentsAnalyzed = analysis.attachmentsAnalyzed;
+  }
   if (typeof message.messageId === "string" && message.messageId !== "") {
     record.messageId = message.messageId;
   }

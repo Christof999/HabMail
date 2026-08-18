@@ -52,6 +52,11 @@ export type EmailRecord = {
   status: string
   priority?: string
   hasAttachment?: boolean
+  /**
+   * Wie viele Anhänge die KI beim Auswerten gelesen hat. 0 oder fehlend
+   * heißt: die Zusammenfassung kennt nur den Mailtext.
+   */
+  attachmentsAnalyzed?: number
   ingestedAt?: number
   attachments?: EmailAttachment[]
   /** RTDB: ID aus mailFolders; leer/fehlend = Posteingang */
