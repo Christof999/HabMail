@@ -33,6 +33,12 @@ exports.updateInvoice = require("./invoices").updateInvoice;
 exports.reanalyzeInvoices = require("./reanalyze").reanalyzeInvoices;
 
 /**
+ * Buchhaltung ans Rechnungsprogramm nachreichen. Neue Mails gehen beim
+ * Abholen von allein hinüber; dieser Aufruf holt den Bestand nach.
+ */
+exports.syncAccounting = require("./rechnungsprogramm").syncAccounting;
+
+/**
  * Bankumsätze. Zwei Wege zum selben Ziel:
  *
  *   importStatement  Kontoauszug hochladen (CSV, CAMT, MT940) — braucht nichts

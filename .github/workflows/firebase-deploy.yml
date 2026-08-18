@@ -28,6 +28,17 @@
 #     Nur für das automatische Abholen der Bankumsätze, und nur mit einem
 #     bestehenden GoCardless-Zugang (neue gibt es seit Juli 2025 nicht mehr).
 #     Der Weg über den hochgeladenen Kontoauszug braucht nichts davon.
+#   RECHNUNGSPROGRAMM_TOKEN
+#     Gemeinsames Passwort mit dem Rechnungsprogramm (dort HABMAIL_WEBHOOK_TOKEN).
+#     Nur zusammen mit den beiden Variables unten wird Buchhaltung übergeben.
+#
+# Optional als Variables (Übergabe der Buchhaltung ans Rechnungsprogramm):
+#   RECHNUNGSPROGRAMM_URL     https://dein-rechnungsprogramm.vercel.app
+#   RECHNUNGSPROGRAMM_UID     Firebase-UID des Benutzers, dessen Buchhaltung
+#                             übergeben wird — ohne sie geht nichts hinüber.
+#   RECHNUNGSPROGRAMM_MAILBOXES
+#                             Postfach-Kennungen mit Komma getrennt. Leer =
+#                             alle Postfächer dieses Benutzers.
 #
 # Alle Werte landen in functions/.env.<projekt>, das der Workflow erzeugt und
 # das nicht im Repository liegt. Firebase liest diese Datei beim Ausrollen und
@@ -158,12 +169,16 @@ jobs:
           POLL_TRIGGER_TOKEN: ${{ secrets.POLL_TRIGGER_TOKEN }}
           GOCARDLESS_SECRET_ID: ${{ secrets.GOCARDLESS_SECRET_ID }}
           GOCARDLESS_SECRET_KEY: ${{ secrets.GOCARDLESS_SECRET_KEY }}
+          RECHNUNGSPROGRAMM_TOKEN: ${{ secrets.RECHNUNGSPROGRAMM_TOKEN }}
           # Nicht geheim
           EMAILPROXY_URL: ${{ vars.EMAILPROXY_URL }}
           ADMIN_UIDS: ${{ vars.ADMIN_UIDS }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           POLL_MESSAGE_LIMIT: ${{ vars.POLL_MESSAGE_LIMIT }}
           MAX_INLINE_ATTACHMENT_BYTES: ${{ vars.MAX_INLINE_ATTACHMENT_BYTES }}
+          RECHNUNGSPROGRAMM_URL: ${{ vars.RECHNUNGSPROGRAMM_URL }}
+          RECHNUNGSPROGRAMM_UID: ${{ vars.RECHNUNGSPROGRAMM_UID }}
+          RECHNUNGSPROGRAMM_MAILBOXES: ${{ vars.RECHNUNGSPROGRAMM_MAILBOXES }}
         run: |
           env_file="functions/.env.$PROJECT_ID"
           : > "$env_file"
@@ -183,7 +198,9 @@ jobs:
           for name in EMAILPROXY_URL EMAILPROXY_KEY GEMINI_API_KEY GEMINI_MODEL \
                       ADMIN_UIDS INGEST_TOKEN POLL_TRIGGER_TOKEN \
                       POLL_MESSAGE_LIMIT MAX_INLINE_ATTACHMENT_BYTES \
-                      GOCARDLESS_SECRET_ID GOCARDLESS_SECRET_KEY; do
+                      GOCARDLESS_SECRET_ID GOCARDLESS_SECRET_KEY \
+                      RECHNUNGSPROGRAMM_URL RECHNUNGSPROGRAMM_TOKEN \
+                      RECHNUNGSPROGRAMM_UID RECHNUNGSPROGRAMM_MAILBOXES; do
             write "$name"
           done
 

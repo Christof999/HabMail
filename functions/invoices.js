@@ -15,6 +15,7 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const { ACCOUNTING_CATEGORIES, periodFromDate } = require("./categories");
 const { userEmailsPath, userInvoiceIndexPath } = require("./paths");
+const { forwardInvoice } = require("./rechnungsprogramm");
 
 /** Was der Bankabgleich von einer Rechnung wissen muss. */
 function buildIndexEntry(emailId, record) {
@@ -130,6 +131,13 @@ const updateInvoice = onCall(async (request) => {
 
   const updated = (await emailRef.get()).val();
   await updateIndexEntry(uid, emailId, updated ?? record);
+
+  /*
+   * Korrigierte Zahlen auch im Rechnungsprogramm nachziehen. Ohne Anhänge:
+   * die liegen dort bereits, und ein zweites Mal dieselben Belege durch die
+   * Leitung zu schicken bringt nichts.
+   */
+  await forwardInvoice(uid, emailId, updated ?? record, { withAttachments: false });
 
   return { emailId, invoice: updated?.invoice ?? null, period: updated?.period ?? null };
 });

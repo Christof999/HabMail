@@ -155,3 +155,21 @@ export const reanalyzeInvoices = callable<
   { cursor?: string | null; all?: boolean },
   ReanalyzeReport
 >('reanalyzeInvoices')
+
+export type AccountingSyncReport = {
+  checked: number
+  sent: number
+  skipped: number
+  failed: number
+  cursor: string | null
+  done: boolean
+}
+
+/**
+ * Buchhaltung ans Rechnungsprogramm nachreichen. Neu ankommende Rechnungen
+ * gehen beim Abholen von allein hinüber; das hier holt den Bestand nach und
+ * arbeitet wie das Neuauswerten seitenweise.
+ */
+export const syncAccounting = callable<{ cursor?: string | null }, AccountingSyncReport>(
+  'syncAccounting',
+)

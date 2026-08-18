@@ -23,7 +23,7 @@ import {
   type BankTransaction,
   type MatchSuggestion,
 } from './bankApi'
-import { reanalyzeInvoices } from './usersApi'
+import { reanalyzeInvoices, syncAccounting } from './usersApi'
 import type { EmailRow } from './types'
 
 /**
@@ -93,6 +93,11 @@ export default function AccountingView({ rows, uid }: Props) {
   const [transactions, setTransactions] = useState<BankTransaction[]>([])
   const [reanalyzing, setReanalyzing] = useState<ReanalyzeState>(null)
   const [reanalyzed, setReanalyzed] = useState<string | null>(null)
+  /** Läuft gerade eine Übergabe ans Rechnungsprogramm, und wie weit ist sie? */
+  const [handingOver, setHandingOver] = useState<{ checked: number; sent: number } | null>(
+    null,
+  )
+  const [handedOver, setHandedOver] = useState<string | null>(null)
 
   /** Wie viele Rechnungen ohne Betrag dastehen — der Anlass zum Nachauswerten. */
   const missingAmounts = useMemo(
@@ -224,6 +229,43 @@ export default function AccountingView({ rows, uid }: Props) {
   }
 
   /**
+   * Die Buchhaltung ans Rechnungsprogramm übergeben.
+   *
+   * Neue Rechnungen gehen beim Abholen von allein hinüber. Dieser Knopf ist
+   * für den Bestand: alles, was vor der Einrichtung da war oder bei einer
+   * Störung liegen blieb. Doppelt schicken ist harmlos — drüben ist die
+   * Mail-Kennung die Dokument-Kennung.
+   */
+  async function handOver() {
+    setError(null)
+    setHandedOver(null)
+    setHandingOver({ checked: 0, sent: 0 })
+    try {
+      let cursor: string | null = null
+      const total = { checked: 0, sent: 0, failed: 0 }
+
+      for (;;) {
+        const page = await syncAccounting({ cursor })
+        total.checked += page.checked
+        total.sent += page.sent
+        total.failed += page.failed
+        setHandingOver({ checked: total.checked, sent: total.sent })
+        if (page.done || page.cursor === null) break
+        cursor = page.cursor
+      }
+
+      setHandedOver(
+        `${total.checked} Mails geprüft, ${total.sent} ans Rechnungsprogramm übergeben` +
+          (total.failed > 0 ? `, ${total.failed} fehlgeschlagen.` : '.'),
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Übergabe fehlgeschlagen')
+    } finally {
+      setHandingOver(null)
+    }
+  }
+
+  /**
    * Den Stapel eines Monats erzeugen — wahlweise nur den einer Firma.
    *
    * Jede Firma gibt ihre eigene Erklärung ab, ein gemischter Stapel nützt dem
@@ -343,6 +385,34 @@ export default function AccountingView({ rows, uid }: Props) {
 
       {error ? <p className="mailbox-error">{error}</p> : null}
       {reanalyzed ? <p className="muted small">{reanalyzed}</p> : null}
+
+      {handedOver ? <p className="muted small">{handedOver}</p> : null}
+
+      <section className="card reanalyze-block">
+        <p className="small">
+          <strong>Übergabe ans Rechnungsprogramm.</strong> Neue Rechnungen und
+          Mahnungen gehen beim Abholen von allein in die Buchhaltung des
+          Rechnungsprogramms. Der Bestand — alles, was vorher schon dalag —
+          wird hier nachgereicht.
+        </p>
+        <div className="mailbox-item-actions">
+          <button
+            type="button"
+            className="ghost"
+            disabled={handingOver !== null}
+            onClick={() => void handOver()}
+          >
+            {handingOver === null
+              ? 'Buchhaltung übergeben'
+              : `Übergebe … ${handingOver.checked} geprüft, ${handingOver.sent} übergeben`}
+          </button>
+        </div>
+        <p className="muted small">
+          Doppelt schicken schadet nicht: drüben entscheidet die Mail-Kennung,
+          es entsteht keine zweite Rechnung. Was dort bereits bearbeitet wurde
+          (Status, Freigabe, Notizen), bleibt unangetastet.
+        </p>
+      </section>
 
       {missingAmounts > 0 || reanalyzing !== null ? (
         <section className="card reanalyze-block">

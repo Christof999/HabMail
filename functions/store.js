@@ -12,6 +12,7 @@ const admin = require("firebase-admin");
 const { CATEGORY_LABELS, periodFromDate } = require("./categories");
 const { userEmailsPath } = require("./paths");
 const { updateIndexEntry } = require("./invoices");
+const { forwardInvoice } = require("./rechnungsprogramm");
 
 /**
  * Anhänge über dieser Grenze werden nur mit Namen und Größe gespeichert.
@@ -145,6 +146,10 @@ async function storeMessage(ownerUid, mailboxId, message, analysis) {
   // möglicherweise bereits zugeordneter Zahlung.
   if (result.committed) {
     await updateIndexEntry(ownerUid, key, record);
+    // Rechnungen und Mahnungen gehen weiter ins Rechnungsprogramm. Der Aufruf
+    // wirft nicht: die Mail ist gespeichert, und eine hakende Gegenstelle darf
+    // den Abhol-Lauf nicht abbrechen — nachreichen geht über syncAccounting.
+    await forwardInvoice(ownerUid, key, record);
   }
 
   return result.committed ? "stored" : "duplicate";

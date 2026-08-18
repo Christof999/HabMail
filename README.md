@@ -234,6 +234,34 @@ eigenen Bereich.
 `pdf-lib` wird erst beim Klick geladen (eigener Chunk, ~420 kB); der Start der
 App bleibt davon unberührt.
 
+### Übergabe ans Rechnungsprogramm
+
+Rechnungen und Mahnungen können weiter in die Buchhaltung des
+[Rechnungsprogramms](https://github.com/Christof999/Timo_Rechnungsprogramm)
+laufen. Dort werden sie zu Eingangsrechnungen — mit Lieferant, Nummer, Betrag,
+Fälligkeit und den angehängten Belegen.
+
+Neue Mails gehen beim Abholen von allein hinüber. Für den Bestand gibt es in
+der Buchhaltung den Knopf **Buchhaltung übergeben**; er arbeitet seitenweise
+und lässt sich jederzeit wiederholen — drüben ist die Mail-Kennung zugleich die
+Dokument-Kennung, es entsteht also nichts doppelt. Was dort schon bearbeitet
+wurde (Status, Freigabe, Kategorie, Notizen), bleibt dabei unangetastet.
+
+Eingerichtet wird das über drei Werte in den Functions (im Deploy-Workflow als
+Secret bzw. Variables, siehe Kopf von `.github/workflows/firebase-deploy.yml`):
+
+| Wert | Wo | Bedeutung |
+|---|---|---|
+| `RECHNUNGSPROGRAMM_URL` | Variable | Adresse des Rechnungsprogramms, z. B. `https://…vercel.app` |
+| `RECHNUNGSPROGRAMM_TOKEN` | Secret | gemeinsames Passwort; drüben `HABMAIL_WEBHOOK_TOKEN` |
+| `RECHNUNGSPROGRAMM_UID` | Variable | Firebase-UID **des** Benutzers, dessen Buchhaltung übergeben wird |
+| `RECHNUNGSPROGRAMM_MAILBOXES` | Variable, optional | Postfach-Kennungen mit Komma; leer = alle Postfächer dieses Benutzers |
+
+Die UID ist Absicht und kein Beiwerk: HabMail bedient mehrere Firmen, und ohne
+sie wüsste niemand, wessen Rechnungen gemeint sind. Fehlt einer der drei Werte,
+wird **nichts** übergeben — auch nicht versehentlich die Post einer anderen
+Firma.
+
 ## Bankumsätze
 
 Optional — ohne bleibt die Buchhaltung voll nutzbar, es fehlt dann nur die
