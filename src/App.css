@@ -924,6 +924,7 @@ button.ghost:hover:not(:disabled) {
 }
 
 .send-mail-form input,
+.send-mail-form select,
 .send-mail-form textarea {
   padding: 0.55rem 0.65rem;
   border-radius: 8px;

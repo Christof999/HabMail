@@ -88,6 +88,14 @@ export function omittedReason(attachment: EmailAttachment): string | null {
         `Zu groß für die Datenbank${size > 0 ? ` (${formatBytes(size)})` : ''} — ` +
         'die Datei liegt weiterhin im Postfach.'
       )
+    case 'budget_exceeded':
+      // Sollte seit dem Abbruch-vor-der-Nachricht im Proxy nicht mehr neu
+      // entstehen. Bestand aus der Zeit davor gibt es aber.
+      return (
+        'Beim Abholen war die Antwort schon voll — der Anhang wurde damals ' +
+        'übersprungen. Neu abgeholte Mails trifft das nicht mehr; diese hier ' +
+        'liegt weiterhin im Postfach.'
+      )
     case 'no_content':
       return 'Der Server hat zu diesem Anhang keinen Inhalt geliefert.'
     case undefined:

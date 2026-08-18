@@ -184,5 +184,27 @@ export const MAIL_PROVIDER_PRESETS: MailProvider[] = [
   },
 ]
 
+/**
+ * Aus der Postfach-Kennung etwas Lesbares machen.
+ *
+ * Der Proxy bildet die Kennung als `<client>-<achtstelliger Hash>-<Adresse>`,
+ * damit sich Postfächer verschiedener Benutzer nie ins Gehege kommen. Auf
+ * einem Filterknopf will das niemand lesen — dort gehört die Adresse hin.
+ *
+ *   habmail-5be30464-info-fliesen-reisloehner-de  →  info@fliesen-reisloehner.de
+ */
+export function mailboxLabel(id: string): string {
+  const parts = id.split('-')
+  const rest =
+    parts.length > 2 && /^[0-9a-f]{8}$/.test(parts[1]) ? parts.slice(2) : parts
+  if (rest.length === 0) return id
+
+  // Die letzte Silbe ist die Top-Level-Domain, davor der Name des Postfachs.
+  const local = rest[0]
+  const domain = rest.slice(1)
+  if (domain.length < 2) return rest.join('-')
+  return `${local}@${domain.slice(0, -1).join('-')}.${domain[domain.length - 1]}`
+}
+
 /** Vorauswahl im Formular. */
 export const DEFAULT_PROVIDER: MailProvider = MAIL_PROVIDER_PRESETS[0]

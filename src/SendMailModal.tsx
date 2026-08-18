@@ -1,7 +1,7 @@
 import type { User } from 'firebase/auth'
 import { useEffect, useState, type FormEvent } from 'react'
 import type { EmailRow } from './types'
-import { listMailboxes, type Mailbox } from './mailboxesApi'
+import { listMailboxes, mailboxLabel, type Mailbox } from './mailboxesApi'
 import {
   fwdSubject,
   reSubject,
@@ -26,8 +26,10 @@ export function SendMailModal({ compose, user, onClose }: Props) {
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  /** Nur zum Anzeigen, aus welchem Postfach die Mail rausgeht. */
-  const [mailbox, setMailbox] = useState<Mailbox | null>(null)
+  /** Alle Postfächer des Benutzers — für die Absenderauswahl. */
+  const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
+  /** Aus welchem Postfach die Mail rausgeht. */
+  const [fromId, setFromId] = useState('')
 
   useEffect(() => {
     if (!compose) return
@@ -41,18 +43,20 @@ export function SendMailModal({ compose, user, onClose }: Props) {
       setSubject(fwdSubject(compose.row.subject))
     }
     setBody('')
-    setMailbox(null)
-
-    // Welches Postfach verschickt, entscheidet der Server. Hier wird es nur
-    // nachgeschlagen, damit im Formular steht, wer als Absender erscheint.
-    const mailboxId = compose.row.mailboxId
-    if (mailboxId === undefined || mailboxId === '') return
+    // Vorbelegt mit dem Postfach, in dem die Mail ankam: aus dem heraus zu
+    // antworten ist fast immer richtig. Änderbar bleibt es trotzdem — wer
+    // mehrere Firmen führt, braucht das gelegentlich.
+    setFromId(compose.row.mailboxId ?? '')
 
     let active = true
     void (async () => {
       try {
         const list = await listMailboxes(await user.getIdToken())
-        if (active) setMailbox(list.find((m) => m.id === mailboxId) ?? null)
+        if (!active) return
+        setMailboxes(list)
+        // Ohne Postfach an der Mail (Altbestand) das erste versandfähige nehmen,
+        // statt den Versand scheitern zu lassen.
+        setFromId((current) => (current !== '' ? current : (list[0]?.id ?? '')))
       } catch {
         // Kein Beinbruch: dann steht eben nur die Postfach-Kennung da.
       }
@@ -83,7 +87,7 @@ export function SendMailModal({ compose, user, onClose }: Props) {
         to: to.trim(),
         subject: subject.trim(),
         body,
-        mailboxId: active.row.mailboxId ?? '',
+        mailboxId: fromId,
         context: {
           originalFrom: fromLine,
           originalSubject: active.row.subject || '(Ohne Betreff)',
@@ -124,22 +128,46 @@ export function SendMailModal({ compose, user, onClose }: Props) {
           </button>
         </div>
         <p className="muted small">
-          {active.row.mailboxId ? (
-            <>
-              Absender:{' '}
-              <strong>{mailbox?.from ?? mailbox?.user ?? active.row.mailboxId}</strong>
-              {mailbox?.from || mailbox?.user ? ` (Postfach ${active.row.mailboxId})` : ''}
-            </>
-          ) : (
-            <>
-              Zu dieser Mail ist <strong>kein Postfach hinterlegt</strong> — sie
-              stammt noch aus der Zeit vor der Anbindung. Der Versand wird
-              fehlschlagen.
-            </>
-          )}
-          {' '}Der Originaltext wird als Zitat angehängt.
+          Der Originaltext wird als Zitat angehängt. Verschickt wird über das
+          gewählte Postfach — dieselben Zugangsdaten wie beim Empfangen, es ist
+          nichts gesondert einzurichten.
         </p>
         <form className="send-mail-form" onSubmit={(e) => void handleSubmit(e)}>
+          {/*
+            Vorbelegt mit dem Postfach, in dem die Mail ankam. Bei nur einem
+            Postfach steht der Absender nur da; erst ab zwei lohnt die Auswahl.
+          */}
+          {mailboxes.length > 1 ? (
+            <label>
+              Von
+              <select value={fromId} onChange={(e) => setFromId(e.target.value)}>
+                {mailboxes.map((box) => (
+                  <option key={box.id} value={box.id}>
+                    {box.from || box.user || mailboxLabel(box.id)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <p className="muted small">
+              {fromId === '' ? (
+                <>
+                  <strong>Kein Postfach hinterlegt</strong> — ohne eines lässt
+                  sich nichts verschicken. Unter „Postfächer verwalten“ eines
+                  anlegen.
+                </>
+              ) : (
+                <>
+                  Absender:{' '}
+                  <strong>
+                    {mailboxes.find((m) => m.id === fromId)?.from ??
+                      mailboxes.find((m) => m.id === fromId)?.user ??
+                      mailboxLabel(fromId)}
+                  </strong>
+                </>
+              )}
+            </p>
+          )}
           <label>
             An (Komma für mehrere)
             <input

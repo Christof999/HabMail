@@ -56,6 +56,7 @@ import {
   omittedReason,
   openAttachment,
 } from './attachments'
+import { mailboxLabel } from './mailboxesApi'
 import AccountMenu from './AccountMenu'
 import MailboxSettings from './MailboxSettings'
 import AccountingView from './AccountingView'
@@ -453,6 +454,15 @@ export default function App() {
       if (r.mailboxId) ids.add(r.mailboxId)
     }
     return [...ids].sort((a, b) => a.localeCompare(b, 'de'))
+  }, [rows])
+
+  /** Wie viele Mails je Postfach — für die Zahlen an den Filterknöpfen. */
+  const mailboxCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const r of rows) {
+      if (r.mailboxId) counts.set(r.mailboxId, (counts.get(r.mailboxId) ?? 0) + 1)
+    }
+    return counts
   }, [rows])
 
   /** Wie viele Mails je Kategorie — für die Zahlen an den Filterknöpfen. */
@@ -1168,22 +1178,34 @@ export default function App() {
             oben rechts — dort sind sie aus jeder Ansicht erreichbar, statt
             hier zwischen den Filtern Platz zu belegen.
           */}
+          {/*
+            Als Knopfreihe wie die Kategorien, nicht als Auswahlfeld: mit
+            mehreren Postfächern ist das die Frage, die man am häufigsten
+            stellt („was kam bei Firma A rein?“), und ein aufklappendes Feld
+            versteckt gerade die Antwort. Erscheint erst ab zwei Postfächern.
+          */}
           {knownMailboxIds.length > 1 ? (
-            <div className="mailbox-filter-row">
-              <label className="muted small mailbox-filter">
-                Postfach
-                <select
-                  value={mailboxFilter ?? ''}
-                  onChange={(e) => setMailboxFilter(e.target.value || null)}
+            <div className="mailbox-filter-row" role="group" aria-label="Postfach">
+              <button
+                type="button"
+                className={`category-chip${mailboxFilter === null ? ' active' : ''}`}
+                aria-pressed={mailboxFilter === null}
+                onClick={() => setMailboxFilter(null)}
+              >
+                Alle Postfächer
+              </button>
+              {knownMailboxIds.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`category-chip${mailboxFilter === id ? ' active' : ''}`}
+                  aria-pressed={mailboxFilter === id}
+                  onClick={() => setMailboxFilter(mailboxFilter === id ? null : id)}
                 >
-                  <option value="">alle</option>
-                  {knownMailboxIds.map((id) => (
-                    <option key={id} value={id}>
-                      {id}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  {mailboxLabel(id)}
+                  <span className="category-chip-count">{mailboxCounts.get(id) ?? 0}</span>
+                </button>
+              ))}
             </div>
           ) : null}
         </div>
