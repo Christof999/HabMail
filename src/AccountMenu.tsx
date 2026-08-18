@@ -20,6 +20,7 @@ type Props = {
   databasePath: string
   isAdmin: boolean
   onOpenMailboxes: () => void
+  onOpenSignatures: () => void
   onOpenUsers: () => void
   onLogout: () => void
 }
@@ -35,6 +36,7 @@ export default function AccountMenu({
   databasePath,
   isAdmin,
   onOpenMailboxes,
+  onOpenSignatures,
   onOpenUsers,
   onLogout,
 }: Props) {
@@ -113,6 +115,9 @@ export default function AccountMenu({
             <div className="account-section account-actions">
               <button type="button" onClick={() => choose(onOpenMailboxes)}>
                 Postfächer verwalten
+              </button>
+              <button type="button" onClick={() => choose(onOpenSignatures)}>
+                Signaturen
               </button>
               {isAdmin ? (
                 <button type="button" onClick={() => choose(onOpenUsers)}>

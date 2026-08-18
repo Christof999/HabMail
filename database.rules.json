@@ -3,33 +3,43 @@
     "users": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
-
         "mailFolders": {
           "$folderId": {
             ".write": "auth != null && auth.uid === $uid",
             ".validate": "!newData.exists() || (newData.hasChild('name') && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 120)"
           }
         },
-
         "companies": {
           "$companyId": {
             ".write": "auth != null && auth.uid === $uid",
             ".validate": "!newData.exists() || (newData.hasChild('name') && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 120)",
-            "name": { ".validate": "newData.isString() && newData.val().length <= 120" },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 120"
+            },
             "mailboxIds": {
-              "$index": { ".validate": "newData.isString() && newData.val().length <= 200" }
+              "$index": {
+                ".validate": "newData.isString() && newData.val().length <= 200"
+              }
             },
             "matchTerms": {
-              "$index": { ".validate": "newData.isString() && newData.val().length <= 120" }
+              "$index": {
+                ".validate": "newData.isString() && newData.val().length <= 120"
+              }
             },
-            "$other": { ".validate": false }
+            "$other": {
+              ".validate": false
+            }
           }
         },
-
+        "signatures": {
+          "$mailboxId": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 2000)"
+          }
+        },
         "emails": {
           "$emailId": {
             ".write": "auth != null && auth.uid === $uid && !newData.exists()",
-
             "folderId": {
               ".write": "auth != null && auth.uid === $uid",
               ".validate": "!newData.exists() || newData.isString() || newData.val() == null"
@@ -42,13 +52,11 @@
         }
       }
     },
-
     "admins": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid"
       }
     },
-
     "userDirectory": {
       ".read": "auth != null && root.child('admins').child(auth.uid).val() === true"
     }

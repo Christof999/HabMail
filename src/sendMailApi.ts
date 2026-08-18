@@ -5,8 +5,10 @@ export type SendMailPayload = {
   to: string
   subject: string
   body: string
-  /** Aus welchem Postfach verschickt wird — das, in dem die Mail ankam. */
+  /** Aus welchem Postfach verschickt wird — vorbelegt mit dem der Mail. */
   mailboxId: string
+  /** Dateien zum Mitschicken, schon Base64-kodiert. */
+  attachments?: { filename: string; contentType: string; contentBase64: string }[]
   context: {
     originalFrom: string
     originalSubject: string

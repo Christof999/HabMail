@@ -90,16 +90,59 @@ function proxyConfig(): { url: string; apiKey: string } | null {
 
 const MAX_BODY_CHARS = 50_000
 
+/**
+ * Anhänge gehen Base64-kodiert durch, das sind rund 4/3 der Bytes. Vercel
+ * nimmt etwa 4,5 MB je Request an — 3 MB Nutzdaten lassen genug Luft für den
+ * Rest der Nachricht.
+ */
+const MAX_ATTACHMENT_TOTAL_BYTES = 3 * 1024 * 1024
+const MAX_ATTACHMENTS = 10
+
+type OutgoingAttachment = {
+  filename: string
+  contentType: string
+  contentBase64: string
+}
+
 type Payload = {
   kind: 'reply' | 'forward'
   to: string
   subject: string
   body: string
   mailboxId: string
+  attachments: OutgoingAttachment[]
   context: { originalFrom: string; originalSubject: string; originalBody: string }
 }
 
-function parsePayload(req: VercelRequest): Payload | null {
+/**
+ * Anhänge aus dem Request. Fehlerhafte Einträge fliegen raus, statt den
+ * ganzen Versand scheitern zu lassen — und die Summe ist gedeckelt, damit
+ * eine zu große Nachricht hier auffällt und nicht erst beim Mailserver.
+ */
+function parseAttachments(value: unknown): OutgoingAttachment[] | 'too_large' {
+  if (!Array.isArray(value)) return []
+  const out: OutgoingAttachment[] = []
+  let total = 0
+
+  for (const item of value.slice(0, MAX_ATTACHMENTS)) {
+    if (item === null || typeof item !== 'object') continue
+    const entry = item as Record<string, unknown>
+    const contentBase64 = String(entry.contentBase64 ?? '').replace(/\s/g, '')
+    if (contentBase64 === '' || !/^[A-Za-z0-9+/]+=*$/.test(contentBase64)) continue
+
+    total += Math.floor((contentBase64.length * 3) / 4)
+    if (total > MAX_ATTACHMENT_TOTAL_BYTES) return 'too_large'
+
+    out.push({
+      filename: String(entry.filename ?? 'anhang').slice(0, 255) || 'anhang',
+      contentType: String(entry.contentType ?? 'application/octet-stream').slice(0, 255),
+      contentBase64,
+    })
+  }
+  return out
+}
+
+function parsePayload(req: VercelRequest): Payload | null | 'too_large' {
   const raw = req.body
   let o: Record<string, unknown>
   try {
@@ -114,6 +157,9 @@ function parsePayload(req: VercelRequest): Payload | null {
   const subject = String(o.subject ?? '').trim()
   if (to === '' || subject === '') return null
 
+  const attachments = parseAttachments(o.attachments)
+  if (attachments === 'too_large') return 'too_large'
+
   const ctx = (o.context ?? {}) as Record<string, unknown>
   return {
     kind,
@@ -121,6 +167,7 @@ function parsePayload(req: VercelRequest): Payload | null {
     subject: subject.slice(0, 500),
     body: String(o.body ?? '').slice(0, MAX_BODY_CHARS),
     mailboxId: String(o.mailboxId ?? '').trim(),
+    attachments,
     context: {
       originalFrom: String(ctx.originalFrom ?? '').slice(0, 400),
       originalSubject: String(ctx.originalSubject ?? '').slice(0, 500),
@@ -162,6 +209,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!auth.ok) return res.status(auth.status).json(auth.body)
 
   const payload = parsePayload(req)
+  if (payload === 'too_large') {
+    return res.status(413).json({
+      error: 'attachments_too_large',
+      hint: `Die Anhänge sind zusammen größer als ${MAX_ATTACHMENT_TOTAL_BYTES / 1024 / 1024} MB.`,
+    })
+  }
   if (payload === null) {
     return res.status(400).json({
       error: 'bad_request',
@@ -205,6 +258,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         to: payload.to,
         subject: payload.subject,
         text: composeText(payload),
+        // Der Proxy nennt das Feld "content" und erwartet dort Base64.
+        ...(payload.attachments.length === 0
+          ? {}
+          : {
+              attachments: payload.attachments.map((a) => ({
+                filename: a.filename,
+                contentType: a.contentType,
+                content: a.contentBase64,
+              })),
+            }),
       }),
     })
 

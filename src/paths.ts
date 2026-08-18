@@ -31,6 +31,14 @@ export function userCompaniesPath(uid: string): string {
 }
 
 /**
+ * Signaturen, eine je Postfach. Liegen hier und nicht im Email-Proxy: der
+ * verschickt nur — was in der Nachricht steht, ist Sache dieser App.
+ */
+export function userSignaturesPath(uid: string): string {
+  return `${userRootPath(uid)}/signatures`
+}
+
+/**
  * Was der letzte Abhol-Lauf gebracht hat. Schreibt nur der Server; hier wird
  * nur gelesen — daran ist zu sehen, ob der geplante Lauf überhaupt stattfindet.
  */

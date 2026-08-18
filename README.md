@@ -323,6 +323,38 @@ Nur bei GoCardless:
   die HabMail bedient. Ein Zugang für fremde Konten setzt die Zustimmung der
   Firma voraus — das ist keine technische, sondern eine rechtliche Grenze.
 
+## Schreiben
+
+Antworten und Weiterleiten laufen über den Email-Proxy, aus dem Postfach heraus,
+in dem die Mail ankam. **Einzurichten ist dafür nichts** — es sind dieselben
+Zugangsdaten wie beim Empfangen.
+
+- **Absender wählen.** Ab zwei Postfächern steht im Schreibfenster ein Feld
+  „Von“, vorbelegt mit dem Postfach der Mail.
+- **Signaturen**, eine je Postfach, unter *Kontozeichen → Signaturen*. Sie steht
+  sichtbar im Schreibfeld und lässt sich dort noch anpassen; beim Wechsel des
+  Absenders wird die alte ersetzt, nicht die neue angestapelt.
+- **Anhänge**: bis zu 10 Dateien, zusammen 3 MB. Mehr nimmt eine Vercel-Function
+  nicht an — Base64 bläht die Bytes um ein Drittel auf.
+
+### Wer als Absender erscheint
+
+Für Postfächer **mit Eigentümer** — also die je Benutzer angelegten — gilt:
+`from` am Postfach, sonst der SMTP-Benutzer (bei IONOS und Strato ist das die
+Mailadresse selbst), sonst der Absender am Client, sonst `MAIL_FROM`.
+
+Das Postfach steht bewusst vorn. Diese Postfächer melden sich mit ihren eigenen
+Zugangsdaten beim Mailserver an, und der lehnt einen fremden Absender ab:
+
+```
+550 5.7.0 Die verwendete Absenderadresse im Envelope-From
+(info@soergel-design.de) gehoert nicht zu Ihrem authentifizierten
+STRATO Paket (info@fliesen-reisloehner.de)
+```
+
+Für Postfächer **ohne Eigentümer** bleibt es bei der alten Reihenfolge — Client,
+Postfach, `MAIL_FROM`. Andere Projekte hängen daran, daran wird nichts geändert.
+
 ## Mehrere Firmen
 
 Wer mehrere Firmen führt, braucht die Buchhaltung je Firma getrennt — jede gibt

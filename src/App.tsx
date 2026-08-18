@@ -59,6 +59,7 @@ import {
 import { mailboxLabel } from './mailboxesApi'
 import AccountMenu from './AccountMenu'
 import MailboxSettings from './MailboxSettings'
+import SignatureSettings from './SignatureSettings'
 import AccountingView from './AccountingView'
 import UserSettings from './UserSettings'
 import { whoAmI } from './usersApi'
@@ -317,6 +318,7 @@ export default function App() {
   const [mailboxFilter, setMailboxFilter] = useState<string | null>(null)
   const [showMailboxSettings, setShowMailboxSettings] = useState(false)
   const [showUserSettings, setShowUserSettings] = useState(false)
+  const [showSignatures, setShowSignatures] = useState(false)
   /** Posteingang oder Buchhaltung — zwei Sichten auf dieselben Daten. */
   const [view, setView] = useState<'inbox' | 'accounting'>('inbox')
   const [isAdmin, setIsAdmin] = useState(false)
@@ -1065,6 +1067,7 @@ export default function App() {
             databasePath={emailsPath}
             isAdmin={isAdmin}
             onOpenMailboxes={() => setShowMailboxSettings(true)}
+            onOpenSignatures={() => setShowSignatures(true)}
             onOpenUsers={() => setShowUserSettings(true)}
             onLogout={handleLogout}
           />
@@ -1625,6 +1628,10 @@ export default function App() {
 
       {showMailboxSettings && user ? (
         <MailboxSettings user={user} onClose={() => setShowMailboxSettings(false)} />
+      ) : null}
+
+      {showSignatures && user ? (
+        <SignatureSettings user={user} onClose={() => setShowSignatures(false)} />
       ) : null}
 
       {showUserSettings && user && isAdmin ? (

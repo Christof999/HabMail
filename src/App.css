@@ -2479,3 +2479,73 @@ html[data-theme='dark'] .pill-paid {
     margin-left: 0;
   }
 }
+
+/* --- Signaturen und Anhänge beim Schreiben --- */
+
+.signature-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.signature-text {
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--text);
+  width: 100%;
+  resize: vertical;
+}
+
+.compose-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.compose-attachment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.compose-attachment-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+}
+
+.compose-attachment-list .attachment-meta {
+  flex: 1;
+}
+
+/* Die Dateiauswahl im Schreibfenster wie die im Bank-Fenster. */
+.send-mail-form input[type='file'] {
+  padding: 0.55rem;
+  border: 1px dashed var(--border);
+  border-radius: 9px;
+  font-size: 0.85rem;
+}
+
+.send-mail-form input[type='file']::file-selector-button {
+  font: inherit;
+  font-size: 0.85rem;
+  margin-right: 0.6rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--pre-bg);
+  color: var(--text);
+  cursor: pointer;
+}
