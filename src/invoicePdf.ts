@@ -53,7 +53,17 @@ export type PdfBuildResult = {
   skipped: string[]
 }
 
-export async function buildMonthPdf(group: MonthGroup): Promise<PdfBuildResult> {
+/**
+ * Der Stapel eines Monats — wahlweise nur der einer Firma.
+ *
+ * Jede Firma gibt ihre eigene Steuererklärung ab; ein Stapel mit den
+ * Rechnungen mehrerer Firmen nützt dem Steuerberater nichts. Deshalb steht
+ * der Firmenname auf dem Deckblatt und im Dateinamen.
+ */
+export async function buildMonthPdf(
+  group: MonthGroup,
+  options: { companyName?: string } = {},
+): Promise<PdfBuildResult> {
   const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib')
 
   const doc = await PDFDocument.create()
@@ -81,6 +91,9 @@ export async function buildMonthPdf(group: MonthGroup): Promise<PdfBuildResult> 
   }
 
   line(`Rechnungen ${winAnsiSafe(group.label)}`, { size: 18, bold: true, gap: 10 })
+  if (options.companyName !== undefined && options.companyName !== '') {
+    line(winAnsiSafe(options.companyName), { size: 12, bold: true, gap: 10 })
+  }
   line(
     `${group.entries.length} Rechnung${group.entries.length === 1 ? '' : 'en'} · erstellt am ${formatDate(
       new Date().toISOString().slice(0, 10),
@@ -202,7 +215,14 @@ export async function buildMonthPdf(group: MonthGroup): Promise<PdfBuildResult> 
 
   return {
     blob: new Blob([buffer], { type: 'application/pdf' }),
-    filename: `Rechnungen-${group.period}.pdf`,
+    filename:
+      options.companyName === undefined || options.companyName === ''
+        ? `Rechnungen-${group.period}.pdf`
+        : // Dateinamen vertragen weder Schrägstriche noch Doppelpunkte.
+          `Rechnungen-${group.period}-${options.companyName
+            .replace(/[^\p{L}\p{N}]+/gu, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 40)}.pdf`,
     skipped,
   }
 }

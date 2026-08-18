@@ -323,6 +323,43 @@ Nur bei GoCardless:
   die HabMail bedient. Ein Zugang für fremde Konten setzt die Zustimmung der
   Firma voraus — das ist keine technische, sondern eine rechtliche Grenze.
 
+## Mehrere Firmen
+
+Wer mehrere Firmen führt, braucht die Buchhaltung je Firma getrennt — jede gibt
+ihre eigene Steuererklärung ab. Angelegt werden Firmen unter **Buchhaltung →
+Firmen**.
+
+Woran erkennt HabMail die Firma? Zwei Wege, in dieser Reihenfolge
+([`src/companies.ts`](src/companies.ts)):
+
+1. **Am Postfach.** Hat jede Firma ihr eigenes, ist das keine Vermutung, sondern
+   eine Tatsache: die Mail ist dort angekommen. Kostenlos, sofort, immer gleich.
+   Deshalb zuerst — dafür ordnet man einer Firma ihre Postfächer zu.
+2. **Am Rechnungsempfänger aus dem Beleg.** Nötig bei einem gemeinsamen
+   Buchhaltungspostfach, in dem Rechnungen mehrerer Firmen landen: dann sagt das
+   Postfach nichts. Die KI liest den Namen aus dem Anschriftenfeld des PDFs
+   (`invoice.recipient`), und der wird gegen die Firmennamen gehalten. **Ein
+   Postfach, das keiner Firma zugeordnet ist, geht automatisch diesen Weg.**
+
+Für Weg 2 gibt es je Firma *weitere Schreibweisen* — „Lauffer Bau", „Lauffer Bau
+GmbH & Co. KG". Verglichen wird ohne Rechtsform, Umlaute und Groß-/Kleinschreibung.
+**Passen zwei Firmen, wird gar nichts zugeordnet**: eine falsche Firma in der
+Steuer ist schlimmer als eine, die man selbst zuordnet.
+
+Widersprechen sich beide Wege — Rechnung im Postfach von Firma A, adressiert an
+Firma B —, **gewinnt das Postfach**, und die Zeile trägt einen roten Hinweis.
+Meist ist die Rechnung schlicht im falschen Postfach gelandet.
+
+In der Buchhaltung heißt das: der **Monat bleibt die erste Ebene** (die Steuer
+läuft nach Zeitraum), die Firma kommt darunter — mit eigener Summe und eigenem
+PDF-Stapel, der den Firmennamen auf dem Deckblatt und im Dateinamen trägt. Über
+den Auswahlknöpfen oben lässt sich auf eine einzige Firma einschränken.
+
+**Zugeordnet wird beim Anzeigen, nicht beim Ablegen.** Eine Umbenennung oder ein
+umgehängtes Postfach wirkt sofort auf den gesamten Bestand; es muss nichts
+nachgezogen werden. Wer keine Firma anlegt, merkt von alledem nichts — dann
+verhält sich die Buchhaltung wie zuvor.
+
 ## Was die KI zu sehen bekommt
 
 [`functions/categorize.js`](functions/categorize.js) schickt an Gemini: Absender,
@@ -341,7 +378,9 @@ gespeichert, aber nicht ausgewertet.
 
 Bei Widersprüchen zwischen Mailtext und Anhang zählt der Anhang. Als Betrag ist
 ausdrücklich der **Bruttogesamtbetrag** verlangt, nicht netto und nicht eine
-einzelne Position.
+einzelne Position. Neben dem Aussteller (`vendor`) wird auch der
+**Rechnungsempfänger** (`recipient`) gelesen — die eigene Firma, an die die
+Rechnung adressiert ist. Den braucht die Zuordnung bei mehreren Firmen.
 
 ### Bestand nachträglich auswerten
 

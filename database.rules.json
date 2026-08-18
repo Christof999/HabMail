@@ -11,6 +11,21 @@
           }
         },
 
+        "companies": {
+          "$companyId": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "!newData.exists() || (newData.hasChild('name') && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 120)",
+            "name": { ".validate": "newData.isString() && newData.val().length <= 120" },
+            "mailboxIds": {
+              "$index": { ".validate": "newData.isString() && newData.val().length <= 200" }
+            },
+            "matchTerms": {
+              "$index": { ".validate": "newData.isString() && newData.val().length <= 120" }
+            },
+            "$other": { ".validate": false }
+          }
+        },
+
         "emails": {
           "$emailId": {
             ".write": "auth != null && auth.uid === $uid && !newData.exists()",

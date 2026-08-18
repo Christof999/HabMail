@@ -23,6 +23,14 @@ export function userFoldersPath(uid: string): string {
 }
 
 /**
+ * Die Firmen des Benutzers. Anders als Mails und Bankdaten schreibt die der
+ * Browser selbst — es ist seine eigene Gliederung, kein Ergebnis eines Laufs.
+ */
+export function userCompaniesPath(uid: string): string {
+  return `${userRootPath(uid)}/companies`
+}
+
+/**
  * Was der letzte Abhol-Lauf gebracht hat. Schreibt nur der Server; hier wird
  * nur gelesen — daran ist zu sehen, ob der geplante Lauf überhaupt stattfindet.
  */

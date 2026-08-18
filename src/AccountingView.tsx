@@ -2,12 +2,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
 import {
+  filterByCompany,
   formatCents,
   formatDate,
   groupInvoicesByMonth,
+  type CompanyGroup,
   type InvoiceEntry,
   type MonthGroup,
 } from './accounting'
+import CompanySettings from './CompanySettings'
+import { parseCompanies, UNASSIGNED_ID, type Company } from './companies'
+import { userCompaniesPath } from './paths'
 import { buildMonthPdf, downloadPdf, openPdf } from './invoicePdf'
 import BankSettings, { PaymentBadge } from './BankSettings'
 import {
@@ -38,7 +43,44 @@ type PdfState = { period: string; skipped: string[] } | null
 type ReanalyzeState = { checked: number; updated: number; amountsFound: number } | null
 
 export default function AccountingView({ rows, uid }: Props) {
-  const groups = useMemo(() => groupInvoicesByMonth(rows), [rows])
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [showCompanies, setShowCompanies] = useState(false)
+  /** null = alle Firmen zusammen. */
+  const [companyFilter, setCompanyFilter] = useState<string | null>(null)
+
+  useEffect(
+    () =>
+      onValue(ref(getFirebaseDb(), userCompaniesPath(uid)), (snap) =>
+        setCompanies(parseCompanies(snap.val())),
+      ),
+    [uid],
+  )
+
+  const allGroups = useMemo(() => groupInvoicesByMonth(rows, companies), [rows, companies])
+  const groups = useMemo(
+    () => filterByCompany(allGroups, companyFilter),
+    [allGroups, companyFilter],
+  )
+
+  /** Die Postfächer, aus denen Rechnungen kamen — zur Auswahl in der Firmenverwaltung. */
+  const mailboxIds = useMemo(
+    () =>
+      [...new Set(rows.map((row) => row.mailboxId ?? '').filter((id) => id !== ''))].sort(),
+    [rows],
+  )
+
+  /**
+   * Welche Firmen kommen im Bestand überhaupt vor? Nur die gehören in die
+   * Auswahl — eine Firma ohne Rechnungen wäre dort nur ein leerer Knopf.
+   */
+  const presentCompanies = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const group of allGroups) {
+      for (const company of group.companies) seen.set(company.id, company.label)
+    }
+    return [...seen].map(([id, label]) => ({ id, label }))
+  }, [allGroups])
+
   const [openPeriods, setOpenPeriods] = useState<Set<string>>(
     () => new Set(groups.slice(0, 1).map((g) => g.period)),
   )
@@ -181,12 +223,33 @@ export default function AccountingView({ rows, uid }: Props) {
     }
   }
 
-  async function exportMonth(group: MonthGroup, action: 'print' | 'download') {
+  /**
+   * Den Stapel eines Monats erzeugen — wahlweise nur den einer Firma.
+   *
+   * Jede Firma gibt ihre eigene Erklärung ab, ein gemischter Stapel nützt dem
+   * Steuerberater nichts. Deshalb geht der Firmenname mit ins PDF.
+   */
+  async function exportMonth(
+    group: MonthGroup,
+    action: 'print' | 'download',
+    company?: CompanyGroup,
+  ) {
     setError(null)
     setLastPdf(null)
     setBusyPeriod(group.period)
     try {
-      const result = await buildMonthPdf(group)
+      // Monat behält Zeitraum und Überschrift, Zahlen und Belege kommen von
+      // der Firma. Reihenfolge zählt: die Firmenwerte überschreiben die des
+      // Monats, period und label des Monats bleiben.
+      const source: MonthGroup =
+        company === undefined
+          ? group
+          : { ...group, ...company, period: group.period, label: group.label }
+      const result = await buildMonthPdf(source, {
+        ...(company === undefined || company.id === UNASSIGNED_ID
+          ? {}
+          : { companyName: company.label }),
+      })
       if (action === 'print') openPdf(result.blob)
       else downloadPdf(result.blob, result.filename)
       setLastPdf({ period: group.period, skipped: result.skipped })
@@ -245,10 +308,38 @@ export default function AccountingView({ rows, uid }: Props) {
             {openTotal > 0 ? ` · ${openTotal} offen` : ' · alles bezahlt'}
           </span>
         </div>
-        <button type="button" className="ghost" onClick={() => setShowBank(true)}>
-          Bankumsätze
-        </button>
+        <div className="accounting-head-actions">
+          <button type="button" className="ghost" onClick={() => setShowCompanies(true)}>
+            Firmen
+          </button>
+          <button type="button" className="ghost" onClick={() => setShowBank(true)}>
+            Bankumsätze
+          </button>
+        </div>
       </div>
+
+      {/* Erst ab zwei Firmen: bei einer einzigen wäre die Auswahl nur Ballast. */}
+      {presentCompanies.length > 1 ? (
+        <div className="company-filter" role="group" aria-label="Firma">
+          <button
+            type="button"
+            className={`category-chip${companyFilter === null ? ' active' : ''}`}
+            onClick={() => setCompanyFilter(null)}
+          >
+            Alle Firmen
+          </button>
+          {presentCompanies.map((company) => (
+            <button
+              key={company.id}
+              type="button"
+              className={`category-chip${companyFilter === company.id ? ' active' : ''}`}
+              onClick={() => setCompanyFilter(companyFilter === company.id ? null : company.id)}
+            >
+              {company.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {error ? <p className="mailbox-error">{error}</p> : null}
       {reanalyzed ? <p className="muted small">{reanalyzed}</p> : null}
@@ -375,46 +466,113 @@ export default function AccountingView({ rows, uid }: Props) {
 
             {isOpen ? (
               <>
-                <ul className="invoice-list">
-                  {group.entries.map((entry) => (
-                    <InvoiceRow
-                      key={entry.row.id}
-                      entry={entry}
-                      editing={editing === entry.row.id}
-                      onEdit={() => setEditing(entry.row.id)}
-                      onCancel={() => setEditing(null)}
-                      onSave={async (patch) => {
-                        await saveInvoice(entry.row, patch)
-                        setEditing(null)
-                      }}
-                      onRelease={releaseMatch}
-                    />
-                  ))}
-                </ul>
+                {/*
+                  Ab zwei Firmen im Monat wird je Firma unterteilt — mit eigener
+                  Summe und eigenem Stapel, weil jede Firma ihre eigene
+                  Erklärung abgibt. Bei einer Firma bliebe die Zwischenüberschrift
+                  ohne Nutzen, dann steht die Liste direkt da.
+                */}
+                {group.companies.length > 1 ? (
+                  group.companies.map((company) => (
+                    <section key={company.id} className="company-group">
+                      <div className="company-group-head">
+                        <strong>{company.label}</strong>
+                        <span className="company-group-total">
+                          {formatCents(company.totalCents, company.currencies[0])}
+                        </span>
+                        <span className="muted small">
+                          {company.entries.length} Rechnung
+                          {company.entries.length === 1 ? '' : 'en'}
+                          {company.openCount > 0 ? ` · ${company.openCount} offen` : ''}
+                        </span>
+                      </div>
 
-                <div className="month-actions">
-                  <span className="muted small">
-                    {group.printableAttachments} Anhang/Anhänge druckbar
-                    {group.missingAttachments > 0
-                      ? ` · ${group.missingAttachments} fehlt/fehlen (zu groß)`
-                      : ''}
-                  </span>
-                  <button
-                    type="button"
-                    className="ghost"
-                    disabled={busy}
-                    onClick={() => void exportMonth(group, 'download')}
-                  >
-                    {busy ? 'Erzeuge …' : 'Als PDF speichern'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void exportMonth(group, 'print')}
-                  >
-                    {busy ? 'Erzeuge …' : 'Alle Rechnungen drucken'}
-                  </button>
-                </div>
+                      <ul className="invoice-list">
+                        {company.entries.map((entry) => (
+                          <InvoiceRow
+                            key={entry.row.id}
+                            entry={entry}
+                            editing={editing === entry.row.id}
+                            onEdit={() => setEditing(entry.row.id)}
+                            onCancel={() => setEditing(null)}
+                            onSave={async (patch) => {
+                              await saveInvoice(entry.row, patch)
+                              setEditing(null)
+                            }}
+                            onRelease={releaseMatch}
+                          />
+                        ))}
+                      </ul>
+
+                      <div className="month-actions">
+                        <span className="muted small">
+                          {company.printableAttachments} Anhang/Anhänge druckbar
+                          {company.missingAttachments > 0
+                            ? ` · ${company.missingAttachments} fehlt/fehlen (zu groß)`
+                            : ''}
+                        </span>
+                        <button
+                          type="button"
+                          className="ghost"
+                          disabled={busy}
+                          onClick={() => void exportMonth(group, 'download', company)}
+                        >
+                          {busy ? 'Erzeuge …' : 'Als PDF speichern'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void exportMonth(group, 'print', company)}
+                        >
+                          {busy ? 'Erzeuge …' : `Rechnungen ${company.label} drucken`}
+                        </button>
+                      </div>
+                    </section>
+                  ))
+                ) : (
+                  <>
+                    <ul className="invoice-list">
+                      {group.entries.map((entry) => (
+                        <InvoiceRow
+                          key={entry.row.id}
+                          entry={entry}
+                          editing={editing === entry.row.id}
+                          onEdit={() => setEditing(entry.row.id)}
+                          onCancel={() => setEditing(null)}
+                          onSave={async (patch) => {
+                            await saveInvoice(entry.row, patch)
+                            setEditing(null)
+                          }}
+                          onRelease={releaseMatch}
+                        />
+                      ))}
+                    </ul>
+
+                    <div className="month-actions">
+                      <span className="muted small">
+                        {group.printableAttachments} Anhang/Anhänge druckbar
+                        {group.missingAttachments > 0
+                          ? ` · ${group.missingAttachments} fehlt/fehlen (zu groß)`
+                          : ''}
+                      </span>
+                      <button
+                        type="button"
+                        className="ghost"
+                        disabled={busy}
+                        onClick={() => void exportMonth(group, 'download', group.companies[0])}
+                      >
+                        {busy ? 'Erzeuge …' : 'Als PDF speichern'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void exportMonth(group, 'print', group.companies[0])}
+                      >
+                        {busy ? 'Erzeuge …' : 'Alle Rechnungen drucken'}
+                      </button>
+                    </div>
+                  </>
+                )}
 
                 {lastPdf?.period === group.period && lastPdf.skipped.length > 0 ? (
                   <p className="muted small month-warning">
@@ -433,6 +591,13 @@ export default function AccountingView({ rows, uid }: Props) {
       </p>
 
       {showBank ? <BankSettings uid={uid} onClose={() => setShowBank(false)} /> : null}
+      {showCompanies ? (
+        <CompanySettings
+          uid={uid}
+          mailboxIds={mailboxIds}
+          onClose={() => setShowCompanies(false)}
+        />
+      ) : null}
     </div>
   )
 }
@@ -489,6 +654,16 @@ function InvoiceRow({ entry, editing, onEdit, onCancel, onSave, onRelease }: Row
           Zusammengefasst, damit sie auf schmalen Schirmen als Gruppe
           umbrechen statt einzeln durch die Zeile zu wandern. */}
       <span className="invoice-meta">
+        {/* Das Postfach entscheidet, aber ein Widerspruch zum Beleg gehört
+            gezeigt: meist ist die Rechnung im falschen Postfach gelandet. */}
+        {entry.company.conflictWith !== undefined ? (
+          <span
+            className="pill pill-conflict"
+            title={`Zugeordnet über das Postfach. Die Rechnung selbst ist an ${entry.company.conflictWith.name} adressiert.`}
+          >
+            adressiert an {entry.company.conflictWith.name}
+          </span>
+        ) : null}
         {entry.printableAttachments > 0 || entry.missingAttachments > 0 ? (
           <span className="invoice-attach" title="Belege im Anhang">
             {entry.printableAttachments > 0 ? `📎 ${entry.printableAttachments}` : ''}

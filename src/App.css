@@ -2374,3 +2374,107 @@ html[data-theme='dark'] .pill-paid {
     min-height: 2.5rem;
   }
 }
+
+/* --- Firmen --- */
+
+.accounting-head-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.4rem;
+}
+
+/* Die Auswahl der Firma steht über den Monaten, wie die Kategorien im
+   Posteingang — dieselbe Optik, damit sie sich gleich anfühlt. */
+.company-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+/* Eine Firma innerhalb eines Monats. Der senkrechte Strich zeigt, dass sie
+   zum Monat darüber gehört und keine eigene Ebene ist. */
+.company-group {
+  margin-top: 0.9rem;
+  padding-left: 0.7rem;
+  border-left: 2px solid var(--border);
+}
+
+.company-group:first-of-type {
+  margin-top: 0.6rem;
+}
+
+.company-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.company-group-total {
+  margin-left: auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Rechnung im Postfach der einen Firma, adressiert an eine andere. */
+.pill-conflict {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
+.company-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.company-name {
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--text);
+  width: 100%;
+}
+
+.company-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.company-field input {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--text);
+  width: 100%;
+}
+
+.company-mailboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+@media (max-width: 767px) {
+  .accounting-head-actions {
+    width: 100%;
+  }
+
+  .accounting-head-actions button {
+    flex: 1;
+    min-height: 2.75rem;
+  }
+
+  .company-group-total {
+    margin-left: 0;
+  }
+}

@@ -26,6 +26,11 @@ export type InvoiceDetails = {
   dueOn?: string
   /** Wer die Rechnung gestellt hat. */
   vendor?: string
+  /**
+   * An wen die Rechnung adressiert ist — die eigene Firma. Trägt die
+   * Zuordnung, wenn ein Postfach für mehrere Firmen zuständig ist.
+   */
+  recipient?: string
   /** YYYY-MM-DD der Zahlung — vom Bankabgleich gesetzt. */
   paidAt?: string
   /** Der zugeordnete Bankumsatz. */
