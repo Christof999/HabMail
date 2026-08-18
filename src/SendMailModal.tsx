@@ -128,11 +128,29 @@ export function SendMailModal({ compose, user, onClose }: Props) {
         const list = await listMailboxes(await user.getIdToken())
         if (!active) return
         setMailboxes(list)
-        // Ohne Postfach an der Mail (Altbestand) das erste versandfähige nehmen,
-        // statt den Versand scheitern zu lassen.
+        // Ohne Postfach an der Mail (Altbestand oder neue Mail) das erste
+        // nehmen, statt den Versand scheitern zu lassen.
         setFromId((current) => (current !== '' ? current : (list[0]?.id ?? '')))
-      } catch {
-        // Kein Beinbruch: dann steht eben nur die Postfach-Kennung da.
+        if (list.length === 0) {
+          setError(
+            'Es ist kein Postfach hinterlegt. Ohne eines lässt sich nichts ' +
+              'verschicken — unter „Postfächer verwalten" eines anlegen.',
+          )
+        }
+      } catch (e) {
+        if (!active) return
+        /*
+         * Hier wurde der Fehler verschluckt. Beim Antworten und Weiterleiten
+         * fiel das nicht auf: dort steht das Postfach schon an der Mail, der
+         * Versand lief also weiter. Bei einer neuen Mail gibt es keine
+         * Vorgabe — dann blieb das Absender-Postfach leer und der Versand
+         * scheiterte, ohne dass irgendwo stand, warum.
+         */
+        setError(
+          `Die Postfächer ließen sich nicht laden: ${
+            e instanceof Error ? e.message : 'unbekannter Fehler'
+          }. Ohne sie ist kein Absender wählbar.`,
+        )
       }
     })()
     return () => {
@@ -355,8 +373,10 @@ export function SendMailModal({ compose, user, onClose }: Props) {
             <button type="button" className="ghost" onClick={onClose}>
               Abbrechen
             </button>
-            <button type="submit" disabled={sending}>
-              {sending ? 'Sende…' : 'Senden'}
+            {/* Ohne Absender-Postfach lehnt der Server ohnehin ab. Das hier
+                zu sperren ist ehrlicher als ein Knopf, der ins Leere führt. */}
+            <button type="submit" disabled={sending || fromId === ''}>
+              {sending ? 'Sende…' : fromId === '' ? 'Kein Absender' : 'Senden'}
             </button>
           </div>
         </form>

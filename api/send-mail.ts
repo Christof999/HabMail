@@ -243,8 +243,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({
       error: 'no_mailbox',
       hint:
-        'Zu dieser Mail ist kein Postfach hinterlegt — sie stammt vermutlich noch aus ' +
-        'der Zeit vor der Anbindung. Wähle das Absender-Postfach von Hand aus.',
+        'Es wurde kein Absender-Postfach übergeben. Entweder ist gar keines ' +
+        'hinterlegt — dann unter „Postfächer verwalten" eines anlegen —, oder ' +
+        'die Mail stammt noch aus der Zeit vor der Anbindung; dann das ' +
+        'Absender-Postfach im Schreibfenster von Hand wählen.',
     })
   }
 
