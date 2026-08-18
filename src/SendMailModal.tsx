@@ -7,6 +7,12 @@ import type { EmailRow } from './types'
 import { listMailboxes, mailboxLabel, type Mailbox } from './mailboxesApi'
 import { formatBytes } from './attachments'
 import {
+  EMPTY_SIGNATURE,
+  parseSignatures,
+  signatureImageSrc,
+  type Signature,
+} from './signatures'
+import {
   fwdSubject,
   reSubject,
   requestSendMail,
@@ -63,18 +69,15 @@ export function SendMailModal({ compose, user, onClose }: Props) {
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
   /** Aus welchem Postfach die Mail rausgeht. */
   const [fromId, setFromId] = useState('')
-  const [signatures, setSignatures] = useState<Record<string, string>>({})
+  const [signatures, setSignatures] = useState<Record<string, Signature>>({})
   const [attachments, setAttachments] = useState<Attached[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
 
   useEffect(
     () =>
-      onValue(ref(getFirebaseDb(), userSignaturesPath(user.uid)), (snap) => {
-        const value = snap.val()
-        setSignatures(
-          value !== null && typeof value === 'object' ? (value as Record<string, string>) : {},
-        )
-      }),
+      onValue(ref(getFirebaseDb(), userSignaturesPath(user.uid)), (snap) =>
+        setSignatures(parseSignatures(snap.val())),
+      ),
     [user.uid],
   )
 
@@ -85,9 +88,10 @@ export function SendMailModal({ compose, user, onClose }: Props) {
    * werden — man soll sehen, was rausgeht, und sie noch ändern können. Beim
    * Wechsel des Absenders wird die alte ersetzt, nicht die neue angestapelt.
    */
+  const signature = signatures[mailboxKey(fromId)] ?? EMPTY_SIGNATURE
   const appliedSignature = useRef('')
   useEffect(() => {
-    const next = (signatures[mailboxKey(fromId)] ?? '').trim()
+    const next = signature.text.trim()
     const previous = appliedSignature.current
     if (next === previous) return
 
@@ -97,7 +101,7 @@ export function SendMailModal({ compose, user, onClose }: Props) {
       return next === '' ? withoutOld : `${withoutOld.trimEnd()}\n\n${next}`
     })
     appliedSignature.current = next
-  }, [fromId, signatures])
+  }, [signature.text])
 
   useEffect(() => {
     if (!compose) return
@@ -226,6 +230,17 @@ export function SendMailModal({ compose, user, onClose }: Props) {
           contentType,
           contentBase64,
         })),
+        // Das Bild der Signatur reist getrennt vom Text: der Server baut
+        // daraus eine HTML-Fassung mit <img src="cid:…">. Im Textfeld hat es
+        // nichts zu suchen — dort steht nur, was man tippen kann.
+        ...(signature.imageBase64 === ''
+          ? {}
+          : {
+              signatureImage: {
+                contentType: signature.imageType,
+                contentBase64: signature.imageBase64,
+              },
+            }),
         context,
       })
       onClose()
@@ -332,6 +347,17 @@ export function SendMailModal({ compose, user, onClose }: Props) {
               placeholder="Dein Text…"
             />
           </label>
+          {/* Das Bild steht nicht im Textfeld — dort ließe es sich nicht
+              darstellen. Deshalb hier die Vorschau, damit man weiß, was
+              mitgeht. */}
+          {signature.imageBase64 !== '' ? (
+            <div className="compose-signature-image">
+              <span className="account-section-label">Signaturbild</span>
+              <img src={signatureImageSrc(signature)} alt="Bild der Signatur" />
+              <span className="muted small">Steht in der Mail unter deinem Text.</span>
+            </div>
+          ) : null}
+
           <div className="compose-attachments">
             <span className="account-section-label">Anhänge</span>
             {attachments.length > 0 ? (

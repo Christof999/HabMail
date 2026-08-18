@@ -4,6 +4,18 @@ import { onValue, ref, remove, set } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
 import { mailboxKey, userSignaturesPath } from './paths'
 import { listMailboxes, mailboxLabel, type Mailbox } from './mailboxesApi'
+import {
+  EMPTY_SIGNATURE,
+  imageBytes,
+  isSignatureEmpty,
+  MAX_SIGNATURE_CHARS,
+  MAX_SIGNATURE_IMAGE_BYTES,
+  parseSignatures,
+  signatureImageSrc,
+  SIGNATURE_IMAGE_TYPES,
+  type Signature,
+} from './signatures'
+import { formatBytes } from './attachments'
 
 /**
  * Signaturen — eine je Postfach.
@@ -21,12 +33,9 @@ type Props = {
   onClose: () => void
 }
 
-/** Höchstlänge, gleich der Prüfung in database.rules.json. */
-const MAX_SIGNATURE_CHARS = 2000
-
 export default function SignatureSettings({ user, onClose }: Props) {
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
-  const [signatures, setSignatures] = useState<Record<string, string>>({})
+  const [signatures, setSignatures] = useState<Record<string, Signature>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
@@ -35,14 +44,7 @@ export default function SignatureSettings({ user, onClose }: Props) {
     () =>
       onValue(
         ref(getFirebaseDb(), userSignaturesPath(user.uid)),
-        (snap) => {
-          const value = snap.val()
-          setSignatures(
-            value !== null && typeof value === 'object'
-              ? (value as Record<string, string>)
-              : {},
-          )
-        },
+        (snap) => setSignatures(parseSignatures(snap.val())),
         (e) => setError(e.message),
       ),
     [user.uid],
@@ -65,17 +67,52 @@ export default function SignatureSettings({ user, onClose }: Props) {
     }
   }, [user])
 
-  async function save(mailboxId: string, text: string) {
+  async function save(mailboxId: string, signature: Signature) {
     setError(null)
     try {
       const target = ref(getFirebaseDb(), `${userSignaturesPath(user.uid)}/${mailboxKey(mailboxId)}`)
       // Leer heißt: keine Signatur. Ein leerer Eintrag wäre nur Ballast.
-      await (text.trim() === '' ? remove(target) : set(target, text.slice(0, MAX_SIGNATURE_CHARS)))
+      await (isSignatureEmpty(signature)
+        ? remove(target)
+        : set(target, {
+            text: signature.text.slice(0, MAX_SIGNATURE_CHARS),
+            imageBase64: signature.imageBase64,
+            imageType: signature.imageType,
+          }))
       setSaved(mailboxId)
       window.setTimeout(() => setSaved(null), 2000)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Speichern fehlgeschlagen')
     }
+  }
+
+  /** Ein Bild auswählen — sofort speichern, es gibt hier nichts zu tippen. */
+  async function chooseImage(mailboxId: string, file: File) {
+    setError(null)
+    if (!SIGNATURE_IMAGE_TYPES.includes(file.type)) {
+      setError(`„${file.name}" ist kein Bild, das sich in einer Mail zuverlässig anzeigen lässt (PNG, JPEG, GIF oder WebP).`)
+      return
+    }
+    if (file.size > MAX_SIGNATURE_IMAGE_BYTES) {
+      setError(
+        `„${file.name}" ist ${formatBytes(file.size)} groß — erlaubt sind ` +
+          `${formatBytes(MAX_SIGNATURE_IMAGE_BYTES)}. Ein Logo dieser Größe würde jede Mail unnötig schwer machen.`,
+      )
+      return
+    }
+
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    let binary = ''
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+    }
+    const next: Signature = {
+      ...(signatures[mailboxKey(mailboxId)] ?? EMPTY_SIGNATURE),
+      imageBase64: btoa(binary),
+      imageType: file.type,
+    }
+    setSignatures((s) => ({ ...s, [mailboxKey(mailboxId)]: next }))
+    await save(mailboxId, next)
   }
 
   return (
@@ -105,7 +142,9 @@ export default function SignatureSettings({ user, onClose }: Props) {
           </p>
         ) : (
           <ul className="mailbox-list">
-            {mailboxes.map((box) => (
+            {mailboxes.map((box) => {
+              const signatur = signatures[mailboxKey(box.id)] ?? EMPTY_SIGNATURE
+              return (
               <li key={box.id} className="mailbox-item signature-item">
                 <div className="mailbox-item-head">
                   <strong>{box.from || box.user || mailboxLabel(box.id)}</strong>
@@ -115,23 +154,75 @@ export default function SignatureSettings({ user, onClose }: Props) {
                   className="signature-text"
                   rows={5}
                   maxLength={MAX_SIGNATURE_CHARS}
-                  value={signatures[mailboxKey(box.id)] ?? ''}
+                  value={signatur.text}
                   placeholder={`Mit freundlichen Grüßen\n\n${box.from || mailboxLabel(box.id)}\nTelefon …`}
                   aria-label={`Signatur für ${mailboxLabel(box.id)}`}
                   onChange={(e) =>
-                    setSignatures((s) => ({ ...s, [mailboxKey(box.id)]: e.target.value }))
+                    setSignatures((s) => ({
+                      ...s,
+                      [mailboxKey(box.id)]: { ...signatur, text: e.target.value },
+                    }))
                   }
                   // Beim Verlassen des Feldes speichern, nicht bei jedem
                   // Tastendruck: sonst ginge für jede Zeile ein Schreibvorgang
                   // in die Datenbank.
-                  onBlur={(e) => void save(box.id, e.target.value)}
+                  onBlur={(e) => void save(box.id, { ...signatur, text: e.target.value })}
                 />
                 <span className="muted small">
-                  {(signatures[mailboxKey(box.id)] ?? '').length} von {MAX_SIGNATURE_CHARS} Zeichen ·
-                  wird beim Verlassen des Feldes gespeichert
+                  {signatur.text.length} von {MAX_SIGNATURE_CHARS} Zeichen · wird
+                  beim Verlassen des Feldes gespeichert
                 </span>
+
+                {/*
+                  Das Bild geht als eingebetteter Anhang mit, nicht als
+                  data:-Adresse im HTML — Gmail und Outlook entfernen solche
+                  Bilder wortlos, beim Absender sieht es trotzdem gut aus.
+                */}
+                <div className="signature-image">
+                  {signatur.imageBase64 !== '' ? (
+                    <>
+                      <img
+                        src={signatureImageSrc(signatur)}
+                        alt={`Signaturbild für ${mailboxLabel(box.id)}`}
+                      />
+                      <span className="muted small">
+                        {formatBytes(imageBytes(signatur))} · steht in der Mail unter dem Text
+                      </span>
+                      <button
+                        type="button"
+                        className="ghost small-btn"
+                        onClick={() => {
+                          const ohne = { ...signatur, imageBase64: '', imageType: '' }
+                          setSignatures((s) => ({ ...s, [mailboxKey(box.id)]: ohne }))
+                          void save(box.id, ohne)
+                        }}
+                      >
+                        Bild entfernen
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="account-section-label">Bild (z. B. Logo)</span>
+                      <input
+                        type="file"
+                        accept={SIGNATURE_IMAGE_TYPES.join(',')}
+                        aria-label={`Signaturbild für ${mailboxLabel(box.id)}`}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) void chooseImage(box.id, file)
+                          e.target.value = ''
+                        }}
+                      />
+                      <span className="muted small">
+                        PNG, JPEG, GIF oder WebP, höchstens{' '}
+                        {formatBytes(MAX_SIGNATURE_IMAGE_BYTES)}.
+                      </span>
+                    </>
+                  )}
+                </div>
               </li>
-            ))}
+              )
+            })}
           </ul>
         )}
 

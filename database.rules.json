@@ -34,7 +34,19 @@
         "signatures": {
           "$mailboxId": {
             ".write": "auth != null && auth.uid === $uid",
-            ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 2000)"
+            ".validate": "!newData.exists() || newData.isString() || (newData.hasChildren() && newData.child('text').isString())",
+            "text": {
+              ".validate": "newData.isString() && newData.val().length <= 2000"
+            },
+            "imageBase64": {
+              ".validate": "newData.isString() && newData.val().length <= 400000"
+            },
+            "imageType": {
+              ".validate": "newData.isString() && newData.val().length <= 60"
+            },
+            "$other": {
+              ".validate": false
+            }
           }
         },
         "emails": {

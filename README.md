@@ -337,6 +337,12 @@ Zugangsdaten wie beim Empfangen.
 - **Signaturen**, eine je Postfach, unter *Kontozeichen → Signaturen*. Sie steht
   sichtbar im Schreibfeld und lässt sich dort noch anpassen; beim Wechsel des
   Absenders wird die alte ersetzt, nicht die neue angestapelt.
+- **Bild in der Signatur** (Logo), je Postfach eines: PNG, JPEG, GIF oder WebP
+  bis 200 kB. Es geht **als eingebetteter Anhang mit einer Content-ID** mit, und
+  die Mail bekommt dafür eine HTML-Fassung mit `<img src="cid:…">`. Als
+  `data:`-Adresse ginge es nicht — Gmail und Outlook entfernen solche Bilder
+  wortlos, beim Absender sieht die Mail trotzdem gut aus. Ohne Bild bleibt die
+  Mail reiner Text wie bisher; der Text reist auch mit Bild immer mit.
 - **Anhänge**: bis zu 10 Dateien, zusammen 3 MB. Mehr nimmt eine Vercel-Function
   nicht an — Base64 bläht die Bytes um ein Drittel auf.
 

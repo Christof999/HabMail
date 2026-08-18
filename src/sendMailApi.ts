@@ -10,6 +10,12 @@ export type SendMailPayload = {
   mailboxId: string
   /** Dateien zum Mitschicken, schon Base64-kodiert. */
   attachments?: { filename: string; contentType: string; contentBase64: string }[]
+  /**
+   * Das Bild der Signatur. Der Server baut daraus eine HTML-Fassung und hängt
+   * es als eingebettetes Bild an — als data:-Adresse würden Gmail und Outlook
+   * es entfernen.
+   */
+  signatureImage?: { contentType: string; contentBase64: string }
   /** Der zitierte Originaltext. Bei einer neuen Mail leer. */
   context: {
     originalFrom: string

@@ -104,6 +104,10 @@ type OutgoingAttachment = {
   contentBase64: string
 }
 
+/** Content-ID, unter der das Signaturbild in der Mail steckt. */
+const SIGNATURE_CID = 'habmail-signatur'
+const MAX_SIGNATURE_IMAGE_BYTES = 200 * 1024
+
 type Payload = {
   kind: 'reply' | 'forward' | 'new'
   to: string
@@ -111,7 +115,46 @@ type Payload = {
   body: string
   mailboxId: string
   attachments: OutgoingAttachment[]
+  /** Bild der Signatur, falls eines hinterlegt ist. */
+  signatureImage: { contentType: string; contentBase64: string } | null
   context: { originalFrom: string; originalSubject: string; originalBody: string }
+}
+
+/** Nur ein Bild, nur in vernünftiger Größe, sonst lieber gar keines. */
+function parseSignatureImage(value: unknown): Payload['signatureImage'] {
+  if (value === null || typeof value !== 'object') return null
+  const entry = value as Record<string, unknown>
+  const contentBase64 = String(entry.contentBase64 ?? '').replace(/\s/g, '')
+  if (contentBase64 === '' || !/^[A-Za-z0-9+/]+=*$/.test(contentBase64)) return null
+  if (Math.floor((contentBase64.length * 3) / 4) > MAX_SIGNATURE_IMAGE_BYTES) return null
+
+  const contentType = String(entry.contentType ?? '').toLowerCase()
+  if (!/^image\/(png|jpeg|gif|webp)$/.test(contentType)) return null
+  return { contentType, contentBase64 }
+}
+
+/** Für HTML: alles entschärfen, was als Markup gelesen werden könnte. */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+/**
+ * Die HTML-Fassung — nur nötig, wenn ein Signaturbild mitgeht.
+ *
+ * Ohne Bild bleibt die Mail reiner Text, wie bisher. Das ist kein Rückschritt,
+ * sondern die robustere Form: reiner Text kommt überall gleich an.
+ */
+function composeHtml(payload: Payload): string {
+  const body = escapeHtml(composeText(payload)).replace(/\n/g, '<br>')
+  return (
+    `<div style="font-family:sans-serif;font-size:14px;line-height:1.5">${body}` +
+    `<div style="margin-top:12px"><img src="cid:${SIGNATURE_CID}" alt="" style="max-width:100%"></div>` +
+    `</div>`
+  )
 }
 
 /**
@@ -169,6 +212,7 @@ function parsePayload(req: VercelRequest): Payload | null | 'too_large' {
     body: String(o.body ?? '').slice(0, MAX_BODY_CHARS),
     mailboxId: String(o.mailboxId ?? '').trim(),
     attachments,
+    signatureImage: parseSignatureImage(o.signatureImage),
     context: {
       originalFrom: String(ctx.originalFrom ?? '').slice(0, 400),
       originalSubject: String(ctx.originalSubject ?? '').slice(0, 500),
@@ -250,6 +294,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   }
 
+  /*
+   * Das Signaturbild reist als eingebetteter Anhang mit einer Content-ID mit,
+   * nicht als data:-Adresse im HTML: Gmail und Outlook entfernen data:-Bilder
+   * wortlos. Über cid: findet der Empfänger es zuverlässig.
+   */
+  const outgoingAttachments = [
+    ...payload.attachments.map((a) => ({
+      filename: a.filename,
+      contentType: a.contentType,
+      content: a.contentBase64,
+    })),
+    ...(payload.signatureImage === null
+      ? []
+      : [
+          {
+            filename: `signatur.${payload.signatureImage.contentType.split('/')[1]}`,
+            contentType: payload.signatureImage.contentType,
+            content: payload.signatureImage.contentBase64,
+            cid: SIGNATURE_CID,
+          },
+        ]),
+  ]
+
   try {
     const response = await fetch(`${config.url}/api/send`, {
       method: 'POST',
@@ -267,16 +334,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         to: payload.to,
         subject: payload.subject,
         text: composeText(payload),
+        // Mit Bild zusätzlich eine HTML-Fassung. Der reine Text bleibt
+        // trotzdem dabei — Mailprogramme ohne HTML zeigen dann ihn.
+        ...(payload.signatureImage === null ? {} : { html: composeHtml(payload) }),
         // Der Proxy nennt das Feld "content" und erwartet dort Base64.
-        ...(payload.attachments.length === 0
-          ? {}
-          : {
-              attachments: payload.attachments.map((a) => ({
-                filename: a.filename,
-                contentType: a.contentType,
-                content: a.contentBase64,
-              })),
-            }),
+        ...(outgoingAttachments.length === 0 ? {} : { attachments: outgoingAttachments }),
       }),
     })
 
