@@ -1062,6 +1062,19 @@ export default function App() {
               Buchhaltung
             </button>
           </div>
+          {/* Neben dem Kontozeichen, weil hier alles Persönliche sitzt. Auf
+              dem Handy nur das Zeichen — der Text hätte dort keinen Platz,
+              die Beschriftung bleibt für Vorleseprogramme erhalten. */}
+          <button
+            type="button"
+            className="compose-btn"
+            aria-label="Neue E-Mail schreiben"
+            title="Neue E-Mail schreiben"
+            onClick={() => setCompose({ mode: 'new' })}
+          >
+            <span aria-hidden>✎</span>
+            <span className="compose-btn-label">Neue E-Mail</span>
+          </button>
           <AccountMenu
             email={user.email ?? ''}
             databasePath={emailsPath}

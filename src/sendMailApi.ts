@@ -1,4 +1,5 @@
-export type SendMailComposeKind = 'reply' | 'forward'
+/** `new` = frei verfasst, ohne Bezug auf eine vorhandene Mail. */
+export type SendMailComposeKind = 'reply' | 'forward' | 'new'
 
 export type SendMailPayload = {
   kind: SendMailComposeKind
@@ -9,6 +10,7 @@ export type SendMailPayload = {
   mailboxId: string
   /** Dateien zum Mitschicken, schon Base64-kodiert. */
   attachments?: { filename: string; contentType: string; contentBase64: string }[]
+  /** Der zitierte Originaltext. Bei einer neuen Mail leer. */
   context: {
     originalFrom: string
     originalSubject: string

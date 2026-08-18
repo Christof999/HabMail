@@ -13,10 +13,17 @@ import {
   type SendMailComposeKind,
 } from './sendMailApi'
 
-export type ComposeState = {
-  mode: SendMailComposeKind
-  row: EmailRow
-}
+/**
+ * Was gerade geschrieben wird.
+ *
+ * Antworten und Weiterleiten beziehen sich auf eine vorhandene Mail; eine
+ * neue hat keine. Deshalb zwei Formen statt eines optionalen `row` — so kann
+ * der Übersetzer nicht durchrutschen lassen, dass irgendwo doch darauf
+ * zugegriffen wird.
+ */
+export type ComposeState =
+  | { mode: 'new' }
+  | { mode: Exclude<SendMailComposeKind, 'new'>; row: EmailRow }
 
 /** Eine ausgewählte Datei, schon zum Versand kodiert. */
 type Attached = {
@@ -99,17 +106,21 @@ export function SendMailModal({ compose, user, onClose }: Props) {
     if (compose.mode === 'reply') {
       setTo(compose.row.sender.trim())
       setSubject(reSubject(compose.row.subject))
-    } else {
+    } else if (compose.mode === 'forward') {
       setTo('')
       setSubject(fwdSubject(compose.row.subject))
+    } else {
+      setTo('')
+      setSubject('')
     }
     setBody('')
     setAttachments([])
     appliedSignature.current = ''
     // Vorbelegt mit dem Postfach, in dem die Mail ankam: aus dem heraus zu
     // antworten ist fast immer richtig. Änderbar bleibt es trotzdem — wer
-    // mehrere Firmen führt, braucht das gelegentlich.
-    setFromId(compose.row.mailboxId ?? '')
+    // mehrere Firmen führt, braucht das gelegentlich. Bei einer neuen Mail
+    // gibt es keine Vorgabe; dann greift unten das erste Postfach.
+    setFromId(compose.mode === 'new' ? '' : (compose.row.mailboxId ?? ''))
 
     let active = true
     void (async () => {
@@ -133,7 +144,11 @@ export function SendMailModal({ compose, user, onClose }: Props) {
 
   const active = compose
   const title =
-    active.mode === 'reply' ? 'Antwort verfassen' : 'Weiterleiten'
+    active.mode === 'reply'
+      ? 'Antwort verfassen'
+      : active.mode === 'forward'
+        ? 'Weiterleiten'
+        : 'Neue E-Mail'
 
   async function addFiles(files: FileList) {
     setError(null)
@@ -169,10 +184,19 @@ export function SendMailModal({ compose, user, onClose }: Props) {
     setSending(true)
     try {
       const token = await user.getIdToken(true)
-      const fromLine =
-        active.row.senderName && active.row.sender
-          ? `${active.row.senderName} <${active.row.sender}>`
-          : active.row.sender || active.row.senderName || '—'
+      // Eine neue Mail zitiert nichts — dann bleibt der Zusammenhang leer.
+      const context =
+        active.mode === 'new'
+          ? { originalFrom: '', originalSubject: '', originalBody: '' }
+          : {
+              originalFrom:
+                active.row.senderName && active.row.sender
+                  ? `${active.row.senderName} <${active.row.sender}>`
+                  : active.row.sender || active.row.senderName || '—',
+              originalSubject: active.row.subject || '(Ohne Betreff)',
+              originalBody: active.row.originalBody || '',
+            }
+
       await requestSendMail(token, {
         kind: active.mode,
         to: to.trim(),
@@ -184,11 +208,7 @@ export function SendMailModal({ compose, user, onClose }: Props) {
           contentType,
           contentBase64,
         })),
-        context: {
-          originalFrom: fromLine,
-          originalSubject: active.row.subject || '(Ohne Betreff)',
-          originalBody: active.row.originalBody || '',
-        },
+        context,
       })
       onClose()
     } catch (err) {
@@ -224,9 +244,9 @@ export function SendMailModal({ compose, user, onClose }: Props) {
           </button>
         </div>
         <p className="muted small">
-          Der Originaltext wird als Zitat angehängt. Verschickt wird über das
-          gewählte Postfach — dieselben Zugangsdaten wie beim Empfangen, es ist
-          nichts gesondert einzurichten.
+          {active.mode === 'new' ? '' : 'Der Originaltext wird als Zitat angehängt. '}
+          Verschickt wird über das gewählte Postfach — dieselben Zugangsdaten wie
+          beim Empfangen, es ist nichts gesondert einzurichten.
         </p>
         <form className="send-mail-form" onSubmit={(e) => void handleSubmit(e)}>
           {/*

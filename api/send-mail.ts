@@ -105,7 +105,7 @@ type OutgoingAttachment = {
 }
 
 type Payload = {
-  kind: 'reply' | 'forward'
+  kind: 'reply' | 'forward' | 'new'
   to: string
   subject: string
   body: string
@@ -152,7 +152,8 @@ function parsePayload(req: VercelRequest): Payload | null | 'too_large' {
   }
   if (!o || typeof o !== 'object') return null
 
-  const kind = o.kind === 'forward' ? 'forward' : 'reply'
+  const kind =
+    o.kind === 'forward' ? 'forward' : o.kind === 'new' ? 'new' : 'reply'
   const to = String(o.to ?? '').trim()
   const subject = String(o.subject ?? '').trim()
   if (to === '' || subject === '') return null
@@ -176,8 +177,14 @@ function parsePayload(req: VercelRequest): Payload | null | 'too_large' {
   }
 }
 
-/** Der Originaltext wird als Zitat angehängt — bei Antwort wie bei Weiterleitung. */
+/**
+ * Der Originaltext wird als Zitat angehängt — bei Antwort wie bei
+ * Weiterleitung. Eine frei verfasste Mail hat keinen: dort geht genau das
+ * raus, was im Feld steht.
+ */
 function composeText(payload: Payload): string {
+  if (payload.kind === 'new') return `${payload.body.trim()}\n`
+
   const header =
     payload.kind === 'reply'
       ? `Am ${payload.context.originalFrom || 'unbekannt'} schrieb:`

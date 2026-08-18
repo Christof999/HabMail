@@ -329,6 +329,9 @@ Antworten und Weiterleiten laufen über den Email-Proxy, aus dem Postfach heraus
 in dem die Mail ankam. **Einzurichten ist dafür nichts** — es sind dieselben
 Zugangsdaten wie beim Empfangen.
 
+- **Neue E-Mail** über den Knopf oben rechts, neben dem Kontozeichen. Ohne Bezug
+  auf eine vorhandene Mail und deshalb ohne Zitat; auf dem Handy nur das
+  Stiftzeichen, weil in der Kopfzeile schon Menü, Titel und Konto stehen.
 - **Absender wählen.** Ab zwei Postfächern steht im Schreibfenster ein Feld
   „Von“, vorbelegt mit dem Postfach der Mail.
 - **Signaturen**, eine je Postfach, unter *Kontozeichen → Signaturen*. Sie steht
