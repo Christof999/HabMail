@@ -44,6 +44,10 @@
 # das nicht im Repository liegt. Firebase liest diese Datei beim Ausrollen und
 # setzt die Werte als Umgebungsvariablen der Functions.
 #
+# Daraus folgt: **ein neu gesetztes Secret wirkt erst mit dem nächsten
+# Ausrollen.** Wer hier etwas ändert, muss den Workflow einmal laufen lassen —
+# sonst arbeiten die Functions weiter mit den Werten vom letzten Mal.
+#
 # ---------------------------------------------------------------------------
 # Rechte des Dienstkontos
 # ---------------------------------------------------------------------------
@@ -212,6 +216,27 @@ jobs:
               echo "::warning::$required fehlt — HabMail kann dann keine Mails abholen."
             fi
           done
+
+          # Übergabe ans Rechnungsprogramm: alle drei oder gar nichts.
+          #
+          # Der Stolperstein ist nicht das Fehlen eines Wertes, sondern der
+          # Zeitpunkt: die Werte kommen erst mit diesem Schritt in die
+          # Functions. Wer sie in GitHub setzt und nicht neu ausrollt, wartet
+          # sonst vergeblich auf die erste übergebene Rechnung. Deshalb steht
+          # der Stand jedes Mal im Protokoll.
+          uebergabe=0
+          for name in RECHNUNGSPROGRAMM_URL RECHNUNGSPROGRAMM_TOKEN RECHNUNGSPROGRAMM_UID; do
+            if grep -q "^$name=" "$env_file"; then
+              uebergabe=$((uebergabe + 1))
+            fi
+          done
+          if [ "$uebergabe" -eq 3 ]; then
+            echo "Übergabe ans Rechnungsprogramm: eingerichtet, ab jetzt aktiv."
+          elif [ "$uebergabe" -gt 0 ]; then
+            echo "::warning::Übergabe ans Rechnungsprogramm unvollständig — nötig sind RECHNUNGSPROGRAMM_URL, RECHNUNGSPROGRAMM_TOKEN und RECHNUNGSPROGRAMM_UID. Solange einer fehlt, wird nichts übergeben."
+          else
+            echo "Übergabe ans Rechnungsprogramm: nicht eingerichtet (das ist in Ordnung, wenn sie nicht gewünscht ist)."
+          fi
 
       # Getrennt von den Functions: die Datenbankregeln sind das, was die Daten
       # der Benutzer voneinander abschottet. Die sollen auch dann live gehen,
