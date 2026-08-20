@@ -164,28 +164,55 @@ async function post(payload, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
  * Ein Fehlschlag am Server (5xx) oder ein Zeitüberlauf wird einmal wiederholt;
  * bei einer abgelehnten Anfrage (4xx) bringt das nichts.
  *
- * @returns {Promise<"sent"|"skipped"|"failed">}
+ * Der Grund eines Fehlschlags kommt mit zurück und nicht nur ins Protokoll:
+ * „13 fehlgeschlagen" sagt niemandem, dass beide Seiten verschiedene Passwörter
+ * haben. Genau das war beim Einrichten der Fall, und nachzulesen war es nur in
+ * den Server-Protokollen.
+ *
+ * @returns {Promise<{outcome: "sent"|"skipped"|"failed", reason?: string}>}
  */
 async function forwardInvoice(uid, emailId, record, { withAttachments = true } = {}) {
-  if (!shouldForward(uid, record)) return "skipped";
+  if (!shouldForward(uid, record)) return { outcome: "skipped" };
 
   const payload = buildPayload(emailId, record, { withAttachments });
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       await post(payload);
-      return "sent";
+      return { outcome: "sent" };
     } catch (error) {
       const status = error?.status;
       const retryable = status === undefined || status >= 500;
       if (!retryable || attempt === 1) {
         console.error(`Übergabe ans Rechnungsprogramm fehlgeschlagen (${emailId}):`, error);
-        return "failed";
+        return { outcome: "failed", reason: describe(error) };
       }
     }
   }
 
-  return "failed";
+  return { outcome: "failed", reason: "unbekannter Fehler" };
+}
+
+/**
+ * Aus dem Fehler einen Satz machen, der die Ursache nennt.
+ *
+ * Bei 401 und 403 ist die Ursache fast immer dieselbe und lässt sich nicht
+ * erraten, wenn dort nur „Nicht berechtigt" steht: die beiden Seiten tragen
+ * verschiedene Passwörter. Also steht es da.
+ */
+function describe(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (error?.status === 401 || error?.status === 403) {
+    return (
+      "Das Rechnungsprogramm hat die Anmeldung abgelehnt. RECHNUNGSPROGRAMM_TOKEN hier " +
+      "und HABMAIL_WEBHOOK_TOKEN dort müssen zeichengenau gleich sein — und beide Seiten " +
+      "danach neu ausgerollt werden."
+    );
+  }
+  if (error?.status === 404) {
+    return "Unter RECHNUNGSPROGRAMM_URL antwortet niemand auf /api/habmail-invoice — Adresse prüfen.";
+  }
+  return message.slice(0, 200);
 }
 
 /**
@@ -239,16 +266,23 @@ const syncAccounting = onCall({ timeoutSeconds: 540, memory: "1GiB" }, async (re
     sent: 0,
     skipped: 0,
     failed: 0,
+    /** Warum es scheiterte — höchstens drei verschiedene Gründe. */
+    reasons: [],
     cursor: entries.length === 0 ? null : entries[entries.length - 1][0],
     // Eine nicht volle Seite heißt: dahinter kommt nichts mehr.
     done: entries.length < PAGE_SIZE,
   };
 
   for (const [emailId, record] of entries) {
-    const outcome = await forwardInvoice(uid, emailId, record);
+    const { outcome, reason } = await forwardInvoice(uid, emailId, record);
     if (outcome === "sent") report.sent += 1;
-    else if (outcome === "failed") report.failed += 1;
-    else report.skipped += 1;
+    else if (outcome === "failed") {
+      report.failed += 1;
+      // Drei verschiedene Gründe reichen; hundertmal derselbe hilft niemandem.
+      if (reason !== undefined && !report.reasons.includes(reason) && report.reasons.length < 3) {
+        report.reasons.push(reason);
+      }
+    } else report.skipped += 1;
   }
 
   return report;

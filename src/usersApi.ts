@@ -161,6 +161,8 @@ export type AccountingSyncReport = {
   sent: number
   skipped: number
   failed: number
+  /** Warum es scheiterte — höchstens drei verschiedene Gründe. */
+  reasons: string[]
   cursor: string | null
   done: boolean
 }

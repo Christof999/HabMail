@@ -243,12 +243,16 @@ export default function AccountingView({ rows, uid }: Props) {
     try {
       let cursor: string | null = null
       const total = { checked: 0, sent: 0, failed: 0 }
+      const problems: string[] = []
 
       for (;;) {
         const page = await syncAccounting({ cursor })
         total.checked += page.checked
         total.sent += page.sent
         total.failed += page.failed
+        for (const reason of page.reasons ?? []) {
+          if (!problems.includes(reason) && problems.length < 3) problems.push(reason)
+        }
         setHandingOver({ checked: total.checked, sent: total.sent })
         if (page.done || page.cursor === null) break
         cursor = page.cursor
@@ -258,6 +262,9 @@ export default function AccountingView({ rows, uid }: Props) {
         `${total.checked} Mails geprüft, ${total.sent} ans Rechnungsprogramm übergeben` +
           (total.failed > 0 ? `, ${total.failed} fehlgeschlagen.` : '.'),
       )
+      // Der Grund gehört in die Oberfläche, nicht nur ins Server-Protokoll:
+      // „13 fehlgeschlagen“ allein lässt einen ratlos zurück.
+      if (problems.length > 0) setError(problems.join(' '))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Übergabe fehlgeschlagen')
     } finally {
