@@ -155,7 +155,14 @@ async function post(payload, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
       error.status = response.status;
       throw error;
     }
-    return true;
+
+    // Auch eine angenommene Übergabe kann etwas zu sagen haben — etwa, dass
+    // die Rechnung ankam, der Beleg aber nicht gespeichert werden konnte.
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return {};
+    }
   } finally {
     clearTimeout(timer);
   }
@@ -182,7 +189,25 @@ async function forwardInvoice(uid, emailId, record, { withAttachments = true } =
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      await post(payload);
+      const answer = await post(payload);
+
+      // Das Rechnungsprogramm nimmt nicht alles: eigene Ausgangsrechnungen
+      // gehören nicht in die Eingangsbuchhaltung. Dann ist die Übergabe
+      // gelungen, gezählt wird sie aber als übersprungen — sonst stünde im
+      // Bericht eine Zahl, die es drüben gar nicht gibt.
+      if (typeof answer?.skipped === "string" && answer.skipped !== "") {
+        return {
+          outcome: "skipped",
+          ...(typeof answer.problem === "string" && answer.problem !== ""
+            ? { reason: answer.problem.slice(0, 300) }
+            : {}),
+        };
+      }
+
+      // Übernommen, aber mit Vorbehalt: der Grund gehört trotzdem angezeigt.
+      if (typeof answer?.problem === "string" && answer.problem !== "") {
+        return { outcome: "sent", reason: answer.problem.slice(0, 300) };
+      }
       return { outcome: "sent" };
     } catch (error) {
       const status = error?.status;
@@ -284,13 +309,14 @@ const syncAccounting = onCall({ timeoutSeconds: 540, memory: "1GiB" }, async (re
   for (const [emailId, record] of entries) {
     const { outcome, reason } = await forwardInvoice(uid, emailId, record);
     if (outcome === "sent") report.sent += 1;
-    else if (outcome === "failed") {
-      report.failed += 1;
-      // Drei verschiedene Gründe reichen; hundertmal derselbe hilft niemandem.
-      if (reason !== undefined && !report.reasons.includes(reason) && report.reasons.length < 3) {
-        report.reasons.push(reason);
-      }
-    } else report.skipped += 1;
+    else if (outcome === "failed") report.failed += 1;
+    else report.skipped += 1;
+
+    // Drei verschiedene Gründe reichen; hundertmal derselbe hilft niemandem.
+    // Auch bei „sent": dann steht dort, was trotz Übernahme fehlt.
+    if (reason !== undefined && !report.reasons.includes(reason) && report.reasons.length < 3) {
+      report.reasons.push(reason);
+    }
   }
 
   return report;
