@@ -143,7 +143,11 @@ async function post(payload, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
     if (!response.ok) {
       let message = raw.slice(0, 300);
       try {
-        message = JSON.parse(raw).error ?? message;
+        const data = JSON.parse(raw);
+        // Der Hinweis trägt die eigentliche Diagnose — etwa, dass die beiden
+        // Passwörter verschieden lang sind. Ihn wegzuwerfen hieße, wieder nur
+        // „Nicht berechtigt" dastehen zu haben.
+        message = [data.error, data.hint].filter(Boolean).join(" ") || message;
       } catch {
         // Bei Abstürzen liefert Vercel HTML statt JSON.
       }
@@ -203,6 +207,10 @@ async function forwardInvoice(uid, emailId, record, { withAttachments = true } =
 function describe(error) {
   const message = error instanceof Error ? error.message : String(error);
   if (error?.status === 401 || error?.status === 403) {
+    // Die Gegenstelle weiß mehr als wir: sie kennt beide Längen. Sagt sie
+    // etwas dazu, hat das Vorrang vor dem allgemeinen Satz.
+    const detail = message.replace(/^Rechnungsprogramm: /, "").trim();
+    if (detail !== "" && detail !== "Nicht berechtigt.") return detail.slice(0, 300);
     return (
       "Das Rechnungsprogramm hat die Anmeldung abgelehnt. RECHNUNGSPROGRAMM_TOKEN hier " +
       "und HABMAIL_WEBHOOK_TOKEN dort müssen zeichengenau gleich sein — und beide Seiten " +
