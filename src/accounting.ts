@@ -7,6 +7,7 @@ import {
   type Company,
   type CompanyMatch,
 } from './companies'
+import { ownInvoiceReason } from './ownInvoices'
 import type { EmailRow } from './types'
 
 /**
@@ -15,6 +16,12 @@ import type { EmailRow } from './types'
  * Maßgeblich ist `period` (YYYY-MM) — beim Ablegen aus dem Rechnungsdatum
  * gebildet, hilfsweise aus dem Eingang. Für den Steuerberater zählt das
  * Rechnungsdatum, nicht wann die Mail zufällig ankam.
+ *
+ * Nicht enthalten sind die eigenen Ausgangsrechnungen: was die eigene Firma
+ * selbst ausgestellt hat, ist keine Verbindlichkeit und darf weder in der
+ * Summe noch im Stapel für den Steuerberater auftauchen. Wer sie sehen will,
+ * bekommt sie über `ownOutgoingInvoices` — samt dem Grund, warum sie hier
+ * fehlen (siehe `ownInvoices.ts`).
  */
 
 export type InvoiceEntry = {
@@ -77,6 +84,24 @@ export type MonthGroup = {
 
 function isAccounting(row: EmailRow): boolean {
   return ACCOUNTING_CATEGORIES.includes(row.categoryId)
+}
+
+/** Eine aussortierte eigene Rechnung — mit dem Satz, der das erklärt. */
+export type OwnInvoice = { row: EmailRow; reason: string }
+
+/**
+ * Die eigenen Ausgangsrechnungen, die deshalb nicht in der Buchhaltung stehen.
+ * Neueste zuerst; die Oberfläche zeigt sie als eigenen Block, damit niemand
+ * eine Rechnung für verschwunden hält.
+ */
+export function ownOutgoingInvoices(rows: EmailRow[], companies: Company[] = []): OwnInvoice[] {
+  const own: OwnInvoice[] = []
+  for (const row of rows) {
+    if (!isAccounting(row)) continue
+    const reason = ownInvoiceReason(row, companies)
+    if (reason !== null) own.push({ row, reason })
+  }
+  return own.sort((a, b) => b.row.receivedAt.localeCompare(a.row.receivedAt))
 }
 
 function entryDate(row: EmailRow): string {
@@ -164,6 +189,8 @@ export function groupInvoicesByMonth(rows: EmailRow[], companies: Company[] = []
 
   for (const row of rows) {
     if (!isAccounting(row)) continue
+    // Eigene Ausgangsrechnungen zahlt der Kunde, nicht wir.
+    if (ownInvoiceReason(row, companies) !== null) continue
     const period = row.period ?? entryDate(row).slice(0, 7)
     if (period === '') continue
     const entry = toEntry(row, companies)

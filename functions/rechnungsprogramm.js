@@ -6,7 +6,7 @@
  * `/api/habmail-invoice` des Rechnungsprogramms. Dort entsteht daraus eine
  * Eingangsrechnung.
  *
- * Zwei Dinge sind dabei wichtig:
+ * Drei Dinge sind dabei wichtig:
  *
  *   - **Nur ein Benutzer.** HabMail bedient mehrere Firmen. Ohne die
  *     ausdrücklich konfigurierte Kennung (`RECHNUNGSPROGRAMM_UID`) wird gar
@@ -15,12 +15,18 @@
  *   - **Nichts darf am Abholen hängen.** Scheitert die Übergabe, wird das
  *     protokolliert und der Lauf geht weiter. Die Mail ist gespeichert; sie
  *     lässt sich jederzeit nachreichen (`syncAccounting`).
+ *   - **Keine eigenen Ausgangsrechnungen.** Was die eigene Firma selbst
+ *     ausgestellt hat, ist keine Verbindlichkeit und darf drüben nicht als
+ *     offene Rechnung stehen. Solche Mails gehen als solche gekennzeichnet
+ *     hinüber (`ownInvoice`), damit dort auch ein früher übernommener Bestand
+ *     wieder verschwindet — siehe `ownInvoices.js`.
  */
 
 const admin = require("firebase-admin");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const { ACCOUNTING_CATEGORIES } = require("./categories");
+const { ownInvoiceReasonFor } = require("./ownInvoices");
 const { userEmailsPath } = require("./paths");
 
 const DEFAULT_TIMEOUT_MS = 25_000;
@@ -95,7 +101,13 @@ function attachmentsFor(record) {
   return out;
 }
 
-function buildPayload(emailId, record, { withAttachments }) {
+/**
+ * @param {object} options
+ * @param {boolean} options.withAttachments Belege mitschicken?
+ * @param {string|null} [options.ownReason] Gesetzt, wenn die eigene Firma diese
+ *   Rechnung ausgestellt hat — dann übernimmt sie das Rechnungsprogramm nicht.
+ */
+function buildPayload(emailId, record, { withAttachments, ownReason = null }) {
   const invoice = record.invoice ?? {};
   const payload = {
     mailId: emailId,
@@ -118,6 +130,7 @@ function buildPayload(emailId, record, { withAttachments }) {
 
   if (typeof record.mailboxId === "string") payload.mailboxId = record.mailboxId;
   if (typeof record.messageId === "string") payload.messageId = record.messageId;
+  if (ownReason !== null) payload.ownInvoice = { reason: ownReason.slice(0, 300) };
   if (withAttachments) payload.attachments = attachmentsFor(record);
 
   return payload;
@@ -185,7 +198,22 @@ async function post(payload, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
 async function forwardInvoice(uid, emailId, record, { withAttachments = true } = {}) {
   if (!shouldForward(uid, record)) return { outcome: "skipped" };
 
-  const payload = buildPayload(emailId, record, { withAttachments });
+  /*
+   * Eigene Ausgangsrechnungen werden gemeldet statt verschwiegen.
+   *
+   * Naheliegend wäre, sie hier einfach nicht zu schicken. Dann bliebe drüben
+   * aber stehen, was vor dieser Prüfung schon einmal übergeben wurde — und
+   * genau das ist der Bestand, den es aufzuräumen gilt. Also geht die Rechnung
+   * hinüber, aber als das, was sie ist: das Rechnungsprogramm nimmt sie nicht
+   * auf und entfernt eine früher übernommene wieder. Die Belege bleiben hier;
+   * für eine Rechnung, die drüben nicht entsteht, wären sie nur Ballast.
+   */
+  const ownReason = await ownInvoiceReasonFor(uid, record);
+
+  const payload = buildPayload(emailId, record, {
+    withAttachments: withAttachments && ownReason === null,
+    ownReason,
+  });
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {

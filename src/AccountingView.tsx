@@ -6,7 +6,9 @@ import {
   formatCents,
   formatDate,
   groupInvoicesByMonth,
+  ownOutgoingInvoices,
   type CompanyGroup,
+  type OwnInvoice,
   type InvoiceEntry,
   type MonthGroup,
 } from './accounting'
@@ -57,6 +59,12 @@ export default function AccountingView({ rows, uid }: Props) {
   )
 
   const allGroups = useMemo(() => groupInvoicesByMonth(rows, companies), [rows, companies])
+  /**
+   * Was nicht in der Buchhaltung steht, weil es die eigene Firma ausgestellt
+   * hat. Es wird gezeigt, nicht verschwiegen: sonst sucht man eine Rechnung,
+   * die man selbst geschrieben hat, und hält sie für verloren.
+   */
+  const ownInvoices = useMemo(() => ownOutgoingInvoices(rows, companies), [rows, companies])
   const groups = useMemo(
     () => filterByCompany(allGroups, companyFilter),
     [allGroups, companyFilter],
@@ -311,7 +319,8 @@ export default function AccountingView({ rows, uid }: Props) {
 
   if (groups.length === 0) {
     return (
-      <div className="card">
+      <div className="accounting">
+        <div className="card">
         <h2>Buchhaltung</h2>
         <p className="muted">
           Noch keine Rechnungen. Sobald eine Mail als <strong>Rechnung</strong> oder{' '}
@@ -337,6 +346,9 @@ export default function AccountingView({ rows, uid }: Props) {
             ? 'Mails neu auswerten'
             : `Werte aus … ${reanalyzing.checked} geprüft`}
         </button>
+        </div>
+        {/* Sind alle Rechnungen eigene, wäre „noch keine Rechnungen" irreführend. */}
+        <OwnInvoiceBlock invoices={ownInvoices} />
       </div>
     )
   }
@@ -390,6 +402,18 @@ export default function AccountingView({ rows, uid }: Props) {
         </div>
       ) : null}
 
+      {/*
+        Ohne angelegte Firma fehlt der Maßstab, an dem sich eine eigene
+        Ausgangsrechnung erkennen lässt — sie stünde hier als offener Posten.
+      */}
+      {companies.length === 0 ? (
+        <p className="muted small">
+          Noch keine Firma angelegt. Unter <strong>Firmen</strong> die eigene
+          eintragen: daran erkennt die Buchhaltung Rechnungen, die ihr selbst
+          ausgestellt habt — die gehören nicht hierher.
+        </p>
+      ) : null}
+
       {error ? <p className="mailbox-error">{error}</p> : null}
       {reanalyzed ? <p className="muted small">{reanalyzed}</p> : null}
 
@@ -417,9 +441,12 @@ export default function AccountingView({ rows, uid }: Props) {
         <p className="muted small">
           Doppelt schicken schadet nicht: drüben entscheidet die Mail-Kennung,
           es entsteht keine zweite Rechnung. Was dort bereits bearbeitet wurde
-          (Status, Freigabe, Notizen), bleibt unangetastet.
+          (Status, Freigabe, Notizen), bleibt unangetastet. Eigene
+          Ausgangsrechnungen gehen nicht mit hinüber.
         </p>
       </section>
+
+      <OwnInvoiceBlock invoices={ownInvoices} />
 
       {missingAmounts > 0 || reanalyzing !== null ? (
         <section className="card reanalyze-block">
@@ -801,5 +828,40 @@ function InvoiceRow({ entry, editing, onEdit, onCancel, onSave, onRelease }: Row
         </button>
       )}
     </li>
+  )
+}
+
+/** Der Block „eigene Ausgangsrechnungen" — in beiden Ansichten derselbe. */
+function OwnInvoiceBlock({ invoices }: { invoices: OwnInvoice[] }) {
+  if (invoices.length === 0) return null
+  return (
+    <section className="card reanalyze-block">
+      <p className="small">
+        <strong>
+          {invoices.length} eigene Rechnung{invoices.length === 1 ? '' : 'en'} nicht in der
+          Buchhaltung.
+        </strong>{' '}
+        Diese Rechnungen hat die eigene Firma selbst ausgestellt — bezahlt
+        werden sie vom Kunden. Sie zählen deshalb nicht als offener Posten,
+        gehen nicht in die Monatssumme ein und nicht in den Stapel für den
+        Steuerberater.
+      </p>
+      <ul className="own-invoice-list">
+        {invoices.slice(0, 10).map(({ row, reason }) => (
+          <li key={row.id}>
+            <strong>{row.invoice?.vendor ?? row.senderName ?? row.sender}</strong>
+            {row.subject ? ` — ${row.subject.slice(0, 60)}` : ''}
+            <span className="muted small"> · {reason}</span>
+          </li>
+        ))}
+      </ul>
+      {invoices.length > 10 ? (
+        <p className="muted small">… und {invoices.length - 10} weitere.</p>
+      ) : null}
+      <p className="muted small">
+        Steht hier eine fremde Rechnung, die sehr wohl bezahlt werden muss, ist
+        der Firmenname zu weit gefasst — unter „Firmen" nachschärfen.
+      </p>
+    </section>
   )
 }

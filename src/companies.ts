@@ -30,9 +30,16 @@ export type Company = {
   mailboxIds: string[]
   /**
    * Zusätzliche Schreibweisen des Firmennamens, wie sie auf Rechnungen stehen
-   * — „Lauffer Bau", „Lauffer Bau GmbH & Co. KG". Nur für Weg 2.
+   * — „Lauffer Bau", „Lauffer Bau GmbH & Co. KG". Für Weg 2 und dafür, eigene
+   * Ausgangsrechnungen zu erkennen (siehe `ownInvoices.ts`).
    */
   matchTerms: string[]
+  /**
+   * Eigene Absenderadressen dieser Firma — „@lauffer-bau.de" oder
+   * „buchhaltung@lauffer-bau.de". Kommt eine Rechnung von dort und nennt
+   * keinen anderen Aussteller, ist es eine eigene Ausgangsrechnung.
+   */
+  ownSenders: string[]
 }
 
 /** Was angezeigt wird, wenn sich eine Rechnung keiner Firma zuordnen lässt. */
@@ -85,6 +92,7 @@ export function parseCompanies(raw: unknown): Company[] {
       name,
       mailboxIds: toStringList(entry.mailboxIds),
       matchTerms: toStringList(entry.matchTerms),
+      ownSenders: toStringList(entry.ownSenders),
     })
   }
 

@@ -234,6 +234,37 @@ eigenen Bereich.
 `pdf-lib` wird erst beim Klick geladen (eigener Chunk, ~420 kB); der Start der
 App bleibt davon unberührt.
 
+### Eigene Ausgangsrechnungen bleiben draußen
+
+Eine Rechnung, die die **eigene Firma ausgestellt** hat, ist keine
+Verbindlichkeit: bezahlt wird sie vom Kunden. Als offener Posten wäre sie
+falsch — und sie kommt leichter herein, als man denkt, etwa wenn die eigene
+Rechnung intern noch einmal zur Korrektur herumgeschickt wird.
+
+Solche Rechnungen zählen deshalb **nicht** zur Summe, stehen **nicht** im Stapel
+für den Steuerberater und gehen **nicht** ans Rechnungsprogramm. Sie
+verschwinden aber auch nicht klammheimlich: über der Monatsliste steht, welche
+aussortiert wurden und warum ([`src/ownInvoices.ts`](src/ownInvoices.ts)).
+
+Erkannt werden sie am **Aussteller**, nicht am Absender:
+
+1. `invoice.vendor` — der Aussteller aus dem Beleg — passt auf eine der eigenen
+   Firmen (Name oder *weitere Schreibweisen*, verglichen ohne Rechtsform und
+   Umlaute).
+2. Steht **kein** Aussteller im Beleg, zählt hilfsweise der Absender: eine
+   hinterlegte *eigene Absenderadresse* der Firma (`@meine-firma.de` gilt für
+   die ganze Domain) oder die Adresse des Postfachs, in dem die Mail liegt.
+
+Die Reihenfolge ist Absicht. Eine **weitergeleitete Lieferantenrechnung** kommt
+ebenfalls „von uns", muss aber sehr wohl bezahlt werden — steht ein fremder
+Aussteller im Beleg, bleibt die Rechnung deshalb in der Buchhaltung.
+
+Maßstab sind allein die unter **Buchhaltung → Firmen** gepflegten Firmen; nichts
+ist fest verdrahtet. Für Fliesen Reislöhner ist eine Rechnung von Fliesen
+Reislöhner eine eigene, für Lauffer Bau eine von Lauffer Bau — und jeweils
+umgekehrt eine ganz normale Eingangsrechnung. **Ohne angelegte Firma greift die
+Erkennung nicht**; darauf weist die Buchhaltung dann hin.
+
 ### Übergabe ans Rechnungsprogramm
 
 Rechnungen und Mahnungen können weiter in die Buchhaltung des
@@ -246,6 +277,13 @@ der Buchhaltung den Knopf **Buchhaltung übergeben**; er arbeitet seitenweise
 und lässt sich jederzeit wiederholen — drüben ist die Mail-Kennung zugleich die
 Dokument-Kennung, es entsteht also nichts doppelt. Was dort schon bearbeitet
 wurde (Status, Freigabe, Kategorie, Notizen), bleibt dabei unangetastet.
+
+Eigene Ausgangsrechnungen werden dabei als solche gemeldet (`ownInvoice` im
+Aufruf) statt verschwiegen: das Rechnungsprogramm legt sie nicht an und
+**entfernt eine früher übernommene wieder**, solange dort niemand daran
+gearbeitet hat. Ein Durchgang mit **Buchhaltung übergeben** räumt den Bestand
+also von selbst auf. Die Belege bleiben in diesem Fall hier — für eine
+Rechnung, die drüben nicht entsteht, wären sie nur Ballast.
 
 Eingerichtet wird das über drei Werte in den Functions (im Deploy-Workflow als
 Secret bzw. Variables, siehe Kopf von `.github/workflows/firebase-deploy.yml`):
@@ -412,6 +450,8 @@ Woran erkennt HabMail die Firma? Zwei Wege, in dieser Reihenfolge
 
 Für Weg 2 gibt es je Firma *weitere Schreibweisen* — „Lauffer Bau", „Lauffer Bau
 GmbH & Co. KG". Verglichen wird ohne Rechtsform, Umlaute und Groß-/Kleinschreibung.
+Dieselben Schreibweisen erkennen die eigenen Ausgangsrechnungen wieder (siehe
+oben); daneben lassen sich je Firma *eigene Absenderadressen* hinterlegen.
 **Passen zwei Firmen, wird gar nichts zugeordnet**: eine falsche Firma in der
 Steuer ist schlimmer als eine, die man selbst zuordnet.
 

@@ -16,6 +16,10 @@ import { parseCompanies, type Company } from './companies'
  * landen, gibt es den zweiten Weg: dieses Postfach keiner Firma zuordnen, dann
  * entscheidet der Rechnungsempfänger aus dem Beleg. Die Schreibweisen dafür
  * stehen unter „Weitere Schreibweisen“.
+ *
+ * Die Liste sagt zugleich, welche Firmen die eigenen sind. Daran erkennt die
+ * Buchhaltung eigene Ausgangsrechnungen und lässt sie draußen — siehe
+ * `ownInvoices.ts`.
  */
 
 type Props = {
@@ -117,6 +121,11 @@ export default function CompanySettings({ uid, mailboxIds, onClose }: Props) {
           wird über das Postfach, in dem die Mail ankam — das ist verlässlich
           und kostet nichts.
         </p>
+        <p className="muted small">
+          Wer hier steht, gilt als eigene Firma: Rechnungen, die eine dieser
+          Firmen selbst ausgestellt hat, bleiben aus der Buchhaltung heraus.
+          Bezahlt werden sie vom Kunden — als offener Posten wären sie falsch.
+        </p>
 
         {error ? <p className="mailbox-error">{error}</p> : null}
 
@@ -187,8 +196,35 @@ export default function CompanySettings({ uid, mailboxIds, onClose }: Props) {
                     }
                   />
                   <span className="muted small">
-                    Nur nötig, wenn ein Postfach Rechnungen mehrerer Firmen
-                    bekommt. Dann entscheidet der Rechnungsempfänger im Beleg.
+                    Nötig, wenn ein Postfach Rechnungen mehrerer Firmen bekommt
+                    — dann entscheidet der Rechnungsempfänger im Beleg. Die
+                    Schreibweisen erkennen außerdem die eigenen Rechnungen
+                    dieser Firma wieder.
+                  </span>
+                </label>
+
+                <label className="company-field">
+                  <span className="account-section-label">
+                    Eigene Absenderadressen (mit Komma getrennt)
+                  </span>
+                  <input
+                    type="text"
+                    value={company.ownSenders.join(', ')}
+                    placeholder="@lauffer-bau.de, buchhaltung@lauffer-bau.de"
+                    onChange={(e) =>
+                      void patch(company, {
+                        ownSenders: e.target.value
+                          .split(',')
+                          .map((t) => t.trim())
+                          .filter((t) => t !== '')
+                          .slice(0, 10),
+                      })
+                    }
+                  />
+                  <span className="muted small">
+                    Ein führendes @ steht für die ganze Domain. Kommt eine
+                    Rechnung von hier und nennt keinen anderen Aussteller, ist
+                    es eine eigene Ausgangsrechnung.
                   </span>
                 </label>
 

@@ -2230,6 +2230,20 @@ html[data-theme='dark'] .pill-paid {
   margin-top: 0;
 }
 
+/* Die aussortierten eigenen Rechnungen: eine Aufzählung ohne Punkte, damit
+   der Block wie ein Hinweis wirkt und nicht wie eine zweite Buchhaltung. */
+.own-invoice-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+}
+
+.own-invoice-list li {
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--border);
+}
+
 .suggestion-list,
 .suggestion-candidates {
   list-style: none;
