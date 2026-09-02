@@ -23,11 +23,16 @@ export type ManagedUser = {
   adminFromEnv?: boolean
 }
 
-function callable<Req, Res>(name: string) {
+/**
+ * `options.timeout` ist kein Beiwerk: die Callable im Browser gibt sonst nach
+ * 70 Sekunden mit „deadline exceeded" auf, ganz gleich, wie lange die Funktion
+ * selbst laufen dürfte. Genau daran ist der erste Nachlauf gescheitert.
+ */
+function callable<Req, Res>(name: string, options?: { timeout?: number }) {
   return async (payload: Req): Promise<Res> => {
     const fns = getFunctions(getFirebaseApp(), REGION)
     try {
-      const result = await httpsCallable<Req, Res>(fns, name)(payload)
+      const result = await httpsCallable<Req, Res>(fns, name, options)(payload)
       return result.data
     } catch (e) {
       // Callable-Fehler tragen die eigentliche Meldung in `message`.
@@ -201,7 +206,34 @@ export type ImportReport = {
 export const importOlderMails = callable<
   { since: string; mailboxId?: string; allAttachments?: boolean },
   ImportReport
->('importOlderMails')
+>('importOlderMails', { timeout: 300_000 })
+
+/** Anhalten — auch den Nachlauf, der ohne offenes Fenster weiterläuft. */
+export const stopOlderImport = callable<Record<string, never>, { ok: boolean }>(
+  'stopOlderImport',
+)
+
+/**
+ * Der Auftrag, wie er in der Datenbank steht. Geschrieben vom Server, hier nur
+ * gelesen — daran hängt die Anzeige, und daran läuft der Nachlauf weiter, auch
+ * wenn niemand zusieht.
+ */
+export type ImportStatus = {
+  running: boolean
+  since: string
+  allAttachments?: boolean
+  startedAt?: number
+  updatedAt?: number
+  finishedAt?: number
+  stored?: number
+  skipped?: number
+  failed?: number
+  attachmentsDropped?: number
+  remaining?: number
+  stopped?: boolean
+  trigger?: 'manuell' | 'geplant'
+  error?: string
+}
 
 /** Ergebnis einer Seite beim Neu-Auswerten. */
 export type ReanalyzeReport = {

@@ -318,6 +318,13 @@ const importOlderMails = onCall({ timeoutSeconds: 540, memory: "512MiB" }, async
   }
 });
 
+/** Den Nachlauf anhalten — auch den, der im Hintergrund weiterläuft. */
+const stopOlderImport = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Nicht angemeldet.");
+  return importer.stopImport(uid);
+});
+
 /** Damit die Oberfläche weiß, ob sie die Verwaltung überhaupt anbieten soll. */
 const whoAmI = onCall(async (request) => {
   const uid = request.auth?.uid;
@@ -334,6 +341,7 @@ module.exports = {
   pollNow,
   countOlderMails,
   importOlderMails,
+  stopOlderImport,
   whoAmI,
   isAdmin,
 };

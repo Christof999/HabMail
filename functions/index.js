@@ -13,6 +13,7 @@ if (!admin.apps.length) {
 
 const { pollAllMailboxes } = require("./poll");
 const users = require("./users");
+const { continueImports } = require("./import");
 
 /**
  * Benutzerverwaltung. Konten legt ein Administrator an — es gibt bewusst
@@ -31,6 +32,7 @@ exports.pollNow = users.pollNow;
  */
 exports.countOlderMails = users.countOlderMails;
 exports.importOlderMails = users.importOlderMails;
+exports.stopOlderImport = users.stopOlderImport;
 exports.whoAmI = users.whoAmI;
 
 /** Rechnungsdaten korrigieren — serverseitig, damit Mail und Index gleich bleiben. */
@@ -208,6 +210,18 @@ exports.pollMailboxes = onSchedule(
   async () => {
     const report = await pollAllMailboxes({ trigger: "geplant" });
     console.log("Abholen abgeschlossen:", JSON.stringify(report));
+
+    /*
+     * Und danach ein Stück Altbestand, falls jemand einen Nachlauf angefordert
+     * hat. Der gehört hierher und nicht in den Browser: 1400 Mails brauchen
+     * ein bis zwei Stunden, und ein geschlossenes Fenster darf das nicht
+     * abbrechen. Was der Nutzer bei offener Oberfläche auslöst, kommt oben
+     * drauf — dann geht es schneller.
+     */
+    const imports = await continueImports();
+    if (imports.length > 0) {
+      console.log("Nachlauf fortgesetzt:", JSON.stringify(imports));
+    }
   },
 );
 

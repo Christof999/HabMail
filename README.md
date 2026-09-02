@@ -223,9 +223,20 @@ Dafür gibt es in *Postfächer* den Abschnitt **Ältere Mails nachholen**:
 1. Datum wählen (z.B. 1. Januar des laufenden Jahres) und **Nachsehen**. Das
    zählt nur — es wird keine einzige Mail übertragen. Angezeigt wird je
    Postfach, wie viele Mails offen sind und wie viele Megabyte das sind.
-2. **Nachholen** startet. Gearbeitet wird von der jüngsten Mail des Zeitraums
-   rückwärts, in Abschnitten von einigen Minuten; der Fortschritt steht
-   daneben. **Anhalten** geht jederzeit, ein neuer Start macht dort weiter.
+2. **Nachholen** startet den Auftrag. Gearbeitet wird von der jüngsten Mail des
+   Zeitraums rückwärts, in kurzen Abschnitten; der Fortschritt steht daneben.
+   **Anhalten** geht jederzeit, ein neuer Start macht dort weiter.
+
+Der Auftrag steht in der Datenbank, nicht im Browser: **das Fenster darf zu.**
+Der Fünf-Minuten-Lauf treibt ihn weiter, bis der Zeitraum durch ist. Wer die
+Oberfläche offen lässt, ist nur schneller fertig, weil dann zusätzlich von dort
+aus gearbeitet wird. Für 1400 Mails ist mit ein bis zwei Stunden zu rechnen —
+die Zeit geht fast vollständig in die KI-Auswertung.
+
+> Ein Abschnitt aus der Oberfläche endet nach 40 Sekunden, und das ist keine
+> Willkür: die Firebase-Callable gibt im Browser nach 70 Sekunden mit
+> „deadline exceeded" auf, ganz gleich, wie lange die Funktion selbst laufen
+> darf. Genau daran ist der erste Lauf gescheitert.
 
 Zwei Dinge sind dabei wichtig:
 

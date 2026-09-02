@@ -14,12 +14,14 @@ import {
 } from './mailboxesApi'
 import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
-import { userPollStatusPath } from './paths'
+import { userImportStatusPath, userPollStatusPath } from './paths'
 import { formatBytes } from './attachments'
 import {
   countOlderMails,
   importOlderMails,
   pollNow,
+  stopOlderImport,
+  type ImportStatus,
   type OlderCountReport,
   type PollReport,
   type PollStatus,
@@ -38,30 +40,41 @@ import {
  * anschließend in der Datenbank, die die App beim Öffnen komplett lädt.
  * Deshalb steht die Zahl vor dem Knopf und nicht dahinter.
  *
- * Geholt wird abschnittweise: ein Aufruf arbeitet einige Minuten, meldet
- * seinen Stand und wird erneut aufgerufen, bis nichts mehr übrig ist. So
- * bleibt der Fortschritt sichtbar, und Abbrechen ist jederzeit möglich.
+ * Der Auftrag selbst steht in der Datenbank, nicht in diesem Fenster. 1400
+ * Mails brauchen ein bis zwei Stunden, überwiegend für die KI-Auswertung —
+ * hinge der Fortschritt am offenen Tab, wäre jedes Schließen ein Abbruch. Der
+ * Fünf-Minuten-Lauf treibt ihn weiter; wer das Fenster offen lässt, ist nur
+ * schneller fertig, weil dann zusätzlich von hier aus gearbeitet wird.
  */
-function OlderMailImport() {
+function OlderMailImport({ uid }: { uid: string }) {
   const [since, setSince] = useState(() => `${new Date().getFullYear()}-01-01`)
   const [allAttachments, setAllAttachments] = useState(false)
   const [count, setCount] = useState<OlderCountReport | null>(null)
   const [counting, setCounting] = useState(false)
-  const [running, setRunning] = useState(false)
+  const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [progress, setProgress] = useState({ stored: 0, skipped: 0, failed: 0, remaining: 0 })
-  const [finished, setFinished] = useState<string | null>(null)
   // Kein State: der laufende Schleifendurchlauf muss den Abbruch sofort sehen,
   // nicht erst beim nächsten Rendern.
   const stop = useRef(false)
 
+  // Der Fortschritt kommt aus der Datenbank, nicht aus dieser Schleife. Nur so
+  // stimmt die Anzeige auch dann, wenn der Nachlauf zwischendurch vom
+  // Fünf-Minuten-Takt weitergetrieben wurde.
+  const [status, setStatus] = useState<ImportStatus | null>(null)
+  useEffect(
+    () =>
+      onValue(ref(getFirebaseDb(), userImportStatusPath(uid)), (snap) => {
+        const value = snap.val()
+        setStatus(value !== null && typeof value === 'object' ? (value as ImportStatus) : null)
+      }),
+    [uid],
+  )
+
   async function look() {
     setError(null)
-    setFinished(null)
     setCounting(true)
     try {
-      const report = await countOlderMails({ since })
-      setCount(report)
+      setCount(await countOlderMails({ since }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
     } finally {
@@ -71,51 +84,37 @@ function OlderMailImport() {
 
   async function start() {
     setError(null)
-    setFinished(null)
-    setRunning(true)
+    setWorking(true)
     stop.current = false
-    const totals = { stored: 0, skipped: 0, failed: 0, remaining: 0 }
-
     try {
       for (;;) {
         const report = await importOlderMails({ since, allAttachments })
-        for (const box of report.mailboxes) {
-          totals.stored += box.stored ?? 0
-          totals.skipped += box.skipped ?? 0
-          totals.failed += box.failed ?? 0
-        }
-        totals.remaining = report.mailboxes.reduce((sum, box) => sum + (box.remaining ?? 0), 0)
-        setProgress({ ...totals })
-
         const failed = report.mailboxes.find((box) => box.error !== undefined)
         if (failed !== undefined) {
           setError(`${failed.mailbox}: ${failed.error}`)
           break
         }
-        if (!report.hasMore) {
-          setFinished(
-            `Fertig. ${totals.stored} Mail${totals.stored === 1 ? '' : 's'} übernommen, ` +
-              `${totals.skipped} waren schon da.`,
-          )
-          break
-        }
-        if (stop.current) {
-          setFinished(
-            `Angehalten. ${totals.stored} übernommen, noch ${totals.remaining} offen — ` +
-              'ein neuer Start macht dort weiter.',
-          )
-          break
-        }
+        if (!report.hasMore || stop.current) break
       }
       await look()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
     } finally {
-      setRunning(false)
+      setWorking(false)
+    }
+  }
+
+  async function halt() {
+    stop.current = true
+    try {
+      await stopOlderImport({})
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
     }
   }
 
   const remaining = count?.remaining ?? 0
+  const laufend = status?.running === true
 
   return (
     <section className="older-import">
@@ -132,10 +131,15 @@ function OlderMailImport() {
             type="date"
             value={since}
             onChange={(e) => setSince(e.target.value)}
-            disabled={running}
+            disabled={working || laufend}
           />
         </label>
-        <button type="button" className="ghost" disabled={counting || running} onClick={() => void look()}>
+        <button
+          type="button"
+          className="ghost"
+          disabled={counting || working}
+          onClick={() => void look()}
+        >
           {counting ? 'Zähle …' : 'Nachsehen'}
         </button>
       </div>
@@ -143,9 +147,7 @@ function OlderMailImport() {
       {count !== null ? (
         <div className="older-import-count">
           {remaining === 0 ? (
-            <p className="muted small">
-              Nichts nachzuholen — aus diesem Zeitraum ist alles da.
-            </p>
+            <p className="muted small">Nichts nachzuholen — aus diesem Zeitraum ist alles da.</p>
           ) : (
             <>
               <p className="small">
@@ -171,7 +173,7 @@ function OlderMailImport() {
                   type="checkbox"
                   checked={allAttachments}
                   onChange={(e) => setAllAttachments(e.target.checked)}
-                  disabled={running}
+                  disabled={working || laufend}
                 />
                 Alle Anhänge übernehmen, nicht nur die von Rechnungen und Mahnungen
               </label>
@@ -188,19 +190,25 @@ function OlderMailImport() {
         </div>
       ) : null}
 
-      {running ? (
+      {status !== null ? (
         <p className="small">
-          Läuft … {progress.stored} übernommen, {progress.skipped} schon vorhanden
-          {progress.failed > 0 ? `, ${progress.failed} fehlgeschlagen` : ''}
-          {progress.remaining > 0 ? ` · noch ${progress.remaining} offen` : ''}
+          {laufend ? 'Läuft' : status.stopped === true ? 'Angehalten' : 'Zuletzt'}:{' '}
+          {status.stored ?? 0} übernommen, {status.skipped ?? 0} schon vorhanden
+          {(status.failed ?? 0) > 0 ? `, ${status.failed} fehlgeschlagen` : ''}
+          {(status.remaining ?? 0) > 0 ? ` · noch ${status.remaining} offen` : ''}
+          {laufend && !working
+            ? ' · läuft im Hintergrund weiter, auch ohne offenes Fenster'
+            : ''}
         </p>
       ) : null}
-      {finished !== null ? <p className="small">{finished}</p> : null}
+      {status?.error !== undefined ? (
+        <p className="mailbox-error small">{status.error}</p>
+      ) : null}
       {error !== null ? <p className="mailbox-error small">{error}</p> : null}
 
       <div className="older-import-row">
-        {running ? (
-          <button type="button" className="ghost" onClick={() => (stop.current = true)}>
+        {working || laufend ? (
+          <button type="button" className="ghost" onClick={() => void halt()}>
             Anhalten
           </button>
         ) : (
@@ -208,6 +216,11 @@ function OlderMailImport() {
             {remaining === 0 ? 'Nachholen' : `${remaining} Mails nachholen`}
           </button>
         )}
+        {laufend && !working ? (
+          <button type="button" className="ghost" onClick={() => void start()}>
+            Hier weitermachen
+          </button>
+        ) : null}
       </div>
     </section>
   )
@@ -547,7 +560,7 @@ export default function MailboxSettings({ user, onClose }: Props) {
 
         <AutomaticPollStatus uid={user.uid} />
 
-        <OlderMailImport />
+        <OlderMailImport uid={user.uid} />
 
         {pollReport !== null && pollReport.mailboxes.length > 0 ? (
           <ul className="poll-report">

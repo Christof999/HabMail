@@ -28,7 +28,7 @@ const {
   listReceivableMailboxes,
 } = require("./emailproxy");
 const { messageExists, storeMessage } = require("./store");
-const { userImportStatusPath } = require("./paths");
+const { USER_DIRECTORY_PATH, userImportStatusPath } = require("./paths");
 
 /**
  * Mails je Stapel. Klein gehalten, weil die Gegenstelle 30 Sekunden Zeit hat
@@ -38,11 +38,19 @@ const CHUNK_SIZE = 10;
 /** Gleichzeitige Gemini-Aufrufe — wie beim Abholen. */
 const ANALYSIS_CONCURRENCY = 3;
 /**
- * Wie lange ein Aufruf arbeitet, bevor er das Feld räumt. Die Funktion darf
- * 540 Sekunden; der Abstand ist der Platz für den letzten Stapel und das
- * Schreiben des Berichts.
+ * Wie lange ein Abschnitt arbeitet.
+ *
+ * Aus der Oberfläche heraus kurz — und das ist kein Geschmack, sondern eine
+ * harte Grenze: die Firebase-Callable im Browser gibt nach 70 Sekunden auf
+ * ("deadline exceeded"), egal wie lange die Funktion selbst laufen dürfte.
+ * Genau daran ist der erste echte Lauf gescheitert. Ein Abschnitt endet
+ * deshalb weit davor, meldet seinen Stand und wird erneut aufgerufen.
+ *
+ * Im Hintergrund darf er länger: dort taktet der Fünf-Minuten-Lauf, und
+ * niemand wartet vor dem Bildschirm.
  */
-const TIME_BUDGET_MS = 420_000;
+const UI_SLICE_MS = 40_000;
+const BACKGROUND_SLICE_MS = 240_000;
 
 /**
  * Bei welchen Kategorien der Anhang mitkommt.
@@ -151,7 +159,14 @@ async function importMailbox(uid, box, since, deadline, options) {
     done: false,
   };
 
-  while (Date.now() < deadline) {
+  /*
+   * Mindestens ein Stapel je Aufruf, auch wenn das Zeitbudget schon knapp ist:
+   * eine Runde ohne jeden Stapel bringt den Auftrag nicht voran, meldet aber
+   * „noch nicht fertig" — und der Nachlauf drehte sich im Kreis.
+   */
+  let erster = true;
+  while (erster || Date.now() < deadline) {
+    erster = false;
     const batch = await fetchOlderMessages(box.id, since, CHUNK_SIZE);
     summary.total = batch.total;
     summary.remaining = batch.remaining;
@@ -218,26 +233,42 @@ async function importMailbox(uid, box, since, deadline, options) {
   return summary;
 }
 
+/** Den laufenden Auftrag lesen. */
+async function readJob(uid) {
+  const snapshot = await admin.database().ref(userImportStatusPath(uid)).get();
+  const value = snapshot.val();
+  return value !== null && typeof value === "object" ? value : null;
+}
+
 /**
- * Einen Abschnitt Nachlauf abarbeiten — über alle Postfächer des Benutzers.
+ * Einen Abschnitt abarbeiten — über alle Postfächer des Benutzers.
  *
- * `hasMore` sagt der Oberfläche, ob sie noch einmal aufrufen soll. Damit
- * bleibt der Fortschritt sichtbar, statt dass ein einzelner Aufruf minutenlang
- * schweigt und am Zeitlimit stirbt.
+ * Der Auftrag steht in der Datenbank, nicht im Browser. Das ist der Kern:
+ * 1400 Mails brauchen ein bis zwei Stunden, überwiegend für die
+ * KI-Auswertung. Hinge der Fortschritt am offenen Fenster, wäre jeder
+ * geschlossene Tab ein Abbruch. So macht der Fünf-Minuten-Lauf weiter, und
+ * das Fenster ist nur noch Anzeige — und Beschleuniger, solange es offen ist.
  */
-async function importOlderMails(uid, since, mailboxId, options = {}) {
+async function runImportSlice(uid, { budgetMs, trigger }) {
+  const job = await readJob(uid);
+  if (job === null || job.running !== true) {
+    return { ok: true, running: false, hasMore: false, hint: "Kein Nachlauf angefordert." };
+  }
+
   const startedAt = Date.now();
-  const deadline = startedAt + TIME_BUDGET_MS;
-  const boxes = await ownMailboxes(uid, mailboxId);
+  const deadline = startedAt + budgetMs;
+  const since = job.since;
+  const options = { allAttachments: job.allAttachments === true };
+  const boxes = await ownMailboxes(uid, job.mailboxId ?? undefined);
 
   if (boxes.length === 0) {
-    return {
-      ok: true,
-      since,
-      mailboxes: [],
-      hasMore: false,
-      hint: "Für dich ist kein empfangsfähiges Postfach hinterlegt.",
-    };
+    await writeStatus(uid, {
+      ...job,
+      running: false,
+      updatedAt: Date.now(),
+      error: "Für dich ist kein empfangsfähiges Postfach hinterlegt.",
+    });
+    return { ok: false, running: false, hasMore: false, mailboxes: [] };
   }
 
   const results = [];
@@ -257,24 +288,102 @@ async function importOlderMails(uid, since, mailboxId, options = {}) {
     }
   }
 
-  const hasMore = results.some((result) => !result.done && result.error === undefined);
+  const failure = results.find((result) => result.error !== undefined);
+  const hasMore = failure === undefined && results.some((result) => !result.done);
 
   const status = {
-    at: startedAt,
-    finishedAt: Date.now(),
-    since,
+    ...job,
     running: hasMore,
-    ok: results.every((result) => result.error === undefined && result.failed === 0),
-    stored: results.reduce((sum, r) => sum + (r.stored ?? 0), 0),
-    skipped: results.reduce((sum, r) => sum + (r.skipped ?? 0), 0),
-    attachmentsDropped: results.reduce((sum, r) => sum + (r.attachmentsDropped ?? 0), 0),
-    failed: results.reduce((sum, r) => sum + (r.failed ?? 0), 0),
+    trigger,
+    updatedAt: Date.now(),
+    // Aufsummiert über alle Abschnitte: der Nutzer will wissen, wie weit der
+    // ganze Auftrag ist, nicht was die letzten vierzig Sekunden gebracht haben.
+    stored: (job.stored ?? 0) + results.reduce((sum, r) => sum + (r.stored ?? 0), 0),
+    skipped: (job.skipped ?? 0) + results.reduce((sum, r) => sum + (r.skipped ?? 0), 0),
+    failed: (job.failed ?? 0) + results.reduce((sum, r) => sum + (r.failed ?? 0), 0),
+    attachmentsDropped:
+      (job.attachmentsDropped ?? 0) +
+      results.reduce((sum, r) => sum + (r.attachmentsDropped ?? 0), 0),
     remaining: results.reduce((sum, r) => sum + (r.remaining ?? 0), 0),
     mailboxes: results,
+    ...(failure === undefined ? {} : { error: failure.error }),
+    ...(hasMore ? {} : { finishedAt: Date.now() }),
   };
   await writeStatus(uid, status);
 
-  return { ok: status.ok, since, mailboxes: results, hasMore, status };
+  return { ok: failure === undefined, since, mailboxes: results, hasMore, status };
 }
 
-module.exports = { countOlderMails, importOlderMails };
+/**
+ * Den Auftrag anlegen und gleich einen Abschnitt arbeiten.
+ *
+ * Der erste Abschnitt läuft sofort, damit in der Oberfläche binnen Sekunden
+ * etwas passiert — und nicht bis zum nächsten Fünf-Minuten-Takt nichts.
+ */
+async function importOlderMails(uid, since, mailboxId, options = {}) {
+  const existing = await readJob(uid);
+  const fortsetzung =
+    existing !== null && existing.running === true && existing.since === since;
+
+  if (!fortsetzung) {
+    await writeStatus(uid, {
+      running: true,
+      since,
+      allAttachments: options.allAttachments === true,
+      ...(mailboxId === undefined ? {} : { mailboxId }),
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+      stored: 0,
+      skipped: 0,
+      failed: 0,
+      attachmentsDropped: 0,
+      remaining: 0,
+    });
+  }
+
+  return runImportSlice(uid, {
+    budgetMs: options.budgetMs ?? UI_SLICE_MS,
+    trigger: "manuell",
+  });
+}
+
+/** Anhalten. Ein neuer Start macht dort weiter, wo dieser aufgehört hat. */
+async function stopImport(uid) {
+  const job = await readJob(uid);
+  if (job === null) return { ok: true, running: false };
+  await writeStatus(uid, { ...job, running: false, updatedAt: Date.now(), stopped: true });
+  return { ok: true, running: false };
+}
+
+/**
+ * Alle offenen Aufträge ein Stück weiterbringen — aufgerufen vom
+ * Fünf-Minuten-Lauf.
+ *
+ * Ohne das hinge ein Nachlauf über 1400 Mails am geöffneten Browserfenster.
+ * Der Auftrag steht in der Datenbank, also kann ihn auch der geplante Lauf
+ * fortsetzen; wer das Fenster offen lässt, ist nur schneller fertig.
+ */
+async function continueImports({ budgetMs = BACKGROUND_SLICE_MS } = {}) {
+  const snapshot = await admin.database().ref(USER_DIRECTORY_PATH).get();
+  const uids = Object.keys(snapshot.val() ?? {});
+  const deadline = Date.now() + budgetMs;
+  const worked = [];
+
+  for (const uid of uids) {
+    if (Date.now() >= deadline) break;
+    const job = await readJob(uid);
+    if (job === null || job.running !== true) continue;
+
+    const rest = deadline - Date.now();
+    try {
+      const result = await runImportSlice(uid, { budgetMs: rest, trigger: "geplant" });
+      worked.push({ uid, hasMore: result.hasMore, stored: result.status?.stored ?? 0 });
+    } catch (error) {
+      console.error(`Nachlauf im Hintergrund fehlgeschlagen (${uid}):`, error);
+    }
+  }
+
+  return worked;
+}
+
+module.exports = { countOlderMails, importOlderMails, stopImport, continueImports };
