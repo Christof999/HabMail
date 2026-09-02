@@ -10,6 +10,7 @@
 const admin = require("firebase-admin");
 
 const { categorizeMessage } = require("./categorize");
+const { mapWithConcurrency } = require("./concurrency");
 const { ackMessages, fetchMessages, listReceivableMailboxes } = require("./emailproxy");
 const { storeMessage } = require("./store");
 const { USER_DIRECTORY_PATH, userPollStatusPath } = require("./paths");
@@ -22,22 +23,6 @@ function messageLimit() {
   const raw = Number.parseInt(process.env.POLL_MESSAGE_LIMIT || "", 10);
   if (!Number.isFinite(raw) || raw < 1) return DEFAULT_LIMIT;
   return Math.min(raw, 100);
-}
-
-/** Wie Promise.all, aber es laufen nie mehr als `limit` Aufgaben gleichzeitig. */
-async function mapWithConcurrency(items, limit, worker) {
-  const results = new Array(items.length);
-  let next = 0;
-
-  async function run() {
-    while (next < items.length) {
-      const index = next++;
-      results[index] = await worker(items[index], index);
-    }
-  }
-
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
-  return results;
 }
 
 async function pollMailbox(mailbox) {

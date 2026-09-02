@@ -41,6 +41,15 @@ function userPollStatusPath(uid) {
   return `${userRootPath(uid)}/pollStatus`;
 }
 
+/**
+ * Wie weit der Nachlauf durch den Altbestand gekommen ist. Ebenfalls
+ * serverseitig geschrieben und für den Browser nur lesbar — er zeigt daraus
+ * den Fortschritt an.
+ */
+function userImportStatusPath(uid) {
+  return `${userRootPath(uid)}/importStatus`;
+}
+
 /** Zuordnung Rückkehr-Kennung → Benutzer. Nur serverseitig lesbar. */
 const BANK_REQUISITIONS_PATH = "bankRequisitions";
 
@@ -54,6 +63,7 @@ module.exports = {
   userBankPath,
   userInvoiceIndexPath,
   userPollStatusPath,
+  userImportStatusPath,
   BANK_REQUISITIONS_PATH,
   USER_DIRECTORY_PATH,
   ADMINS_PATH,

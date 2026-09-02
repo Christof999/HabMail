@@ -71,6 +71,14 @@ export function userPollStatusPath(uid: string): string {
   return `${userRootPath(uid)}/pollStatus`
 }
 
+/**
+ * Wie weit der Nachlauf durch den Altbestand gekommen ist. Auch das schreibt
+ * nur der Server; die Oberfläche zeigt daraus den Fortschritt.
+ */
+export function userImportStatusPath(uid: string): string {
+  return `${userRootPath(uid)}/importStatus`
+}
+
 /** Verzeichnis aller Benutzer — nur für Administratoren lesbar. */
 export const USER_DIRECTORY_PATH = 'userDirectory'
 

@@ -155,4 +155,22 @@ async function storeMessage(ownerUid, mailboxId, message, analysis) {
   return result.committed ? "stored" : "duplicate";
 }
 
-module.exports = { storeMessage, buildRecord, recordKey };
+/**
+ * Liegt diese Mail schon im Posteingang?
+ *
+ * Gelesen wird ein einzelnes Feld, nicht der ganze Datensatz — der zieht bei
+ * einer Mail mit Anhang ein Megabyte hinter sich her. Gebraucht wird das beim
+ * Nachholen: dort kommen zwangsläufig Mails noch einmal vorbei, die der
+ * laufende Betrieb längst geholt hat, und für die soll weder die KI noch die
+ * Weitergabe ans Rechnungsprogramm ein zweites Mal anlaufen.
+ */
+async function messageExists(ownerUid, mailboxId, message) {
+  const key = recordKey(mailboxId, message);
+  const snapshot = await admin
+    .database()
+    .ref(`${userEmailsPath(ownerUid)}/${key}/receivedAt`)
+    .get();
+  return snapshot.exists();
+}
+
+module.exports = { storeMessage, buildRecord, recordKey, messageExists };
