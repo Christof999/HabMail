@@ -24,6 +24,13 @@ exports.updateUser = users.updateUser;
 exports.deleteUser = users.deleteUser;
 exports.migrateLegacy = users.migrateLegacy;
 exports.pollNow = users.pollNow;
+
+/**
+ * Altbestand nachholen: Mails, die vor der Einrichtung im Postfach lagen.
+ * Erst zählen, dann abschnittweise holen.
+ */
+exports.countOlderMails = users.countOlderMails;
+exports.importOlderMails = users.importOlderMails;
 exports.whoAmI = users.whoAmI;
 
 /** Rechnungsdaten korrigieren — serverseitig, damit Mail und Index gleich bleiben. */

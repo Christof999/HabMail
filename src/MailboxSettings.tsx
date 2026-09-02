@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { User } from 'firebase/auth'
 import {
   createMailbox,
@@ -15,7 +15,203 @@ import {
 import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
 import { userPollStatusPath } from './paths'
-import { pollNow, type PollReport, type PollStatus } from './usersApi'
+import { formatBytes } from './attachments'
+import {
+  countOlderMails,
+  importOlderMails,
+  pollNow,
+  type OlderCountReport,
+  type PollReport,
+  type PollStatus,
+} from './usersApi'
+
+/**
+ * Altbestand nachholen.
+ *
+ * Der laufende Abruf holt nur, was neu dazukommt — beim allerersten Mal die
+ * letzten 25 Mails. Alles, was vorher im Postfach lag, blieb bisher draußen;
+ * bei einem Buchhaltungs-Posteingang ist das ausgerechnet der Teil mit den
+ * Rechnungen des laufenden Jahres.
+ *
+ * Erst wird gezählt, dann entschieden: bei einem gewachsenen Postfach sind es
+ * schnell über tausend Mails und ein paar hundert Megabyte, und die landen
+ * anschließend in der Datenbank, die die App beim Öffnen komplett lädt.
+ * Deshalb steht die Zahl vor dem Knopf und nicht dahinter.
+ *
+ * Geholt wird abschnittweise: ein Aufruf arbeitet einige Minuten, meldet
+ * seinen Stand und wird erneut aufgerufen, bis nichts mehr übrig ist. So
+ * bleibt der Fortschritt sichtbar, und Abbrechen ist jederzeit möglich.
+ */
+function OlderMailImport() {
+  const [since, setSince] = useState(() => `${new Date().getFullYear()}-01-01`)
+  const [allAttachments, setAllAttachments] = useState(false)
+  const [count, setCount] = useState<OlderCountReport | null>(null)
+  const [counting, setCounting] = useState(false)
+  const [running, setRunning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [progress, setProgress] = useState({ stored: 0, skipped: 0, failed: 0, remaining: 0 })
+  const [finished, setFinished] = useState<string | null>(null)
+  // Kein State: der laufende Schleifendurchlauf muss den Abbruch sofort sehen,
+  // nicht erst beim nächsten Rendern.
+  const stop = useRef(false)
+
+  async function look() {
+    setError(null)
+    setFinished(null)
+    setCounting(true)
+    try {
+      const report = await countOlderMails({ since })
+      setCount(report)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
+    } finally {
+      setCounting(false)
+    }
+  }
+
+  async function start() {
+    setError(null)
+    setFinished(null)
+    setRunning(true)
+    stop.current = false
+    const totals = { stored: 0, skipped: 0, failed: 0, remaining: 0 }
+
+    try {
+      for (;;) {
+        const report = await importOlderMails({ since, allAttachments })
+        for (const box of report.mailboxes) {
+          totals.stored += box.stored ?? 0
+          totals.skipped += box.skipped ?? 0
+          totals.failed += box.failed ?? 0
+        }
+        totals.remaining = report.mailboxes.reduce((sum, box) => sum + (box.remaining ?? 0), 0)
+        setProgress({ ...totals })
+
+        const failed = report.mailboxes.find((box) => box.error !== undefined)
+        if (failed !== undefined) {
+          setError(`${failed.mailbox}: ${failed.error}`)
+          break
+        }
+        if (!report.hasMore) {
+          setFinished(
+            `Fertig. ${totals.stored} Mail${totals.stored === 1 ? '' : 's'} übernommen, ` +
+              `${totals.skipped} waren schon da.`,
+          )
+          break
+        }
+        if (stop.current) {
+          setFinished(
+            `Angehalten. ${totals.stored} übernommen, noch ${totals.remaining} offen — ` +
+              'ein neuer Start macht dort weiter.',
+          )
+          break
+        }
+      }
+      await look()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  const remaining = count?.remaining ?? 0
+
+  return (
+    <section className="older-import">
+      <h4>Ältere Mails nachholen</h4>
+      <p className="muted small">
+        Holt Mails, die schon vor dem Einrichten im Postfach lagen. Der laufende
+        Abruf bleibt davon unberührt.
+      </p>
+
+      <div className="older-import-row">
+        <label>
+          ab
+          <input
+            type="date"
+            value={since}
+            onChange={(e) => setSince(e.target.value)}
+            disabled={running}
+          />
+        </label>
+        <button type="button" className="ghost" disabled={counting || running} onClick={() => void look()}>
+          {counting ? 'Zähle …' : 'Nachsehen'}
+        </button>
+      </div>
+
+      {count !== null ? (
+        <div className="older-import-count">
+          {remaining === 0 ? (
+            <p className="muted small">
+              Nichts nachzuholen — aus diesem Zeitraum ist alles da.
+            </p>
+          ) : (
+            <>
+              <p className="small">
+                <strong>{remaining}</strong> Mail{remaining === 1 ? '' : 's'} noch nicht in
+                HabMail, zusammen {formatBytes(count.remainingBytes)}.
+              </p>
+              <ul className="poll-report">
+                {count.mailboxes.map((box) => (
+                  <li key={box.mailbox}>
+                    <strong>{mailboxLabel(box.mailbox)}</strong>{' '}
+                    {box.error !== undefined ? (
+                      <span className="mailbox-error">{box.error}</span>
+                    ) : (
+                      <>
+                        {box.remaining} von {box.total} · {formatBytes(box.remainingBytes)}
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <label className="older-import-option small">
+                <input
+                  type="checkbox"
+                  checked={allAttachments}
+                  onChange={(e) => setAllAttachments(e.target.checked)}
+                  disabled={running}
+                />
+                Alle Anhänge übernehmen, nicht nur die von Rechnungen und Mahnungen
+              </label>
+              <p className="muted small">
+                {allAttachments
+                  ? 'Achtung: damit landen auch Werbe-PDFs und Newsletter-Bilder in der ' +
+                    'Datenbank. HabMail lädt den Posteingang beim Öffnen am Stück — bei ' +
+                    'einem ganzen Jahr macht sich das bemerkbar.'
+                  : 'Bei allen anderen Mails wird der Anhang mit Namen und Größe vermerkt; ' +
+                    'die Datei bleibt im Postfach und lässt sich dort öffnen.'}
+              </p>
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {running ? (
+        <p className="small">
+          Läuft … {progress.stored} übernommen, {progress.skipped} schon vorhanden
+          {progress.failed > 0 ? `, ${progress.failed} fehlgeschlagen` : ''}
+          {progress.remaining > 0 ? ` · noch ${progress.remaining} offen` : ''}
+        </p>
+      ) : null}
+      {finished !== null ? <p className="small">{finished}</p> : null}
+      {error !== null ? <p className="mailbox-error small">{error}</p> : null}
+
+      <div className="older-import-row">
+        {running ? (
+          <button type="button" className="ghost" onClick={() => (stop.current = true)}>
+            Anhalten
+          </button>
+        ) : (
+          <button type="button" disabled={remaining === 0} onClick={() => void start()}>
+            {remaining === 0 ? 'Nachholen' : `${remaining} Mails nachholen`}
+          </button>
+        )}
+      </div>
+    </section>
+  )
+}
 
 /**
  * Der Stand des automatischen Abholens.
@@ -350,6 +546,8 @@ export default function MailboxSettings({ user, onClose }: Props) {
         {notice ? <p className="muted small">{notice}</p> : null}
 
         <AutomaticPollStatus uid={user.uid} />
+
+        <OlderMailImport />
 
         {pollReport !== null && pollReport.mailboxes.length > 0 ? (
           <ul className="poll-report">

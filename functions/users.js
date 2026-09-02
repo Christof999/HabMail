@@ -16,6 +16,7 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const { USER_DIRECTORY_PATH, ADMINS_PATH, userRootPath } = require("./paths");
 const { migrateLegacyData } = require("./migrate");
 const { pollAllMailboxes } = require("./poll");
+const importer = require("./import");
 
 /** Administratoren aus der Umgebung — der Startpunkt, bevor es Einträge gibt. */
 function bootstrapAdminUids() {
@@ -254,6 +255,69 @@ const pollNow = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request
   }
 });
 
+/** Ein Datum der Form 2026-01-01 — mehr nimmt der Nachlauf nicht entgegen. */
+function requireSince(raw) {
+  const value = typeof raw === "string" ? raw.trim() : "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Bitte ein Datum in der Form 2026-01-01 angeben, ab dem nachgeholt werden soll.",
+    );
+  }
+  return value;
+}
+
+/**
+ * Vorschau vor dem Nachholen: wie viele alte Mails liegen im Zeitraum?
+ *
+ * Getrennt vom Nachholen selbst, weil die Zahl vor der Entscheidung stehen
+ * muss. Bei einem Posteingang, der seit Jahren läuft, sind es schnell
+ * Tausende — und jede davon landet danach in der Datenbank.
+ */
+const countOlderMails = onCall({ timeoutSeconds: 120, memory: "256MiB" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Nicht angemeldet.");
+
+  const since = requireSince(request.data?.since);
+  const mailboxId =
+    typeof request.data?.mailboxId === "string" && request.data.mailboxId !== ""
+      ? request.data.mailboxId
+      : undefined;
+
+  try {
+    return await importer.countOlderMails(uid, since, mailboxId);
+  } catch (error) {
+    throw new HttpsError("internal", `Zählen fehlgeschlagen: ${error?.message}`);
+  }
+});
+
+/**
+ * Einen Abschnitt Altbestand nachholen.
+ *
+ * Ein Aufruf arbeitet, bis sein Zeitbudget aufgebraucht ist, und meldet über
+ * `hasMore`, ob noch etwas übrig ist. Die Oberfläche ruft dann erneut auf —
+ * so bleibt der Fortschritt sichtbar, statt dass ein einzelner Aufruf
+ * minutenlang schweigt und am Zeitlimit stirbt.
+ */
+const importOlderMails = onCall({ timeoutSeconds: 540, memory: "512MiB" }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Nicht angemeldet.");
+
+  const since = requireSince(request.data?.since);
+  const mailboxId =
+    typeof request.data?.mailboxId === "string" && request.data.mailboxId !== ""
+      ? request.data.mailboxId
+      : undefined;
+
+  try {
+    return await importer.importOlderMails(uid, since, mailboxId, {
+      allAttachments: request.data?.allAttachments === true,
+    });
+  } catch (error) {
+    throw new HttpsError("internal", `Nachholen fehlgeschlagen: ${error?.message}`);
+  }
+});
+
 /** Damit die Oberfläche weiß, ob sie die Verwaltung überhaupt anbieten soll. */
 const whoAmI = onCall(async (request) => {
   const uid = request.auth?.uid;
@@ -268,6 +332,8 @@ module.exports = {
   deleteUser,
   migrateLegacy,
   pollNow,
+  countOlderMails,
+  importOlderMails,
   whoAmI,
   isAdmin,
 };

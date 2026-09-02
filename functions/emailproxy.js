@@ -97,10 +97,68 @@ async function ackMessages(mailboxId, cursor, uidValidity) {
   });
 }
 
+/*
+ * Der Nachlauf: Mails, die vor der Einrichtung im Postfach lagen.
+ *
+ * Der normale Abruf geht nur vorwärts und beginnt bei den letzten 25 Mails —
+ * alles davor war unerreichbar. Die drei Funktionen hier arbeiten sich
+ * rückwärts durch einen Zeitraum, mit eigenem Wasserstand beim Proxy. Der
+ * Fünf-Minuten-Lauf bleibt davon unberührt.
+ *
+ * Die Zeitgrenzen sind großzügiger als beim Abholen: die Gegenstelle darf sich
+ * 30 Sekunden Zeit nehmen, und wir müssen länger warten als sie.
+ */
+const OLDER_TIMEOUT_MS = 35_000;
+
+/** Nur zählen — kostet beim Proxy eine Verbindung, überträgt keine Mail. */
+async function countOlderMessages(mailboxId, since) {
+  const query =
+    `?mailbox=${encodeURIComponent(mailboxId)}` +
+    `&since=${encodeURIComponent(since)}&count=1`;
+  const data = await request(`/api/receive${query}`, { timeoutMs: OLDER_TIMEOUT_MS });
+  return {
+    total: Number(data.total) || 0,
+    remaining: Number(data.remaining) || 0,
+    remainingBytes: Number(data.remainingBytes) || 0,
+    messagesInFolder: Number(data.messagesInFolder) || 0,
+  };
+}
+
+/** Der nächste Stapel Altbestand, von der jüngsten offenen Mail abwärts. */
+async function fetchOlderMessages(mailboxId, since, limit) {
+  const query =
+    `?mailbox=${encodeURIComponent(mailboxId)}` +
+    `&since=${encodeURIComponent(since)}&limit=${encodeURIComponent(limit)}`;
+  const data = await request(`/api/receive${query}`, { timeoutMs: OLDER_TIMEOUT_MS });
+  return {
+    messages: Array.isArray(data.messages) ? data.messages : [],
+    oldestDelivered: data.oldestDelivered,
+    uidValidity: data.uidValidity,
+    remaining: Number(data.remaining) || 0,
+    total: Number(data.total) || 0,
+    done: data.done === true,
+  };
+}
+
+/**
+ * Bestätigen — erst danach gilt der Stapel als erledigt. Bestätigt wird mit
+ * der niedrigsten gelieferten UID, nicht mit der höchsten: der Nachlauf zählt
+ * abwärts.
+ */
+async function ackOlderMessages(mailboxId, oldestDelivered, uidValidity, since) {
+  await request("/api/receive", {
+    method: "POST",
+    body: { mailbox: mailboxId, olderAck: oldestDelivered, uidValidity, since },
+  });
+}
+
 module.exports = {
   ProxyNotConfiguredError,
   isProxyConfigured,
   listReceivableMailboxes,
   fetchMessages,
   ackMessages,
+  countOlderMessages,
+  fetchOlderMessages,
+  ackOlderMessages,
 };

@@ -96,6 +96,11 @@ export function omittedReason(attachment: EmailAttachment): string | null {
         'übersprungen. Neu abgeholte Mails trifft das nicht mehr; diese hier ' +
         'liegt weiterhin im Postfach.'
       )
+    case 'nur_belege':
+      return (
+        'Beim Nachholen alter Mails wurden nur die Anhänge von Rechnungen und ' +
+        'Mahnungen übernommen — die Datei liegt weiterhin im Postfach.'
+      )
     case 'no_content':
       return 'Der Server hat zu diesem Anhang keinen Inhalt geliefert.'
     case undefined:

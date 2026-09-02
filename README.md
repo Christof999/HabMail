@@ -211,6 +211,42 @@ unangetastet. `--keep-source` lässt ihn ohnehin liegen.
 > Der Benutzer muss vorher existieren. Bei einem leeren Projekt also erst über
 > `ADMIN_UIDS` anmelden und dann migrieren.
 
+## Ältere Mails nachholen
+
+Das Abholen geht vorwärts: beim ersten Mal die letzten 25 Mails, danach nur
+noch, was neu dazukommt. Alles, was vorher im Postfach lag, bleibt damit
+draußen — bei einem Buchhaltungs-Posteingang ausgerechnet der Teil mit den
+Rechnungen des laufenden Jahres.
+
+Dafür gibt es in *Postfächer* den Abschnitt **Ältere Mails nachholen**:
+
+1. Datum wählen (z.B. 1. Januar des laufenden Jahres) und **Nachsehen**. Das
+   zählt nur — es wird keine einzige Mail übertragen. Angezeigt wird je
+   Postfach, wie viele Mails offen sind und wie viele Megabyte das sind.
+2. **Nachholen** startet. Gearbeitet wird von der jüngsten Mail des Zeitraums
+   rückwärts, in Abschnitten von einigen Minuten; der Fortschritt steht
+   daneben. **Anhalten** geht jederzeit, ein neuer Start macht dort weiter.
+
+Zwei Dinge sind dabei wichtig:
+
+- **Anhänge kommen standardmäßig nur bei Rechnungen und Mahnungen mit.** Bei
+  allen anderen Mails wird der Anhang mit Namen und Größe vermerkt und bleibt
+  im Postfach. Der Grund steht in der Mail. Gemessen an einem echten
+  Posteingang: 15 Mails enthielten knapp 8 MB Anhänge, ein ganzes Jahr wären
+  dreiviertel Gigabyte — und die App lädt den Posteingang beim Öffnen am
+  Stück. Wer trotzdem alles will, setzt den Haken „Alle Anhänge übernehmen".
+  Die KI liest die PDFs übrigens in beiden Fällen, Betrag und Rechnungsdaten
+  stehen also so oder so im Datensatz.
+- **Der laufende Abruf bleibt unberührt.** Nachlauf und Fünf-Minuten-Lauf
+  führen im Email-Proxy getrennte Wasserstände; der eine zählt hoch, der
+  andere runter.
+
+Mails, die schon in HabMail liegen, werden beim Nachholen erkannt und
+übersprungen — ohne KI-Aufruf und ohne zweite Übergabe ans Rechnungsprogramm.
+
+> Das braucht einen Email-Proxy, der `since` beim Abholen kennt. Ältere Stände
+> antworten darauf mit „nichts Neues", und der Nachlauf findet nichts.
+
 ## Buchhaltung
 
 Zweite Ansicht neben dem Posteingang, oben rechts umschaltbar. Sie zeigt alles,

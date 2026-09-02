@@ -135,6 +135,74 @@ export type PollStatus = {
   error?: string
 }
 
+/*
+ * Altbestand nachholen: Mails, die vor der Einrichtung im Postfach lagen.
+ *
+ * Zwei Aufrufe, und das mit Absicht. Erst zählen — bei einem gewachsenen
+ * Posteingang sind das schnell Tausende Mails und Hunderte Megabyte, und die
+ * Zahl gehört vor die Entscheidung. Dann abschnittweise holen, so lange
+ * `hasMore` gesetzt ist.
+ */
+
+export type OlderMailboxCount = {
+  mailbox: string
+  /** Mails des Zeitraums insgesamt. */
+  total: number
+  /** Davon noch nicht in HabMail. */
+  remaining: number
+  /** Rohgröße dieser Mails — daran hängt, wie groß der Posteingang wird. */
+  remainingBytes: number
+  /** Wie viele Mails überhaupt im Ordner liegen. */
+  messagesInFolder: number
+  error?: string
+}
+
+export type OlderCountReport = {
+  since: string
+  mailboxes: OlderMailboxCount[]
+  remaining: number
+  remainingBytes: number
+}
+
+/** Nur zählen. Überträgt keine einzige Mail. */
+export const countOlderMails = callable<
+  { since: string; mailboxId?: string },
+  OlderCountReport
+>('countOlderMails')
+
+export type ImportMailboxReport = {
+  mailbox: string
+  stored: number
+  /** Schon vorhanden oder beim Speichern als Dublette erkannt. */
+  skipped: number
+  failed: number
+  analyzed: number
+  /** Mails, bei denen nur der Vermerk statt der Datei gespeichert wurde. */
+  attachmentsDropped?: number
+  remaining?: number | null
+  total?: number | null
+  done: boolean
+  error?: string
+}
+
+export type ImportReport = {
+  ok: boolean
+  since: string
+  mailboxes: ImportMailboxReport[]
+  /** true = es ist noch etwas übrig, bitte noch einmal aufrufen. */
+  hasMore: boolean
+  hint?: string
+}
+
+/**
+ * Einen Abschnitt nachholen. Ein Aufruf arbeitet bis zu sieben Minuten;
+ * danach sagt `hasMore`, ob es weitergeht.
+ */
+export const importOlderMails = callable<
+  { since: string; mailboxId?: string; allAttachments?: boolean },
+  ImportReport
+>('importOlderMails')
+
 /** Ergebnis einer Seite beim Neu-Auswerten. */
 export type ReanalyzeReport = {
   checked: number
