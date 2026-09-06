@@ -33,9 +33,10 @@ einen gewöhnlichen Client-Key, der auf seine eigenen Postfächer beschränkt is
 
 ## KI-Agenten
 
-HabMail lässt sich von Agenten bedienen: per HTTP mit einem Agent-Key (ohne
-Browser), über `window.habmail` in der geöffneten App oder über die
-Oberfläche. Siehe [AGENTS.md](AGENTS.md).
+HabMail lässt sich von Agenten bedienen — im Browser ohne jede Einrichtung
+über `window.habmail` (anmelden, lesen, schreiben, verschicken) oder über
+feste Anker in der Oberfläche. Für Agenten ohne Browser gibt es zusätzlich
+einen Agent-Key. Siehe [AGENTS.md](AGENTS.md).
 
 ## Aufbau
 

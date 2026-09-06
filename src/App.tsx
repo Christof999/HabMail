@@ -943,29 +943,48 @@ export default function App() {
             </div>
           </div>
         </header>
-        <form className="card" onSubmit={handleLogin}>
-          <label>
+        {/* Feste Anker, damit auch ein Agent sich anmelden kann — er findet
+            Felder sonst nur über die Beschriftung, und die ist übersetzbar. */}
+        <form
+          className="card"
+          onSubmit={handleLogin}
+          name="habmail-login"
+          data-testid="login-form"
+        >
+          <label htmlFor="login-email">
             E-Mail
             <input
+              id="login-email"
+              name="email"
               type="email"
               autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              aria-label="E-Mail"
+              data-testid="login-email"
             />
           </label>
-          <label>
+          <label htmlFor="login-password">
             Passwort
             <input
+              id="login-password"
+              name="password"
               type="password"
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              aria-label="Passwort"
+              data-testid="login-password"
             />
           </label>
-          {loginError ? <p className="error">{loginError}</p> : null}
-          <button type="submit" disabled={busy}>
+          {loginError ? (
+            <p className="error" role="alert" data-testid="login-error">
+              {loginError}
+            </p>
+          ) : null}
+          <button type="submit" disabled={busy} data-testid="login-submit">
             {busy ? 'Bitte warten…' : 'Anmelden'}
           </button>
         </form>

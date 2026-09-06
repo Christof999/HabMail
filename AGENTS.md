@@ -1,22 +1,94 @@
 # HabMail für KI-Agenten
 
-HabMail lässt sich von KI-Agenten bedienen, ohne dass sie sich durch die
-Oberfläche klicken müssen. Drei Wege — der erste ist der zuverlässigste.
+HabMail lässt sich von KI-Agenten bedienen. **Wer einen Browser hat, braucht
+dafür nichts einzurichten — keinen Key, keine Umgebungsvariable.** Der Agent
+meldet sich an wie ein Mensch und arbeitet als dieser Nutzer.
 
-| Weg | Wofür | Als wer |
+| Weg | Wofür | Einrichtung |
 |---|---|---|
-| 1. HTTP mit Agent-Key | Agent ohne Browser (OpenClaw-Auftrag, n8n, Cron, Skript) | Der Nutzer, dessen UID im Key steht |
-| 2. `window.habmail` | Agent, der die geöffnete App fernsteuert | Der angemeldete Nutzer |
-| 3. Oberfläche anklicken | Screenshot- und Klick-Agenten | Der angemeldete Nutzer |
+| 1. `window.habmail` | Agent, der einen Browser fernsteuert | keine |
+| 2. Oberfläche anklicken | Screenshot- und Klick-Agenten | keine |
+| 3. HTTP mit Agent-Key | Agent ohne Browser: Auftrag im Hintergrund, n8n, Cron, Skript | Key in Vercel |
 
 Verschickt wird immer über den [Email-Proxy](https://github.com/Christof999/Emailproxy)
-aus einem Postfach des jeweiligen Nutzers. Der Proxy prüft dabei, wem das
-Postfach gehört — deshalb trägt jeder Agent-Key die Firebase-UID seines
-Eigentümers. **Ein Key steht für einen Nutzer, nicht für die App.**
+aus einem Postfach des jeweiligen Nutzers. Die Wege 1 und 2 handeln als der
+angemeldete Nutzer und können deshalb nichts, was er nicht auch von Hand
+könnte. Nur Weg 3 braucht einen Key — dort ist ja niemand angemeldet, den man
+fragen könnte.
 
 ---
 
-## 1. HTTP mit Agent-Key (empfohlen)
+## 1. `window.habmail` — ohne Key, im Browser
+
+Sobald die Seite geladen ist, hängt dort eine kleine API. Damit muss der Agent
+keine Felder im Accessibility-Tree suchen — genau daran scheitern
+Browser-Agenten sonst: sie sehen den Knopf, aber nicht das Formular dahinter.
+Sie ist schon **vor** der Anmeldung da.
+
+```js
+// Warten, bis die API da ist:
+await new Promise((r) =>
+  window.habmail ? r() : window.addEventListener('habmail:ready', r, { once: true }),
+)
+
+window.habmail.describe()   // Selbstbeschreibung, UID, alle Methoden
+window.habmail.isSignedIn() // false → erst anmelden:
+await window.habmail.signIn('mitarbeiter@firma.de', '…')
+
+// Mail schreiben und verschicken — ohne einen einzigen Klick:
+await window.habmail.sendMail({
+  to: 'christof.didi@googlemail.com',
+  subject: 'Testbetreff',
+  body: 'Hallo,\n\nhier der Text.',
+  dryRun: true,   // erst prüfen, dann ohne dryRun echt senden
+})
+
+// Oder nur vorbereiten und den Menschen senden lassen:
+window.habmail.openCompose({ to: '…', subject: '…', body: '…' })
+
+// Posteingang lesen und antworten:
+window.habmail.listMails({ limit: 10, query: 'rechnung' })
+window.habmail.getMail('<id>')
+await window.habmail.listMailboxes()
+await window.habmail.replyTo('<id>', 'Danke, passt so.')
+```
+
+Ohne `mailboxId` verschickt `sendMail` aus dem ersten Postfach, `replyTo` aus
+dem, in dem die Mail ankam. `signIn` tut dasselbe wie der Knopf „Anmelden";
+die Zugangsdaten gehen direkt an Firebase und werden nirgends
+zwischengespeichert. `document.documentElement.dataset.habmailAgentApi`
+enthält die Version, sobald die API bereitsteht.
+
+---
+
+## 2. Oberfläche anklicken — ebenfalls ohne Key
+
+Wer lieber klickt, findet stabile Anker. Sie sind unabhängig von der
+Beschriftung, die sich ändern kann.
+
+| Element | Anker |
+|---|---|
+| Anmeldung | `#login-email`, `#login-password`, `[data-testid="login-submit"]`, Fehler in `[data-testid="login-error"]` |
+| Neue Mail öffnen | `[data-testid="compose-new"]`, Tastenkürzel `n` |
+| Dialog | `[data-testid="send-mail-dialog"]` (`data-compose-mode` = new/reply/forward) |
+| Absender-Postfach | `#send-mail-from` (nur ab zwei Postfächern) |
+| Empfänger | `#send-mail-to` / `[data-testid="send-mail-to"]` |
+| Betreff | `#send-mail-subject` / `[data-testid="send-mail-subject"]` |
+| Nachricht | `#send-mail-body` / `[data-testid="send-mail-body"]` |
+| Anhänge | `#send-mail-attachments` |
+| Senden | `[data-testid="send-mail-submit"]` |
+| Abbrechen | `[data-testid="send-mail-cancel"]`, sonst `Escape` |
+| Fehlermeldung | `[data-testid="send-mail-error"]` (`role="alert"`) |
+
+Antworten und Weiterleiten hängen an den Knöpfen „Antworten" und
+„Weiterleiten" der jeweiligen Mail-Karte (`aria-label`).
+
+---
+
+## 3. HTTP mit Agent-Key — für Agenten ohne Browser
+
+Nur nötig, wenn niemand angemeldet ist: ein Auftrag, der nachts läuft, ein
+n8n-Ablauf, ein Skript. Im Browser ist Weg 1 der einfachere.
 
 ### Einrichten (einmalig, durch den Betreiber)
 
@@ -111,72 +183,10 @@ Bei 5xx lohnt ein Retry, bei 4xx nicht.
 
 ---
 
-## 2. `window.habmail` im geöffneten Browser
-
-Sobald die App geladen ist, hängt dort eine kleine API. Damit muss der Agent
-keine Felder im Accessibility-Tree suchen — genau daran scheitern
-Browser-Agenten sonst.
-
-```js
-// Warten, bis die API da ist:
-await new Promise((r) =>
-  window.habmail ? r() : window.addEventListener('habmail:ready', r, { once: true }),
-)
-
-window.habmail.describe()   // Selbstbeschreibung, UID, alle Methoden
-window.habmail.isSignedIn() // false → der Mensch muss sich erst anmelden
-window.habmail.getAccount() // { email, uid }
-
-// Sofort verschicken, ohne Klick:
-await window.habmail.sendMail({
-  to: 'christof.didi@googlemail.com',
-  subject: 'Testbetreff',
-  body: 'Hallo,\n\nhier der Text.',
-  dryRun: true,   // erst prüfen, dann ohne dryRun echt senden
-})
-
-// Oder nur vorbereiten und den Menschen senden lassen:
-window.habmail.openCompose({ to: '…', subject: '…', body: '…' })
-
-// Posteingang lesen und antworten:
-window.habmail.listMails({ limit: 10, query: 'rechnung' })
-window.habmail.getMail('<id>')
-await window.habmail.listMailboxes()
-await window.habmail.replyTo('<id>', 'Danke, passt so.')
-```
-
-`sendMail` und `replyTo` laufen über denselben authentifizierten Weg wie der
-Senden-Knopf — es geht also nur, was der angemeldete Nutzer ohnehin darf.
-Ohne `mailboxId` verschickt `sendMail` aus dem ersten Postfach, `replyTo` aus
-dem, in dem die Mail ankam. `document.documentElement.dataset.habmailAgentApi`
-enthält die Version, sobald die API bereitsteht.
-
----
-
-## 3. Oberfläche anklicken
-
-Wer doch klicken will, findet stabile Anker:
-
-| Element | Anker |
-|---|---|
-| Neue Mail öffnen | `[data-testid="compose-new"]`, Tastenkürzel `n` |
-| Dialog | `[data-testid="send-mail-dialog"]` (`data-compose-mode` = new/reply/forward) |
-| Absender-Postfach | `#send-mail-from` (nur ab zwei Postfächern) |
-| Empfänger | `#send-mail-to` / `[data-testid="send-mail-to"]` |
-| Betreff | `#send-mail-subject` / `[data-testid="send-mail-subject"]` |
-| Nachricht | `#send-mail-body` / `[data-testid="send-mail-body"]` |
-| Anhänge | `#send-mail-attachments` |
-| Senden | `[data-testid="send-mail-submit"]` |
-| Abbrechen | `[data-testid="send-mail-cancel"]`, sonst `Escape` |
-| Fehlermeldung | `[data-testid="send-mail-error"]` (`role="alert"`) |
-
-Antworten und Weiterleiten hängen an den Knöpfen „Antworten" und
-„Weiterleiten" der jeweiligen Mail-Karte (`aria-label`).
-
----
-
 ## Regeln
 
+- **Im Browser braucht es keinen Key.** Wer einen setzt, ohne ihn zu
+  brauchen, schafft nur ein weiteres Geheimnis, das lecken kann.
 - **Keys gehören in Environment-Variablen**, nie in Quelltext, Beispiele oder
   Commit-Nachrichten.
 - **Pro Agent ein eigener Key** — dann lässt sich einer sperren, ohne die

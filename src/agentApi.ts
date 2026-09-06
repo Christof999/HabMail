@@ -12,7 +12,12 @@
  * gerade angemeldete Nutzer — sie kann nichts, was er nicht auch über den
  * Senden-Knopf könnte.
  */
-import type { User } from 'firebase/auth'
+import {
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  type User,
+} from 'firebase/auth'
+import { getFirebaseAuth } from './firebase'
 import type { EmailRow } from './types'
 import { listMailboxes, mailboxLabel } from './mailboxesApi'
 import { requestSendMail, type SendMailComposeKind } from './sendMailApi'
@@ -174,6 +179,8 @@ export function createAgentApi(handlers: AgentHandlers) {
         /** Für den Eintrag in HABMAIL_AGENT_KEYS beim Einrichten. */
         uid: user?.uid ?? null,
         methods: {
+          'signIn(email, password)': 'Anmelden wie über das Formular',
+          'signOut()': 'Abmelden',
           'listMails({ limit?, query? })': 'Mails der geladenen Ansicht',
           'getMail(id)': 'Eine Mail inklusive Volltext',
           'listMailboxes()': 'Die eigenen Absender-Postfächer',
@@ -184,14 +191,46 @@ export function createAgentApi(handlers: AgentHandlers) {
           'replyTo(id, body, { subject?, to?, mailboxId?, dryRun? })':
             'Antwort auf eine Mail, Original wird zitiert',
         },
+        /*
+         * Diese API braucht keinen Agent-Key: sie handelt als der angemeldete
+         * Nutzer. Ein Key ist nur für Agenten ohne Browser nötig.
+         */
         httpFallback: {
           url: '/api/send-mail',
           method: 'POST',
-          auth: 'X-HabMail-Agent-Key: <key> — ohne Browser',
+          auth: 'X-HabMail-Agent-Key: <key> — nur nötig ohne Browser',
           manifest: 'GET /api/send-mail',
           docs: 'AGENTS.md im Repository',
         },
       }
+    },
+
+    /**
+     * Anmelden wie über das Formular — damit ein Agent im eigenen Browser
+     * nicht erst die Felder im Accessibility-Tree suchen muss. Es geschieht
+     * nichts anderes als beim Knopf „Anmelden": die Angaben gehen direkt an
+     * Firebase und werden nirgends zwischengespeichert.
+     */
+    signIn: async (email: string, secret: string) => {
+      const address = requireText(email, 'email')
+      if (typeof secret !== 'string' || secret === '') {
+        throw new Error('habmail: "password" fehlt.')
+      }
+      const credential = await signInWithEmailAndPassword(
+        getFirebaseAuth(),
+        address,
+        secret,
+      )
+      return {
+        ok: true as const,
+        email: credential.user.email,
+        uid: credential.user.uid,
+      }
+    },
+
+    signOut: async () => {
+      await firebaseSignOut(getFirebaseAuth())
+      return { ok: true as const }
     },
 
     isSignedIn: () => handlers.getUser() !== null,
