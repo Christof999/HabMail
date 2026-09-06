@@ -16,6 +16,8 @@ export type SendMailPayload = {
    * es entfernen.
    */
   signatureImage?: { contentType: string; contentBase64: string }
+  /** true = der Server baut die Mail nur zusammen und verschickt nichts. */
+  dryRun?: boolean
   /** Der zitierte Originaltext. Bei einer neuen Mail leer. */
   context: {
     originalFrom: string
@@ -42,7 +44,13 @@ export function sendMailApiUrl(): string {
 }
 
 /** Was der Server tatsächlich benutzt hat — für die Rückmeldung im Formular. */
-export type SendMailResult = { mailbox?: string; from?: string }
+export type SendMailResult = {
+  mailbox?: string
+  from?: string
+  /** Nur bei dryRun: die fertige Mail, so wie sie rausgegangen wäre. */
+  text?: string
+  dryRun?: boolean
+}
 
 export async function requestSendMail(
   idToken: string,
@@ -57,7 +65,7 @@ export async function requestSendMail(
     body: JSON.stringify(payload),
   })
   const raw = await res.text()
-  let data = {} as { error?: string; hint?: string; mailbox?: string; from?: string }
+  let data = {} as SendMailResult & { error?: string; hint?: string }
   try {
     data = raw ? (JSON.parse(raw) as typeof data) : {}
   } catch {
@@ -75,5 +83,9 @@ export async function requestSendMail(
         : `HTTP ${res.status} (keine Antwort vom Server)`,
     )
   }
-  return { mailbox: data.mailbox, from: data.from }
+  return {
+    mailbox: data.mailbox,
+    from: data.from,
+    ...(data.dryRun === true ? { dryRun: true, text: data.text } : {}),
+  }
 }

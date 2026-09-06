@@ -28,7 +28,11 @@ import {
  * zugegriffen wird.
  */
 export type ComposeState =
-  | { mode: 'new' }
+  | {
+      mode: 'new'
+      /** Vorbelegte Felder, z.B. aus window.habmail.openCompose(). */
+      prefill?: { to?: string; subject?: string; body?: string }
+    }
   | { mode: Exclude<SendMailComposeKind, 'new'>; row: EmailRow }
 
 /** Eine ausgewählte Datei, schon zum Versand kodiert. */
@@ -107,17 +111,20 @@ export function SendMailModal({ compose, user, onClose }: Props) {
     if (!compose) return
     setError(null)
     setSending(false)
-    if (compose.mode === 'reply') {
+    if (compose.mode === 'new') {
+      // Vorbelegung, wenn ein Agent das Fenster über window.habmail öffnet.
+      setTo(compose.prefill?.to ?? '')
+      setSubject(compose.prefill?.subject ?? '')
+      setBody(compose.prefill?.body ?? '')
+    } else if (compose.mode === 'reply') {
       setTo(compose.row.sender.trim())
       setSubject(reSubject(compose.row.subject))
-    } else if (compose.mode === 'forward') {
-      setTo('')
-      setSubject(fwdSubject(compose.row.subject))
+      setBody('')
     } else {
       setTo('')
-      setSubject('')
+      setSubject(fwdSubject(compose.row.subject))
+      setBody('')
     }
-    setBody('')
     setAttachments([])
     appliedSignature.current = ''
     // Vorbelegt mit dem Postfach, in dem die Mail ankam: aus dem heraus zu
@@ -161,6 +168,15 @@ export function SendMailModal({ compose, user, onClose }: Props) {
       active = false
     }
   }, [compose, user])
+
+  useEffect(() => {
+    if (!compose) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    globalThis.window.addEventListener('keydown', onKey)
+    return () => globalThis.window.removeEventListener('keydown', onKey)
+  }, [compose, onClose])
 
   if (!compose) return null
 
@@ -264,6 +280,8 @@ export function SendMailModal({ compose, user, onClose }: Props) {
         role="dialog"
         aria-labelledby="send-mail-title"
         aria-modal="true"
+        data-testid="send-mail-dialog"
+        data-compose-mode={active.mode}
       >
         <div className="modal-head">
           <h2 id="send-mail-title">{title}</h2>
@@ -272,6 +290,7 @@ export function SendMailModal({ compose, user, onClose }: Props) {
             className="ghost modal-close"
             onClick={onClose}
             aria-label="Schließen"
+            data-testid="send-mail-close"
           >
             ×
           </button>
@@ -281,7 +300,12 @@ export function SendMailModal({ compose, user, onClose }: Props) {
           Verschickt wird über das gewählte Postfach — dieselben Zugangsdaten wie
           beim Empfangen, es ist nichts gesondert einzurichten.
         </p>
-        <form className="send-mail-form" onSubmit={(e) => void handleSubmit(e)}>
+        <form
+          className="send-mail-form"
+          onSubmit={(e) => void handleSubmit(e)}
+          name="habmail-compose"
+          data-testid="send-mail-form"
+        >
           {/*
             Vorbelegt mit dem Postfach, in dem die Mail ankam. Bei nur einem
             Postfach steht der Absender nur da; erst ab zwei lohnt die Auswahl.
@@ -289,7 +313,14 @@ export function SendMailModal({ compose, user, onClose }: Props) {
           {mailboxes.length > 1 ? (
             <label>
               Von
-              <select value={fromId} onChange={(e) => setFromId(e.target.value)}>
+              <select
+                id="send-mail-from"
+                name="mailboxId"
+                value={fromId}
+                onChange={(e) => setFromId(e.target.value)}
+                aria-label="Absender-Postfach"
+                data-testid="send-mail-from"
+              >
                 {mailboxes.map((box) => (
                   <option key={box.id} value={box.id}>
                     {box.from || box.user || mailboxLabel(box.id)}
@@ -320,31 +351,43 @@ export function SendMailModal({ compose, user, onClose }: Props) {
           <label>
             An (Komma für mehrere)
             <input
+              id="send-mail-to"
+              name="to"
               type="text"
               value={to}
               onChange={(e) => setTo(e.target.value)}
               required
               autoComplete="email"
               placeholder="empfaenger@example.com"
+              aria-label="Empfänger"
+              data-testid="send-mail-to"
             />
           </label>
           <label>
             Betreff
             <input
+              id="send-mail-subject"
+              name="subject"
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               required
               maxLength={500}
+              aria-label="Betreff"
+              data-testid="send-mail-subject"
             />
           </label>
           <label>
             Nachricht
             <textarea
+              id="send-mail-body"
+              name="body"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={8}
               placeholder="Dein Text…"
+              aria-label="Nachricht"
+              data-testid="send-mail-body"
             />
           </label>
           {/* Das Bild steht nicht im Textfeld — dort ließe es sich nicht
@@ -382,8 +425,12 @@ export function SendMailModal({ compose, user, onClose }: Props) {
             ) : null}
             <input
               ref={fileInput}
+              id="send-mail-attachments"
+              name="attachments"
               type="file"
               multiple
+              aria-label="Anhänge wählen"
+              data-testid="send-mail-attachments"
               onChange={(e) => {
                 if (e.target.files) void addFiles(e.target.files)
               }}
@@ -394,14 +441,27 @@ export function SendMailModal({ compose, user, onClose }: Props) {
             </span>
           </div>
 
-          {error ? <p className="error">{error}</p> : null}
+          {error ? (
+            <p className="error" role="alert" data-testid="send-mail-error">
+              {error}
+            </p>
+          ) : null}
           <div className="modal-actions">
-            <button type="button" className="ghost" onClick={onClose}>
+            <button
+              type="button"
+              className="ghost"
+              onClick={onClose}
+              data-testid="send-mail-cancel"
+            >
               Abbrechen
             </button>
             {/* Ohne Absender-Postfach lehnt der Server ohnehin ab. Das hier
                 zu sperren ist ehrlicher als ein Knopf, der ins Leere führt. */}
-            <button type="submit" disabled={sending || fromId === ''}>
+            <button
+              type="submit"
+              disabled={sending || fromId === ''}
+              data-testid="send-mail-submit"
+            >
               {sending ? 'Sende…' : fromId === '' ? 'Kein Absender' : 'Senden'}
             </button>
           </div>

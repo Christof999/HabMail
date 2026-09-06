@@ -31,6 +31,12 @@ Der **Admin-Key des Proxys gehört nicht in dieses Projekt**. Er darf alles,
 auch die Postfächer aller anderen Projekte lesen und löschen. HabMail benutzt
 einen gewöhnlichen Client-Key, der auf seine eigenen Postfächer beschränkt ist.
 
+## KI-Agenten
+
+HabMail lässt sich von Agenten bedienen: per HTTP mit einem Agent-Key (ohne
+Browser), über `window.habmail` in der geöffneten App oder über die
+Oberfläche. Siehe [AGENTS.md](AGENTS.md).
+
 ## Aufbau
 
 | Teil | Wo | Wofür |

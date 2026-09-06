@@ -1,6 +1,8 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type DragEvent,
@@ -27,6 +29,11 @@ import {
   type SavedFilter,
 } from './savedFilters'
 import { SendMailModal, type ComposeState } from './SendMailModal'
+import {
+  createAgentApi,
+  installAgentApi,
+  type AgentComposeInput,
+} from './agentApi'
 import {
   buildFolderTree,
   collectDescendantFolderIds,
@@ -431,6 +438,52 @@ export default function App() {
       document.body.style.overflow = prev
     }
   }, [isCompactLayout, folderDrawerOpen])
+
+  const openNewCompose = useCallback((prefill?: AgentComposeInput) => {
+    setCompose({ mode: 'new', prefill: prefill ?? {} })
+    setFolderDrawerOpen(false)
+  }, [])
+
+  /*
+   * KI-Agenten finden die Felder eines Dialogs im Accessibility-Tree ihres
+   * Werkzeugs oft nicht — sie sehen den Knopf, aber nicht das Formular
+   * dahinter. Deshalb liegt eine kleine API auf window.habmail; siehe
+   * AGENTS.md. Sie verschickt als der angemeldete Nutzer, kann also nichts,
+   * was er nicht auch über den Senden-Knopf könnte.
+   */
+  const agentStateRef = useRef({ user, rows })
+  agentStateRef.current = { user, rows }
+
+  useEffect(() => {
+    const api = createAgentApi({
+      getUser: () => agentStateRef.current.user,
+      getRows: () => agentStateRef.current.rows,
+      openCompose: (input) => openNewCompose(input),
+    })
+    return installAgentApi(api)
+  }, [openNewCompose])
+
+  /** „n“ öffnet eine neue Mail — außerhalb von Eingabefeldern. */
+  useEffect(() => {
+    if (user === null) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'n' || e.metaKey || e.ctrlKey || e.altKey) return
+      const el = document.activeElement
+      const tag = el?.tagName.toLowerCase()
+      if (
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select' ||
+        (el instanceof HTMLElement && el.isContentEditable)
+      ) {
+        return
+      }
+      e.preventDefault()
+      setCompose((current) => current ?? { mode: 'new', prefill: {} })
+    }
+    globalThis.window.addEventListener('keydown', onKey)
+    return () => globalThis.window.removeEventListener('keydown', onKey)
+  }, [user])
 
   const isSearchActive =
     query.trim().length > 0 ||
@@ -1069,8 +1122,10 @@ export default function App() {
             type="button"
             className="compose-btn"
             aria-label="Neue E-Mail schreiben"
-            title="Neue E-Mail schreiben"
-            onClick={() => setCompose({ mode: 'new' })}
+            title="Neue E-Mail schreiben (n)"
+            aria-keyshortcuts="n"
+            data-testid="compose-new"
+            onClick={() => openNewCompose()}
           >
             <span aria-hidden>✎</span>
             <span className="compose-btn-label">Neue E-Mail</span>
