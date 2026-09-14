@@ -255,6 +255,9 @@ export function SendMailModal({ compose, user, onClose }: Props) {
               signatureImage: {
                 contentType: signature.imageType,
                 contentBase64: signature.imageBase64,
+                placement: signature.imagePlacement,
+                align: signature.imageAlign,
+                width: signature.imageWidth,
               },
             }),
         context,
@@ -396,8 +399,24 @@ export function SendMailModal({ compose, user, onClose }: Props) {
           {signature.imageBase64 !== '' ? (
             <div className="compose-signature-image">
               <span className="account-section-label">Signaturbild</span>
-              <img src={signatureImageSrc(signature)} alt="Bild der Signatur" />
-              <span className="muted small">Steht in der Mail unter deinem Text.</span>
+              {/* So breit und so ausgerichtet, wie es in der Mail steht — eine
+                  Vorschau, die etwas anderes zeigt als das Ergebnis, ist
+                  schlimmer als keine. */}
+              <div className="signature-preview-image" style={{ textAlign: signature.imageAlign }}>
+                <img
+                  src={signatureImageSrc(signature)}
+                  alt="Bild der Signatur"
+                  style={{ width: `${signature.imageWidth}px`, maxWidth: '100%' }}
+                />
+              </div>
+              <span className="muted small">
+                Steht in der Mail{' '}
+                {signature.imagePlacement === 'above'
+                  ? 'über deinem Text'
+                  : 'unter deinem Text'}
+                , {signature.imageWidth} Pixel breit. Zu ändern unter
+                „Signaturen“.
+              </span>
             </div>
           ) : null}
 

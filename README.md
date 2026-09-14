@@ -473,7 +473,19 @@ Zugangsdaten wie beim Empfangen.
   längste Kante und höchstens 200 kB — ein Logo aus dem Briefpapier-Ordner
   wiegt Megabyte und muss dafür nicht erst durch ein anderes Programm.
   Freigestellte Logos bleiben PNG und behalten ihre Durchsichtigkeit, alles
-  andere wird JPEG. Es geht **als eingebetteter Anhang mit einer Content-ID** mit, und
+  andere wird JPEG.
+- **Lage und Größe des Bildes** — unter „Signaturen", je Postfach: *Position*
+  (unter dem Text oder darüber wie ein Briefkopf), *Ausrichtung* (links,
+  mittig, rechts) und die *Breite* in Pixeln (80 bis 600, Vorgabe 200). Die
+  Vorschau daneben zeigt die Mail, nicht die Datei. Zwischen Signaturtext und
+  übrigem Text kann der Versand nicht unterscheiden — beides steht im
+  Textfeld —, „unter dem Text" heißt deshalb: hinter allem Getippten und damit
+  hinter der Signatur. Gespeichert bleibt das Bild mit bis zu 600 Pixeln, auch
+  wenn es schmaler angezeigt wird; auf Bildschirmen mit doppelter Pixeldichte
+  ist es dadurch scharf. Vor dieser Einstellung lief das Bild mit
+  `max-width:100%` über die ganze Mailbreite — bestehende Signaturen stehen
+  jetzt auf den 200 Pixeln der Vorgabe.
+- Das Bild geht **als eingebetteter Anhang mit einer Content-ID** mit, und
   die Mail bekommt dafür eine HTML-Fassung mit `<img src="cid:…">`. Als
   `data:`-Adresse ginge es nicht — Gmail und Outlook entfernen solche Bilder
   wortlos, beim Absender sieht die Mail trotzdem gut aus. Ohne Bild bleibt die

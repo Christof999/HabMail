@@ -15,7 +15,15 @@ export type SendMailPayload = {
    * es als eingebettetes Bild an — als data:-Adresse würden Gmail und Outlook
    * es entfernen.
    */
-  signatureImage?: { contentType: string; contentBase64: string }
+  signatureImage?: {
+    contentType: string
+    contentBase64: string
+    /** Über dem Text wie ein Briefkopf, oder darunter hinter der Signatur. */
+    placement: 'above' | 'below'
+    align: 'left' | 'center' | 'right'
+    /** Anzeigebreite in Pixeln. */
+    width: number
+  }
   /** true = der Server baut die Mail nur zusammen und verschickt nichts. */
   dryRun?: boolean
   /** Der zitierte Originaltext. Bei einer neuen Mail leer. */

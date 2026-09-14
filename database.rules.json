@@ -44,6 +44,15 @@
             "imageType": {
               ".validate": "newData.isString() && newData.val().length <= 60"
             },
+            "imagePlacement": {
+              ".validate": "newData.val() === 'above' || newData.val() === 'below'"
+            },
+            "imageAlign": {
+              ".validate": "newData.val() === 'left' || newData.val() === 'center' || newData.val() === 'right'"
+            },
+            "imageWidth": {
+              ".validate": "newData.isNumber() && newData.val() >= 80 && newData.val() <= 600"
+            },
             "$other": {
               ".validate": false
             }

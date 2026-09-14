@@ -12,8 +12,12 @@ import {
   MAX_SIGNATURE_IMAGE_BYTES,
   parseSignatures,
   signatureImageSrc,
+  SIGNATURE_IMAGE_MAX_WIDTH,
+  SIGNATURE_IMAGE_MIN_WIDTH,
   SIGNATURE_IMAGE_TYPES,
   type Signature,
+  type SignatureImageAlign,
+  type SignatureImagePlacement,
 } from './signatures'
 import { formatBytes } from './attachments'
 import { prepareSignatureImage } from './signatureImage'
@@ -33,6 +37,55 @@ type Props = {
   user: User
   onClose: () => void
 }
+
+/**
+ * Eine Reihe Knöpfe, von denen einer gedrückt ist.
+ *
+ * Ein Auswahlfeld wäre zwei Klicks und verbirgt die Möglichkeiten, bis man es
+ * öffnet. Hier sind es zwei bis drei kurze Wörter — die passen nebeneinander,
+ * und die Vorschau darunter ändert sich beim Drücken sofort mit.
+ */
+function ChoiceRow<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: T
+  options: readonly (readonly [T, string])[]
+  onChange: (value: T) => void
+}) {
+  return (
+    <div className="signature-choice-group">
+      <span className="account-section-label">{label}</span>
+      <div className="signature-choice" role="group" aria-label={label}>
+        {options.map(([option, text]) => (
+          <button
+            key={option}
+            type="button"
+            className={option === value ? 'is-active' : ''}
+            aria-pressed={option === value}
+            onClick={() => onChange(option)}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const PLACEMENTS: readonly (readonly [SignatureImagePlacement, string])[] = [
+  ['below', 'Unter dem Text'],
+  ['above', 'Über dem Text'],
+]
+
+const ALIGNMENTS: readonly (readonly [SignatureImageAlign, string])[] = [
+  ['left', 'Links'],
+  ['center', 'Mittig'],
+  ['right', 'Rechts'],
+]
 
 export default function SignatureSettings({ user, onClose }: Props) {
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
@@ -82,12 +135,29 @@ export default function SignatureSettings({ user, onClose }: Props) {
             text: signature.text.slice(0, MAX_SIGNATURE_CHARS),
             imageBase64: signature.imageBase64,
             imageType: signature.imageType,
+            imagePlacement: signature.imagePlacement,
+            imageAlign: signature.imageAlign,
+            imageWidth: signature.imageWidth,
           }))
       setSaved(mailboxId)
       window.setTimeout(() => setSaved(null), 2000)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Speichern fehlgeschlagen')
     }
+  }
+
+  /**
+   * Lage oder Breite ändern.
+   *
+   * `persist` ist für den Schieberegler: Beim Ziehen läuft die Vorschau mit,
+   * geschrieben wird erst beim Loslassen. Sonst ginge für jeden Pixel ein
+   * Schreibvorgang in die Datenbank.
+   */
+  function setLayout(mailboxId: string, patch: Partial<Signature>, persist = true) {
+    const key = mailboxKey(mailboxId)
+    const next = { ...(signatures[key] ?? EMPTY_SIGNATURE), ...patch }
+    setSignatures((s) => ({ ...s, [key]: next }))
+    if (persist) void save(mailboxId, next)
   }
 
   /**
@@ -161,6 +231,17 @@ export default function SignatureSettings({ user, onClose }: Props) {
           <ul className="mailbox-list">
             {mailboxes.map((box) => {
               const signatur = signatures[mailboxKey(box.id)] ?? EMPTY_SIGNATURE
+              // Einmal gebaut, oben oder unten eingesetzt — der Unterschied
+              // zwischen den beiden Lagen ist nur die Reihenfolge.
+              const bild = (
+                <div className="signature-preview-image" style={{ textAlign: signatur.imageAlign }}>
+                  <img
+                    src={signatureImageSrc(signatur)}
+                    alt={`Signaturbild für ${mailboxLabel(box.id)}`}
+                    style={{ width: `${signatur.imageWidth}px`, maxWidth: '100%' }}
+                  />
+                </div>
+              )
               return (
               <li key={box.id} className="mailbox-item signature-item">
                 <div className="mailbox-item-head">
@@ -198,12 +279,59 @@ export default function SignatureSettings({ user, onClose }: Props) {
                 <div className="signature-image">
                   {signatur.imageBase64 !== '' ? (
                     <>
-                      <img
-                        src={signatureImageSrc(signatur)}
-                        alt={`Signaturbild für ${mailboxLabel(box.id)}`}
-                      />
+                      {/*
+                        Die Vorschau zeigt die Mail, nicht das Bild: Text und
+                        Logo in der eingestellten Reihenfolge, in der
+                        eingestellten Breite und Ausrichtung. „Oben oder
+                        unten" ist eine Frage, die sich nur beim Ansehen
+                        beantwortet, nicht beim Lesen zweier Wörter.
+                      */}
+                      <div className="signature-preview">
+                        {signatur.imagePlacement === 'above' ? bild : null}
+                        <p className="signature-preview-text">
+                          {signatur.text.trim() === ''
+                            ? 'Dein Text und die Signatur stehen hier.'
+                            : `…\n${signatur.text.trim()}`}
+                        </p>
+                        {signatur.imagePlacement === 'below' ? bild : null}
+                      </div>
+
+                      <div className="signature-layout">
+                        <ChoiceRow
+                          label="Position"
+                          value={signatur.imagePlacement}
+                          options={PLACEMENTS}
+                          onChange={(placement) => setLayout(box.id, { imagePlacement: placement })}
+                        />
+                        <ChoiceRow
+                          label="Ausrichtung"
+                          value={signatur.imageAlign}
+                          options={ALIGNMENTS}
+                          onChange={(align) => setLayout(box.id, { imageAlign: align })}
+                        />
+                        <label className="folder-modal-label signature-width">
+                          Breite: {signatur.imageWidth} Pixel
+                          <input
+                            type="range"
+                            min={SIGNATURE_IMAGE_MIN_WIDTH}
+                            max={SIGNATURE_IMAGE_MAX_WIDTH}
+                            step={10}
+                            value={signatur.imageWidth}
+                            aria-label={`Breite des Signaturbildes für ${mailboxLabel(box.id)} in Pixeln`}
+                            onChange={(e) =>
+                              setLayout(box.id, { imageWidth: Number(e.target.value) }, false)
+                            }
+                            // Beim Loslassen schreiben, nicht bei jedem Pixel.
+                            onPointerUp={() => void save(box.id, signatur)}
+                            onKeyUp={() => void save(box.id, signatur)}
+                            onBlur={() => void save(box.id, signatur)}
+                          />
+                        </label>
+                      </div>
+
                       <span className="muted small">
-                        {formatBytes(imageBytes(signatur))} · steht in der Mail unter dem Text
+                        {formatBytes(imageBytes(signatur))} · gespeichert bis 600 Pixel
+                        breit, damit es auch auf scharfen Bildschirmen scharf bleibt
                       </span>
                       <button
                         type="button"

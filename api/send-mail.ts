@@ -228,6 +228,9 @@ type OutgoingAttachment = {
 /** Content-ID, unter der das Signaturbild in der Mail steckt. */
 const SIGNATURE_CID = 'habmail-signatur'
 const MAX_SIGNATURE_IMAGE_BYTES = 200 * 1024
+const SIGNATURE_IMAGE_MIN_WIDTH = 80
+const SIGNATURE_IMAGE_MAX_WIDTH = 600
+const SIGNATURE_IMAGE_DEFAULT_WIDTH = 200
 
 type Payload = {
   kind: 'reply' | 'forward' | 'new'
@@ -239,7 +242,15 @@ type Payload = {
   mailboxId: string
   attachments: OutgoingAttachment[]
   /** Bild der Signatur, falls eines hinterlegt ist. */
-  signatureImage: { contentType: string; contentBase64: string } | null
+  signatureImage: {
+    contentType: string
+    contentBase64: string
+    /** Über dem Text wie ein Briefkopf, oder darunter hinter der Signatur. */
+    placement: 'above' | 'below'
+    align: 'left' | 'center' | 'right'
+    /** Anzeigebreite in Pixeln — unabhängig davon, wie groß die Datei ist. */
+    width: number
+  } | null
   context: { originalFrom: string; originalSubject: string; originalBody: string }
 }
 
@@ -253,7 +264,20 @@ function parseSignatureImage(value: unknown): Payload['signatureImage'] {
 
   const contentType = String(entry.contentType ?? '').toLowerCase()
   if (!/^image\/(png|jpeg|gif|webp)$/.test(contentType)) return null
-  return { contentType, contentBase64 }
+
+  // Lage und Breite kommen aus der Oberfläche mit, sind aber nichts, worauf
+  // sich der Versand verlassen muss: Fehlt etwas oder steht Unsinn drin, gilt
+  // die Vorgabe, statt die Mail scheitern zu lassen.
+  const width = Number(entry.width)
+  return {
+    contentType,
+    contentBase64,
+    placement: entry.placement === 'above' ? 'above' : 'below',
+    align: entry.align === 'center' || entry.align === 'right' ? entry.align : 'left',
+    width: Number.isFinite(width)
+      ? Math.min(SIGNATURE_IMAGE_MAX_WIDTH, Math.max(SIGNATURE_IMAGE_MIN_WIDTH, Math.round(width)))
+      : SIGNATURE_IMAGE_DEFAULT_WIDTH,
+  }
 }
 
 /** Für HTML: alles entschärfen, was als Markup gelesen werden könnte. */
@@ -265,6 +289,8 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;')
 }
 
+const BODY_STYLE = 'font-family:sans-serif;font-size:14px;line-height:1.5'
+
 /**
  * Die HTML-Fassung — nur nötig, wenn ein Signaturbild mitgeht.
  *
@@ -273,11 +299,25 @@ function escapeHtml(text: string): string {
  */
 function composeHtml(payload: Payload): string {
   const body = escapeHtml(composeText(payload)).replace(/\n/g, '<br>')
-  return (
-    `<div style="font-family:sans-serif;font-size:14px;line-height:1.5">${body}` +
-    `<div style="margin-top:12px"><img src="cid:${SIGNATURE_CID}" alt="" style="max-width:100%"></div>` +
-    `</div>`
-  )
+  const image = payload.signatureImage
+  if (image === null) return `<div style="${BODY_STYLE}">${body}</div>`
+
+  /*
+   * Die Breite steht doppelt da: als Attribut und im Stil. Outlook rechnet mit
+   * Word und ignoriert `width` im Stil häufig, während Webmailer das Attribut
+   * als veraltet behandeln. Beides zusammen trifft überall.
+   *
+   * `max-width:100%` bleibt daneben stehen: Auf einem schmalen Telefon ist die
+   * eingestellte Breite sonst breiter als die Mail.
+   */
+  const picture =
+    `<div style="margin:12px 0;text-align:${image.align}">` +
+    `<img src="cid:${SIGNATURE_CID}" alt="" width="${image.width}" ` +
+    `style="width:${image.width}px;max-width:100%;height:auto;border:0"></div>`
+
+  return image.placement === 'above'
+    ? `<div style="${BODY_STYLE}">${picture}${body}</div>`
+    : `<div style="${BODY_STYLE}">${body}${picture}</div>`
 }
 
 /**
