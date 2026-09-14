@@ -468,8 +468,12 @@ Zugangsdaten wie beim Empfangen.
 - **Signaturen**, eine je Postfach, unter *Kontozeichen → Signaturen*. Sie steht
   sichtbar im Schreibfeld und lässt sich dort noch anpassen; beim Wechsel des
   Absenders wird die alte ersetzt, nicht die neue angestapelt.
-- **Bild in der Signatur** (Logo), je Postfach eines: PNG, JPEG, GIF oder WebP
-  bis 200 kB. Es geht **als eingebetteter Anhang mit einer Content-ID** mit, und
+- **Bild in der Signatur** (Logo), je Postfach eines: PNG, JPEG, GIF oder WebP.
+  Größere Bilder verkleinert der Browser beim Hochladen selbst auf 600 Pixel
+  längste Kante und höchstens 200 kB — ein Logo aus dem Briefpapier-Ordner
+  wiegt Megabyte und muss dafür nicht erst durch ein anderes Programm.
+  Freigestellte Logos bleiben PNG und behalten ihre Durchsichtigkeit, alles
+  andere wird JPEG. Es geht **als eingebetteter Anhang mit einer Content-ID** mit, und
   die Mail bekommt dafür eine HTML-Fassung mit `<img src="cid:…">`. Als
   `data:`-Adresse ginge es nicht — Gmail und Outlook entfernen solche Bilder
   wortlos, beim Absender sieht die Mail trotzdem gut aus. Ohne Bild bleibt die

@@ -16,6 +16,7 @@ import {
   type Signature,
 } from './signatures'
 import { formatBytes } from './attachments'
+import { prepareSignatureImage } from './signatureImage'
 
 /**
  * Signaturen — eine je Postfach.
@@ -39,6 +40,9 @@ export default function SignatureSettings({ user, onClose }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  /** Das Postfach, dessen Bild gerade umgerechnet wird. */
+  const [working, setWorking] = useState<string | null>(null)
 
   useEffect(
     () =>
@@ -86,33 +90,45 @@ export default function SignatureSettings({ user, onClose }: Props) {
     }
   }
 
-  /** Ein Bild auswählen — sofort speichern, es gibt hier nichts zu tippen. */
+  /**
+   * Ein Bild auswählen — sofort speichern, es gibt hier nichts zu tippen.
+   *
+   * Zu groß ist kein Grund mehr abzulehnen: Ein Logo kommt selten in
+   * Mailgröße aus dem Ordner, und wer es erst in einem anderen Programm
+   * verkleinern muss, lässt es meistens bleiben. Der Browser rechnet es hier
+   * selbst herunter; gesagt wird es trotzdem, denn aus 3 MB werden 40 kB, und
+   * das soll niemanden überraschen.
+   */
   async function chooseImage(mailboxId: string, file: File) {
     setError(null)
+    setNotice(null)
     if (!SIGNATURE_IMAGE_TYPES.includes(file.type)) {
       setError(`„${file.name}" ist kein Bild, das sich in einer Mail zuverlässig anzeigen lässt (PNG, JPEG, GIF oder WebP).`)
       return
     }
-    if (file.size > MAX_SIGNATURE_IMAGE_BYTES) {
-      setError(
-        `„${file.name}" ist ${formatBytes(file.size)} groß — erlaubt sind ` +
-          `${formatBytes(MAX_SIGNATURE_IMAGE_BYTES)}. Ein Logo dieser Größe würde jede Mail unnötig schwer machen.`,
-      )
-      return
-    }
 
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    let binary = ''
-    for (let i = 0; i < bytes.length; i += 0x8000) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+    setWorking(mailboxId)
+    try {
+      const bild = await prepareSignatureImage(file, MAX_SIGNATURE_IMAGE_BYTES)
+      const next: Signature = {
+        ...(signatures[mailboxKey(mailboxId)] ?? EMPTY_SIGNATURE),
+        imageBase64: bild.base64,
+        imageType: bild.type,
+      }
+      setSignatures((s) => ({ ...s, [mailboxKey(mailboxId)]: next }))
+      await save(mailboxId, next)
+      if (bild.converted) {
+        setNotice(
+          `„${file.name}" war ${formatBytes(bild.originalBytes)} groß und ist jetzt ` +
+            `${formatBytes(bild.bytes)} klein (${bild.width} × ${bild.height} Pixel).` +
+            (file.type === 'image/gif' ? ' Eine Animation geht dabei verloren.' : ''),
+        )
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Das Bild ließ sich nicht übernehmen.')
+    } finally {
+      setWorking(null)
     }
-    const next: Signature = {
-      ...(signatures[mailboxKey(mailboxId)] ?? EMPTY_SIGNATURE),
-      imageBase64: btoa(binary),
-      imageType: file.type,
-    }
-    setSignatures((s) => ({ ...s, [mailboxKey(mailboxId)]: next }))
-    await save(mailboxId, next)
   }
 
   return (
@@ -132,6 +148,7 @@ export default function SignatureSettings({ user, onClose }: Props) {
         </p>
 
         {error ? <p className="mailbox-error">{error}</p> : null}
+        {notice ? <p className="muted small">{notice}</p> : null}
 
         {loading ? (
           <p className="muted small">Wird geladen …</p>
@@ -207,6 +224,7 @@ export default function SignatureSettings({ user, onClose }: Props) {
                         type="file"
                         accept={SIGNATURE_IMAGE_TYPES.join(',')}
                         aria-label={`Signaturbild für ${mailboxLabel(box.id)}`}
+                        disabled={working !== null}
                         onChange={(e) => {
                           const file = e.target.files?.[0]
                           if (file) void chooseImage(box.id, file)
@@ -214,8 +232,10 @@ export default function SignatureSettings({ user, onClose }: Props) {
                         }}
                       />
                       <span className="muted small">
-                        PNG, JPEG, GIF oder WebP, höchstens{' '}
-                        {formatBytes(MAX_SIGNATURE_IMAGE_BYTES)}.
+                        {working === box.id
+                          ? 'Wird auf Mailgröße gebracht …'
+                          : 'PNG, JPEG, GIF oder WebP. Größere Bilder werden beim ' +
+                            'Hochladen selbständig verkleinert.'}
                       </span>
                     </>
                   )}
