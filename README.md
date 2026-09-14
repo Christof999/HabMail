@@ -193,6 +193,17 @@ sind hinterlegt (`smtp.ionos.de:587`, `imap.ionos.de:993`). Andere Anbieter
 
 Bei Gmail und GMX braucht es ein App-Passwort, nicht das Kontopasswort.
 
+**Ein Postfach nachträglich ändern**: *Bearbeiten* am Eintrag — neues Passwort,
+Benutzername, Absenderadresse, Server und Ports. Das ist der Weg, wenn ein
+Postfach zwar abholt, aber nicht verschickt: meist stimmt nur das
+Versand-Passwort nicht. Gespeichert wird nur, was ausgefüllt ist; die
+Passwortfelder bleiben leer, weil der Proxy gespeicherte Passwörter nicht
+herausgibt. Direkt nach dem Speichern wird die Verbindung geprüft und das
+Ergebnis angezeigt.
+
+Löschen und neu anlegen ist dafür nicht nötig — und beim Bearbeiten bleibt die
+Kennung des Postfachs dieselbe, die schon geholten Mails hängen daran.
+
 ## Bestand migrieren
 
 Wer HabMail schon vor der Benutzertrennung benutzt hat, hat Mails flach an der

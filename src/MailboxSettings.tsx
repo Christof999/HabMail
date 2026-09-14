@@ -342,6 +342,49 @@ const EMPTY_FORM: FormState = {
   imapFolder: 'INBOX',
 }
 
+/**
+ * Ein bestehendes Postfach ändern.
+ *
+ * Die Passwortfelder sind bewusst leer und nicht vorbelegt: Der Proxy gibt
+ * gespeicherte Passwörter nie heraus — auch nicht maskiert an diese App. Was
+ * leer bleibt, geht deshalb gar nicht erst mit und bleibt drüben unverändert.
+ */
+type EditState = {
+  password: string
+  /** Das neue Versand-Passwort auch fürs Abholen setzen. */
+  imapSame: boolean
+  imapPassword: string
+  user: string
+  from: string
+  host: string
+  port: string
+  imapHost: string
+  imapPort: string
+  imapFolder: string
+}
+
+/**
+ * Das Formular aus dem, was über das Postfach bekannt ist.
+ *
+ * `imapSuggestion` ist der Weg „Abholen einschalten": dort gibt es noch keinen
+ * IMAP-Server, und der Vorschlag aus dem SMTP-Namen trifft bei den gängigen
+ * Anbietern.
+ */
+function editStateFor(box: Mailbox, imapSuggestion: boolean): EditState {
+  return {
+    password: '',
+    imapSame: true,
+    imapPassword: '',
+    user: '',
+    from: box.from ?? '',
+    host: box.host,
+    port: String(box.port),
+    imapHost: box.imap?.host ?? (imapSuggestion ? suggestImapHost(box.host) : ''),
+    imapPort: String(box.imap?.port ?? DEFAULT_PROVIDER.imapPort),
+    imapFolder: box.imap?.folder ?? 'INBOX',
+  }
+}
+
 /** Aus „Müller GmbH" wird „mueller-gmbh" — der Proxy erlaubt nur diese Zeichen. */
 function toId(value: string): string {
   return value
@@ -371,6 +414,9 @@ export default function MailboxSettings({ user, onClose }: Props) {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [pollReport, setPollReport] = useState<PollReport | null>(null)
+  const [editing, setEditing] = useState<string | null>(null)
+  const [edit, setEdit] = useState<EditState | null>(null)
+  const [editAdvanced, setEditAdvanced] = useState(false)
 
   const load = useCallback(
     async (verify: boolean) => {
@@ -480,20 +526,118 @@ export default function MailboxSettings({ user, onClose }: Props) {
     }
   }
 
-  async function enableImap(box: Mailbox) {
-    const host = suggestImapHost(box.host)
-    const answer = window.prompt(
-      `IMAP-Server für „${box.id}" (zum Abholen der Mails):`,
-      host,
-    )
-    if (answer === null || answer.trim() === '') return
+  function startEdit(box: Mailbox, imapSuggestion = false) {
+    setError(null)
+    setNotice(null)
+    setConfirmDelete(null)
+    setEditing(box.id)
+    setEdit(editStateFor(box, imapSuggestion))
+    // Wer das Abholen einschalten will, will genau an die Serverfelder — und
+    // wessen Versand scheitert, sieht dort, ob überhaupt der richtige Server
+    // eingetragen ist.
+    setEditAdvanced(imapSuggestion || box.reachable === false)
+  }
+
+  function cancelEdit() {
+    setEditing(null)
+    setEdit(null)
+    setEditAdvanced(false)
+  }
+
+  function setEditField(patch: Partial<EditState>) {
+    setEdit((prev) => (prev === null ? prev : { ...prev, ...patch }))
+  }
+
+  /**
+   * Das geänderte Postfach speichern — und sofort nachsehen, ob es jetzt geht.
+   *
+   * Geschickt wird nur, was sich wirklich ändert. Ein leeres Passwortfeld ist
+   * keine Änderung, sondern heißt „bleibt wie es ist": würde es als leerer
+   * Wert mitgehen, wäre das gespeicherte Passwort weg. Die Kennung des
+   * Postfachs rührt das nicht an, die schon geholten Mails hängen daran und
+   * bleiben, wo sie sind.
+   */
+  async function saveEdit(box: Mailbox) {
+    if (edit === null) return
+
+    const patch: Partial<Omit<MailboxInput, 'id'>> = {}
+    // Ein Postfach ohne IMAP-Server holt nichts ab; ein Passwort dafür wäre
+    // eine Angabe ins Leere.
+    const receives = box.imap !== undefined || edit.imapHost.trim() !== ''
+
+    if (edit.password !== '') {
+      patch.password = edit.password
+      // Ohne eigenes IMAP-Passwort holt der Proxy mit dem Versand-Passwort ab.
+      // Wird nur dieses geändert, bliebe das Abholen sonst auf dem alten
+      // stehen — und aus „kann nicht senden" würde „kann nicht empfangen".
+      if (edit.imapSame && receives) patch.imapPassword = edit.password
+    }
+    if (!edit.imapSame && edit.imapPassword !== '' && receives) {
+      patch.imapPassword = edit.imapPassword
+    }
+
+    const login = edit.user.trim()
+    if (login !== '') patch.user = login
+
+    const from = edit.from.trim()
+    if (from !== (box.from ?? '')) patch.from = from
+
+    const host = edit.host.trim()
+    if (host !== '' && host !== box.host) patch.host = host
+    const port = toNumberOrUndefined(edit.port)
+    if (port !== undefined && port !== box.port) patch.port = port
+
+    const imapHost = edit.imapHost.trim()
+    if (imapHost !== '' && imapHost !== (box.imap?.host ?? '')) patch.imapHost = imapHost
+    if (imapHost !== '') {
+      const imapPort = toNumberOrUndefined(edit.imapPort)
+      if (imapPort !== undefined && imapPort !== box.imap?.port) patch.imapPort = imapPort
+      const folder = edit.imapFolder.trim() || 'INBOX'
+      if (folder !== (box.imap?.folder ?? 'INBOX')) patch.imapFolder = folder
+    }
+
+    if (Object.keys(patch).length === 0) {
+      setError(
+        'Nichts geändert. Die Passwortfelder sind absichtlich leer — tipp das neue ' +
+          'Passwort hinein, das alte steht nirgends zum Überschreiben bereit.',
+      )
+      return
+    }
 
     setError(null)
+    setNotice(null)
     setBusy(true)
     try {
-      await updateMailbox(await user.getIdToken(), box.id, { imapHost: answer.trim() })
-      setNotice(`Abholen für „${box.id}" eingeschaltet.`)
-      await load(false)
+      const token = await user.getIdToken()
+      await updateMailbox(token, box.id, patch)
+
+      // Gleich mit Prüfung zurückholen: Wer gerade ein Passwort getippt hat,
+      // will wissen, ob es das richtige war, und nicht erst einen zweiten Knopf
+      // suchen müssen.
+      const verified = await listMailboxes(token, true)
+      setMailboxes(verified)
+      cancelEdit()
+
+      const fresh = verified.find((m) => m.id === box.id)
+      const name = fresh?.from || mailboxLabel(box.id)
+      if (fresh?.reachable === false) {
+        setError(
+          `Gespeichert, aber der Versand über „${name}" scheitert weiter: ` +
+            `${fresh.message ?? 'unbekannter Fehler'}`,
+        )
+      } else if (fresh?.imapReachable === false) {
+        setError(
+          `Gespeichert, aber das Abholen für „${name}" scheitert weiter: ` +
+            `${fresh.imapMessage ?? 'unbekannter Fehler'}`,
+        )
+      } else if (fresh?.reachable === true) {
+        setNotice(
+          `Gespeichert. Versand über „${name}" funktioniert` +
+            `${fresh.imapReachable === true ? ', Abholen ebenfalls' : ''}.`,
+        )
+      } else {
+        setNotice(`Gespeichert. Zur Erreichbarkeit von „${name}" kam keine Antwort.`)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
     } finally {
@@ -621,48 +765,208 @@ export default function MailboxSettings({ user, onClose }: Props) {
                   </div>
                 ) : null}
 
-                <div className="mailbox-item-actions">
-                  {box.imap === undefined && box.source === 'registry' ? (
+                {editing === box.id && edit !== null ? (
+                  <div className="mailbox-edit">
+                    <p className="muted small">
+                      Die Passwortfelder sind leer, weil der Proxy gespeicherte
+                      Passwörter nicht herausgibt — auch nicht an HabMail. Leer heißt
+                      hier: bleibt, wie es ist.
+                    </p>
+
+                    <label className="folder-modal-label">
+                      Neues Passwort für den Versand
+                      <input
+                        type="password"
+                        value={edit.password}
+                        autoComplete="new-password"
+                        placeholder="unverändert"
+                        onChange={(e) => setEditField({ password: e.target.value })}
+                      />
+                    </label>
+
+                    {box.imap !== undefined || edit.imapHost.trim() !== '' ? (
+                      <label className="mailbox-edit-option small">
+                        <input
+                          type="checkbox"
+                          checked={edit.imapSame}
+                          onChange={(e) => setEditField({ imapSame: e.target.checked })}
+                        />
+                        Gilt auch fürs Abholen
+                      </label>
+                    ) : null}
+                    {edit.imapSame && box.imap !== undefined ? (
+                      <p className="muted small">
+                        Steht für das Abholen ein eigenes Passwort im Proxy, nimm den
+                        Haken heraus — sonst wird es mitüberschrieben.
+                      </p>
+                    ) : null}
+
+                    {edit.imapSame ? null : (
+                      <label className="folder-modal-label">
+                        Abweichendes Passwort fürs Abholen (IMAP)
+                        <input
+                          type="password"
+                          value={edit.imapPassword}
+                          autoComplete="new-password"
+                          placeholder="unverändert"
+                          onChange={(e) => setEditField({ imapPassword: e.target.value })}
+                        />
+                      </label>
+                    )}
+
                     <button
                       type="button"
-                      className="ghost"
-                      disabled={busy}
-                      onClick={() => void enableImap(box)}
+                      className="ghost small-btn mailbox-advanced-toggle"
+                      aria-expanded={editAdvanced}
+                      onClick={() => setEditAdvanced((v) => !v)}
                     >
-                      Abholen einschalten
+                      {editAdvanced
+                        ? 'Servereinstellungen ausblenden'
+                        : 'Servereinstellungen ändern'}
                     </button>
-                  ) : null}
-                  {box.source === 'registry' ? (
-                    confirmDelete === box.id ? (
+
+                    {editAdvanced ? (
+                      <div className="mailbox-advanced">
+                        <label className="folder-modal-label">
+                          Benutzername für die Anmeldung
+                          <input
+                            type="text"
+                            value={edit.user}
+                            autoComplete="off"
+                            placeholder={box.user}
+                            onChange={(e) => setEditField({ user: e.target.value })}
+                          />
+                        </label>
+                        <label className="folder-modal-label">
+                          Absenderadresse
+                          <input
+                            type="text"
+                            value={edit.from}
+                            placeholder="buero@meine-firma.de"
+                            onChange={(e) => setEditField({ from: e.target.value })}
+                          />
+                        </label>
+                        <div className="mailbox-form-row">
+                          <label className="folder-modal-label">
+                            SMTP-Server (Versand)
+                            <input
+                              type="text"
+                              value={edit.host}
+                              onChange={(e) => setEditField({ host: e.target.value })}
+                            />
+                          </label>
+                          <label className="folder-modal-label mailbox-port">
+                            Port
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={edit.port}
+                              onChange={(e) => setEditField({ port: e.target.value })}
+                            />
+                          </label>
+                        </div>
+                        <div className="mailbox-form-row">
+                          <label className="folder-modal-label">
+                            IMAP-Server (Empfang)
+                            <input
+                              type="text"
+                              value={edit.imapHost}
+                              placeholder="imap.ionos.de"
+                              onChange={(e) => setEditField({ imapHost: e.target.value })}
+                            />
+                          </label>
+                          <label className="folder-modal-label mailbox-port">
+                            Port
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={edit.imapPort}
+                              onChange={(e) => setEditField({ imapPort: e.target.value })}
+                            />
+                          </label>
+                        </div>
+                        <label className="folder-modal-label">
+                          IMAP-Ordner
+                          <input
+                            type="text"
+                            value={edit.imapFolder}
+                            onChange={(e) => setEditField({ imapFolder: e.target.value })}
+                          />
+                        </label>
+                        {box.imap === undefined ? (
+                          <p className="muted small">
+                            Ohne IMAP-Server kann über dieses Postfach nur verschickt
+                            werden.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <div className="mailbox-item-actions">
+                      <button type="button" className="ghost" disabled={busy} onClick={cancelEdit}>
+                        Abbrechen
+                      </button>
+                      <button type="button" disabled={busy} onClick={() => void saveEdit(box)}>
+                        {busy ? 'Speichere und prüfe …' : 'Speichern und prüfen'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mailbox-item-actions">
+                    {box.source === 'registry' && confirmDelete !== box.id ? (
                       <>
+                        {box.imap === undefined ? (
+                          <button
+                            type="button"
+                            className="ghost"
+                            disabled={busy}
+                            onClick={() => startEdit(box, true)}
+                          >
+                            Abholen einschalten
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="ghost"
-                          onClick={() => setConfirmDelete(null)}
-                        >
-                          Abbrechen
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-danger"
                           disabled={busy}
-                          onClick={() => void remove(box.id)}
+                          onClick={() => startEdit(box)}
                         >
-                          Wirklich entfernen
+                          Bearbeiten
                         </button>
                       </>
-                    ) : (
-                      <button
-                        type="button"
-                        className="ghost"
-                        disabled={busy}
-                        onClick={() => setConfirmDelete(box.id)}
-                      >
-                        Entfernen
-                      </button>
-                    )
-                  ) : null}
-                </div>
+                    ) : null}
+                    {box.source === 'registry' ? (
+                      confirmDelete === box.id ? (
+                        <>
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={() => setConfirmDelete(null)}
+                          >
+                            Abbrechen
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-danger"
+                            disabled={busy}
+                            onClick={() => void remove(box.id)}
+                          >
+                            Wirklich entfernen
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="ghost"
+                          disabled={busy}
+                          onClick={() => setConfirmDelete(box.id)}
+                        >
+                          Entfernen
+                        </button>
+                      )
+                    ) : null}
+                  </div>
+                )}
               </li>
             ))}
           </ul>

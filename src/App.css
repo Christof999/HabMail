@@ -1045,6 +1045,23 @@ button.ghost:hover:not(:disabled) {
   border-radius: 10px;
 }
 
+/* Das Bearbeiten-Feld sitzt im Postfach-Eintrag selbst: Wer es aufklappt, soll
+   sehen, welches Postfach er gerade ändert. Die Linie oben trennt es von den
+   Angaben darüber, ohne einen zweiten Kasten in den Kasten zu setzen. */
+.mailbox-edit {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+}
+
+.mailbox-edit-option {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+  color: var(--text);
+}
+
 .poll-report {
   list-style: none;
   padding: 0.5rem 0.7rem;
