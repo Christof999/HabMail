@@ -19,7 +19,9 @@
 }
 
 .folder-sidebar {
-  flex: 0 0 220px;
+  /* Zwanzig Pixel mehr als früher: Sie kosten am Schirm nichts und ersparen
+     jedem zweiten Ordnernamen die drei Pünktchen. */
+  flex: 0 0 240px;
   position: sticky;
   top: 1rem;
   align-self: flex-start;
@@ -85,7 +87,9 @@
 }
 
 .folder-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   width: 100%;
   text-align: left;
   font: inherit;
@@ -96,10 +100,25 @@
   background: transparent;
   color: var(--text);
   cursor: pointer;
+  /* Die Grundregel für `button` legt jedem Knopf einen Ring und einen Schatten
+     um — gedacht für die runden Knöpfe der Oberfläche. In einer Liste ergab
+     das einen Kasten um jede einzelne Zeile. */
+  box-shadow: none;
+  /* Der aktive Ordner bekommt seinen Hintergrund, der gedrückte gibt kurz
+     nach — beides schnell genug, um nicht als Verzögerung zu erscheinen. */
+  transition:
+    background-color 140ms ease,
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.folder-item:hover {
-  background: var(--pill-bg);
+.folder-item:active {
+  transform: scale(0.985);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .folder-item:hover {
+    background: var(--pill-bg);
+  }
 }
 
 .folder-item.active {
@@ -108,15 +127,106 @@
   font-weight: 600;
 }
 
+/* Das Sinnbild trägt keine eigene Bedeutung — es gibt der Zeile einen festen
+   linken Rand, an dem das Auge beim Überfliegen entlangläuft. */
+.folder-glyph {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.folder-item.active .folder-glyph {
+  color: var(--accent);
+}
+
+/* Lange Ordnernamen kürzen statt die Leiste zu sprengen. */
+.folder-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Die Zahl der Ungelesenen. Rechtsbündig, damit alle untereinander stehen. */
+.folder-count {
+  flex-shrink: 0;
+  min-width: 1.35rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: var(--pill-bg);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.folder-item.active .folder-count {
+  background: var(--accent);
+  color: #fff;
+}
+
 .folder-item-root {
   margin-bottom: 0.35rem;
 }
 
+/*
+ * Die Markierung gehört der ganzen Zeile, nicht nur dem Namensknopf: So
+ * können die beiden Aktionen darüberliegen, statt auf jeder Zeile dreieinhalb
+ * Rem Breite zu reservieren. Bei einer 220 Pixel schmalen Leiste war das ein
+ * Viertel der Breite — „Rechnungen" endete als „Rechn…".
+ */
 .folder-row {
+  position: relative;
   display: flex;
   align-items: stretch;
   gap: 0.2rem;
   margin-bottom: 0.1rem;
+  border-radius: 8px;
+  transition: background-color 140ms ease;
+}
+
+.folder-row.is-active {
+  background: var(--pill-bg);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .folder-row:hover {
+    background: var(--pill-bg);
+  }
+}
+
+/* Sonst läge die halbdurchsichtige Fläche doppelt übereinander und wäre
+   dunkler als anderswo. */
+.folder-row .folder-item:hover,
+.folder-row .folder-item.active {
+  background: transparent;
+}
+
+/*
+ * Sobald die Knöpfe da sind, hört der Name vor ihnen auf — und der Zähler
+ * macht ihnen Platz, statt sich mit ihnen um dieselben Pixel zu streiten. Wer
+ * eine Zeile anfasst, will sie umbenennen oder löschen; wie viele Ungelesene
+ * darin liegen, hat er eine Zehntelsekunde vorher gesehen.
+ */
+.folder-row:focus-within .folder-item {
+  padding-right: 3.3rem;
+}
+
+.folder-row:focus-within .folder-count {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .folder-row:hover .folder-item {
+    padding-right: 3.3rem;
+  }
+
+  .folder-row:hover .folder-count {
+    display: none;
+  }
 }
 
 .folder-row .folder-item {
@@ -124,25 +234,64 @@
   min-width: 0;
 }
 
+/*
+ * Umbenennen und Löschen standen bisher an jeder Zeile — zwei Knöpfe je
+ * Ordner, immer sichtbar, und auf dem Handy in Fingergröße direkt neben dem
+ * Namen. Das war mehr Bedienelement als Inhalt, und das Löschen lag einen
+ * Daumenbreit neben dem Öffnen. Jetzt zeigen sie sich am Ordner, auf dem der
+ * Zeiger steht, an dem, der gerade offen ist, und sobald die Zeile den
+ * Tastaturfokus hat.
+ */
 .folder-row-actions {
+  position: absolute;
+  right: 0.25rem;
+  top: 0;
+  bottom: 0;
   display: flex;
   flex-shrink: 0;
   align-items: center;
   gap: 0.1rem;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.folder-row:focus-within .folder-row-actions {
+  visibility: visible;
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .folder-row:hover .folder-row-actions {
+    visibility: visible;
+    opacity: 1;
+  }
 }
 
 .folder-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   font: inherit;
   font-size: 0.85rem;
+  font-weight: 400;
   line-height: 1;
-  width: 1.65rem;
-  height: 1.65rem;
+  width: 1.5rem;
+  height: 1.5rem;
   padding: 0;
   border: none;
   border-radius: 6px;
   background: transparent;
+  box-shadow: none;
   color: var(--muted);
   cursor: pointer;
+}
+
+/* Am Rechner genügt das Zeichen, der Name steht im aria-label. Auf dem Handy
+   wird daraus ein beschrifteter Knopf — siehe unten. */
+.folder-action-label {
+  display: none;
 }
 
 .folder-icon-btn:hover {
@@ -152,6 +301,96 @@
 
 .folder-icon-btn--danger:hover {
   color: var(--danger);
+}
+
+/* --- Verschieben-Fenster --- */
+
+.move-sheet-subject {
+  margin: 0 0 0.6rem;
+  overflow-wrap: anywhere;
+}
+
+.move-sheet-filter {
+  font: inherit;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+/* Die Liste scrollt, nicht das Fenster: Der Abbrechen-Knopf bleibt sichtbar,
+   auch bei dreißig Ordnern. */
+.move-sheet-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  max-height: min(52vh, 24rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.move-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 0.92rem;
+  /* Fingergröße, auch am Rechner — hier wird getroffen, nicht gezielt. */
+  min-height: 2.75rem;
+  padding: 0.5rem 0.7rem;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font-weight: 400;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.move-sheet-item:active {
+  transform: scale(0.985);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .move-sheet-item:hover {
+    background: var(--pill-bg);
+  }
+}
+
+.move-sheet-item.is-current {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.move-sheet-item:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.move-sheet-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.move-sheet-check {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+  color: var(--accent);
 }
 
 .btn-danger {
@@ -1606,6 +1845,14 @@ code {
     top: 0;
     left: 0;
     bottom: 0;
+    /*
+     * Die Leiste steht am Schirm in einer Flex-Reihe und hält sich mit
+     * `align-self: flex-start` oben. Das gilt auch für ein fest
+     * positioniertes Feld: Es füllt dann den Raum zwischen `top` und `bottom`
+     * nicht mehr aus, sondern hört dort auf, wo der letzte Ordner endet — ein
+     * weißes Feld, das mitten im Bildschirm abbricht.
+     */
+    align-self: stretch;
     width: min(20.5rem, calc(100vw - 2rem));
     z-index: 160;
     margin: 0;
@@ -1798,10 +2045,14 @@ code {
     padding-right: 2.65rem;
   }
 
+  /*
+   * Der Ziehgriff war auf dem Telefon ein Knopf, der nichts tut: Safari löst
+   * mit dem Finger keine Drag-Ereignisse aus. Er nahm jeder Karte knapp drei
+   * Rem Breite weg — für ein Versprechen, das er nicht halten konnte. Das
+   * Verschieben läuft hier über den Ordner-Knopf an der Mail.
+   */
   .list-item-email .email-drag-handle {
-    width: 2.75rem;
-    min-width: 2.75rem;
-    min-height: 3.5rem;
+    display: none;
   }
 
   .folder-item,
@@ -1811,11 +2062,67 @@ code {
     padding-bottom: 0.5rem;
   }
 
+  /*
+   * Zwei Knöpfe je Ordner nahmen jeder Zeile fünfeinhalb Rem Breite weg —
+   * auch versteckt, denn Platz belegten sie trotzdem: Die Ordnernamen endeten
+   * deshalb ein gutes Stück vor dem Rand, während der Posteingang darüber
+   * durchlief. Auf dem Handy stehen sie jetzt in einer eigenen Zeile unter dem
+   * geöffneten Ordner, mit Beschriftung statt Zeichen. Die Namen bekommen ihre
+   * Breite zurück, und „Löschen" liegt nicht mehr einen Daumen neben „Öffnen".
+   */
+  .folder-row {
+    flex-wrap: wrap;
+  }
+
+  .folder-row-actions {
+    position: static;
+    display: none;
+    width: 100%;
+    gap: 0.4rem;
+    padding: 0.1rem 0 0.4rem;
+  }
+
+  /* Die Knöpfe stehen hier unter dem Namen, nicht neben ihm — der Name
+     braucht den rechten Rand also nicht freizuhalten. */
+  .folder-row.is-active .folder-item {
+    padding-right: 0.5rem;
+  }
+
+  .folder-row.is-active .folder-row-actions {
+    display: flex;
+    visibility: visible;
+    opacity: 1;
+  }
+
+  /* Ohne Zeiger gibt es kein Überfahren — der Zähler bleibt hier stehen,
+     auch wenn nach dem Tippen noch ein Knopf den Fokus hält. */
+  .folder-row:focus-within .folder-count {
+    display: inline-block;
+  }
+
   .folder-icon-btn {
-    min-width: 2.75rem;
-    min-height: 2.75rem;
-    width: 2.75rem;
-    height: 2.75rem;
+    width: auto;
+    height: 2.5rem;
+    min-height: 2.5rem;
+    padding: 0 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+  }
+
+  /* Mit Beschriftung ist das Zeichen davor nur noch Dekoration. */
+  .folder-action-glyph {
+    display: none;
+  }
+
+  /* Ohne Zeiger gibt es kein Überfahren, an dem „Löschen" rot werden könnte —
+     also steht es hier von vornherein in seiner Farbe. */
+  .folder-icon-btn--danger {
+    color: var(--danger);
+  }
+
+  .folder-action-label {
+    display: inline;
+    font-size: 0.82rem;
   }
 
   .modal-overlay {
@@ -1823,6 +2130,27 @@ code {
     justify-content: stretch;
     padding: 0;
     padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* Damit das Hereinfahren von unten keine Bildlaufleiste erzeugt. */
+    overflow: hidden;
+  }
+
+  /*
+   * Fenster sind auf dem Handy Schubladen von unten — dann sollen sie auch von
+   * unten kommen. Ohne Bewegung erscheinen sie einfach da, und man sucht einen
+   * Moment, was sich gerade geändert hat.
+   *
+   * `@starting-style` nennt den Zustand, aus dem heraus animiert wird. Kennt
+   * ein Browser das nicht, steht das Fenster sofort an seinem Platz — nichts
+   * geht kaputt, es fährt nur nicht.
+   */
+  .modal-overlay > .modal.card {
+    transition: transform 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  @starting-style {
+    .modal-overlay > .modal.card {
+      transform: translateY(100%);
+    }
   }
 
   .modal.card {
@@ -1924,6 +2252,24 @@ code {
   .shell.narrow form.card input {
     min-height: 2.75rem;
     font-size: 1rem;
+  }
+}
+
+/* Die Schublade fährt herein; wer Bewegung abbestellt hat, bekommt sie
+   trotzdem — nur ohne Fahrt. */
+@media (max-width: 767px) and (prefers-reduced-motion: reduce) {
+  .folder-sidebar--drawer {
+    transition: none;
+  }
+
+  .modal-overlay > .modal.card {
+    transition: none;
+  }
+
+  @starting-style {
+    .modal-overlay > .modal.card {
+      transform: none;
+    }
   }
 }
 

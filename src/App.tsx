@@ -4,10 +4,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type Dispatch,
   type DragEvent,
   type FormEvent,
-  type SetStateAction,
 } from 'react'
 import {
   onAuthStateChanged,
@@ -41,7 +39,6 @@ import {
   parseMailFoldersTree,
   rtdbEmailFieldPath,
   rtdbEmailRecordPath,
-  type FolderTreeNode,
   type MailFolder,
 } from './mailFolders'
 import {
@@ -64,6 +61,10 @@ import {
   openAttachment,
 } from './attachments'
 import { mailboxLabel } from './mailboxesApi'
+import { MoveToFolderSheet } from './MoveToFolderSheet'
+import { SvgMoveToFolder } from './icons'
+import { FolderNav } from './FolderNav'
+import { folderRowMailDragLeave, MAIL_DROP_INBOX } from './folderDrop'
 import AccountMenu from './AccountMenu'
 import MailboxSettings from './MailboxSettings'
 import SignatureSettings from './SignatureSettings'
@@ -111,7 +112,6 @@ const HABMAIL_THREAD_DRAG_MIME = 'application/x-habmail-thread'
  */
 let habmailThreadDragSessionActive = false
 
-const MAIL_DROP_INBOX = '__habmail_inbox__'
 
 type HabmailThreadDragPayload = { habmailThread: true; memberIds: string[] }
 
@@ -159,113 +159,6 @@ function threadFromDragMemberIds(
   return threads[0] ?? null
 }
 
-function folderRowMailDragLeave(
-  e: DragEvent,
-  folderId: string,
-  setHighlight: Dispatch<SetStateAction<string | null>>,
-) {
-  const rel = e.relatedTarget as Node | null
-  if (rel && e.currentTarget.contains(rel)) return
-  setHighlight((h) => (h === folderId ? null : h))
-}
-
-function FolderTreeNav({
-  nodes,
-  selectedId,
-  onSelect,
-  onRequestRename,
-  onRequestDelete,
-  mailDropHighlightId,
-  onMailDragOverFolder,
-  onMailDragEnterFolder,
-  onMailDragLeaveFolder,
-  onMailDropOnFolder,
-  depth = 0,
-}: {
-  nodes: FolderTreeNode[]
-  selectedId: string | null
-  onSelect: (id: string) => void
-  onRequestRename: (node: FolderTreeNode) => void
-  onRequestDelete: (node: FolderTreeNode) => void
-  mailDropHighlightId: string | null
-  onMailDragOverFolder: (e: DragEvent, folderId: string) => void
-  onMailDragEnterFolder: (e: DragEvent, folderId: string) => void
-  onMailDragLeaveFolder: (e: DragEvent, folderId: string) => void
-  onMailDropOnFolder: (e: DragEvent, folderId: string) => void
-  depth?: number
-}) {
-  if (!nodes.length) return null
-  return (
-    <ul className="folder-tree">
-      {nodes.map((n) => (
-        <li key={n.id}>
-          <div
-            className={`folder-row${mailDropHighlightId === n.id ? ' folder-row--mail-drop-active' : ''}`}
-            style={{ paddingLeft: `${10 + depth * 12}px` }}
-            onDragEnter={(e) => onMailDragEnterFolder(e, n.id)}
-            onDragOver={(e) => onMailDragOverFolder(e, n.id)}
-            onDragLeave={(e) => onMailDragLeaveFolder(e, n.id)}
-            onDrop={(e) => onMailDropOnFolder(e, n.id)}
-          >
-            <button
-              type="button"
-              className={
-                selectedId === n.id ? 'folder-item active' : 'folder-item'
-              }
-              onClick={() => onSelect(n.id)}
-            >
-              {n.name}
-            </button>
-            <span className="folder-row-actions">
-              <button
-                type="button"
-                className="folder-icon-btn"
-                title="Umbenennen"
-                aria-label={`Ordner ${n.name} umbenennen`}
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  onRequestRename(n)
-                }}
-              >
-                ✎
-              </button>
-              <button
-                type="button"
-                className="folder-icon-btn folder-icon-btn--danger"
-                title="Löschen"
-                aria-label={`Ordner ${n.name} löschen`}
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  onRequestDelete(n)
-                }}
-              >
-                ×
-              </button>
-            </span>
-          </div>
-          {n.children.length > 0 ? (
-            <FolderTreeNav
-              nodes={n.children}
-              selectedId={selectedId}
-              onSelect={onSelect}
-              onRequestRename={onRequestRename}
-              onRequestDelete={onRequestDelete}
-              mailDropHighlightId={mailDropHighlightId}
-              onMailDragOverFolder={onMailDragOverFolder}
-              onMailDragEnterFolder={onMailDragEnterFolder}
-              onMailDragLeaveFolder={onMailDragLeaveFolder}
-              onMailDropOnFolder={onMailDropOnFolder}
-              depth={depth + 1}
-            />
-          ) : null}
-        </li>
-      ))}
-    </ul>
-  )
-}
-
 export default function App() {
   const [configError, setConfigError] = useState<string | null>(null)
   const [user, setUser] = useState<import('firebase/auth').User | null>(null)
@@ -301,6 +194,8 @@ export default function App() {
     null,
   )
   const [moveBusyKey, setMoveBusyKey] = useState<string | null>(null)
+  /** Die Unterhaltung, für die gerade das Verschieben-Fenster offen ist. */
+  const [moveTarget, setMoveTarget] = useState<EmailThread | null>(null)
   const [renameFolderTarget, setRenameFolderTarget] = useState<{
     id: string
     name: string
@@ -576,6 +471,24 @@ export default function App() {
   )
 
   const folderTree = useMemo(() => buildFolderTree(folders), [folders])
+
+  /**
+   * Ungelesene je Ordner.
+   *
+   * Gezählt werden Nachrichten, nicht Unterhaltungen — dieselbe Zahl, die
+   * jedes Mailprogramm zeigt. Und nur die im Ordner selbst: Stünde in einem
+   * Elternordner die Summe seiner Kinder, stünde dieselbe Mail zweimal in der
+   * Leiste, einmal oben und einmal unten.
+   */
+  const unreadByFolder = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const row of rows) {
+      if (row.userRead === true) continue
+      const key = row.folderId?.trim() || MAIL_DROP_INBOX
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    return counts
+  }, [rows])
   async function markThreadRead(thread: EmailThread) {
     if (!user) return
     setFolderActionError(null)
@@ -683,8 +596,8 @@ export default function App() {
   async function moveThreadToFolder(
     thread: EmailThread,
     targetFolderId: string | null,
-  ) {
-    if (!user) return
+  ): Promise<boolean> {
+    if (!user) return false
     setFolderActionError(null)
     const liKey = thread.membersDesc
       .map((r) => r.id)
@@ -699,10 +612,12 @@ export default function App() {
     }
     try {
       await update(ref(db), updates)
+      return true
     } catch (e) {
       setFolderActionError(
         e instanceof Error ? e.message : 'Verschieben fehlgeschlagen',
       )
+      return false
     } finally {
       setMoveBusyKey(null)
     }
@@ -1036,57 +951,46 @@ export default function App() {
               die Liste ist nicht nach Ordner gefiltert.
             </p>
           ) : null}
+          {/*
+            Auf dem Schirm ist das Ziehen der schnellste Weg und der Hinweis
+            deshalb seine Zeile wert. Auf dem Handy stand hier dasselbe — nur
+            dass Ziehen mit dem Finger gar nicht geht. Dort führt der Weg über
+            den Ordner-Knopf an der Mail, und der braucht keine Erklärung.
+          */}
           {!isCompactLayout ? (
             <p className="muted small folder-dnd-hint">
               Unterhaltung am <strong>linken Griff</strong> der Karte ziehen und
-              auf <strong>Posteingang</strong> oder einen Ordner fallen lassen.
+              hier fallen lassen — oder den Ordner-Knopf an der Mail benutzen.
             </p>
-          ) : (
-            <p className="muted small folder-mobile-hint">
-              Zum Verschieben: Karte am <strong>linken Griff</strong> ziehen.
-            </p>
-          )}
-          <nav className="folder-nav">
-            <button
-              type="button"
-              className={[
-                selectedFolderId === null
-                  ? 'folder-item folder-item-root active'
-                  : 'folder-item folder-item-root',
-                mailDropHighlightId === MAIL_DROP_INBOX
-                  ? 'folder-item--mail-drop-active'
-                  : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              onClick={() => selectFolder(null)}
-              onDragEnter={handleMailDragEnterInbox}
-              onDragOver={handleMailDragOverInbox}
-              onDragLeave={handleMailDragLeaveInbox}
-              onDrop={handleMailDropOnInbox}
-            >
-              Posteingang
-            </button>
-            <FolderTreeNav
-              nodes={folderTree}
-              selectedId={selectedFolderId}
-              onSelect={selectFolder}
-              onRequestRename={(node) => {
-                setFolderActionError(null)
-                setRenameFolderTarget({ id: node.id, name: node.name })
-                setRenameFolderInput(node.name)
-              }}
-              onRequestDelete={(node) => {
-                setFolderActionError(null)
-                setDeleteFolderTarget({ id: node.id, name: node.name })
-              }}
-              mailDropHighlightId={mailDropHighlightId}
-              onMailDragOverFolder={handleMailDragOverFolder}
-              onMailDragEnterFolder={handleMailDragEnterFolder}
-              onMailDragLeaveFolder={handleMailDragLeaveFolder}
-              onMailDropOnFolder={handleMailDropOnFolder}
-            />
-          </nav>
+          ) : null}
+          <FolderNav
+            tree={folderTree}
+            selectedId={selectedFolderId}
+            unreadByFolder={unreadByFolder}
+            mailDropHighlightId={mailDropHighlightId}
+            onSelect={selectFolder}
+            onRequestRename={(node) => {
+              setFolderActionError(null)
+              setRenameFolderTarget({ id: node.id, name: node.name })
+              setRenameFolderInput(node.name)
+            }}
+            onRequestDelete={(node) => {
+              setFolderActionError(null)
+              setDeleteFolderTarget({ id: node.id, name: node.name })
+            }}
+            inboxDragHandlers={{
+              onDragEnter: handleMailDragEnterInbox,
+              onDragOver: handleMailDragOverInbox,
+              onDragLeave: handleMailDragLeaveInbox,
+              onDrop: handleMailDropOnInbox,
+            }}
+            folderDragHandlers={{
+              onDragEnter: handleMailDragEnterFolder,
+              onDragOver: handleMailDragOverFolder,
+              onDragLeave: handleMailDragLeaveFolder,
+              onDrop: handleMailDropOnFolder,
+            }}
+          />
         </aside>
   )
 
@@ -1453,6 +1357,10 @@ export default function App() {
                   setFolderActionError(null)
                   setThreadDeleteTarget(thread)
                 }}
+                onRequestMove={() => {
+                  setFolderActionError(null)
+                  setMoveTarget(thread)
+                }}
                 onReply={() =>
                   setCompose({ mode: 'reply', row: head })
                 }
@@ -1505,6 +1413,29 @@ export default function App() {
         </div>
       </div>
       )}
+
+      {moveTarget ? (
+        <MoveToFolderSheet
+          folders={folderTree}
+          currentFolderId={threadHeadFolderId(moveTarget)}
+          subject={moveTarget.membersDesc[0].subject}
+          busy={moveBusyKey !== null}
+          error={folderActionError}
+          onClose={() => {
+            setFolderActionError(null)
+            setMoveTarget(null)
+          }}
+          onMove={(folderId) => {
+            const thread = moveTarget
+            void (async () => {
+              // Nur schließen, wenn es geklappt hat — sonst stünde die
+              // Fehlermeldung hinter einem Fenster, das sich gerade
+              // geschlossen hat.
+              if (await moveThreadToFolder(thread, folderId)) setMoveTarget(null)
+            })()
+          }}
+        />
+      ) : null}
 
       {renameFolderTarget ? (
         <div
@@ -1901,6 +1832,7 @@ function EmailCard({
   onMarkInteracted,
   onMarkUnread,
   onRequestDelete,
+  onRequestMove,
   onReply,
   onForward,
 }: {
@@ -1909,6 +1841,7 @@ function EmailCard({
   onMarkInteracted: () => void
   onMarkUnread: () => void
   onRequestDelete: () => void
+  onRequestMove: () => void
   onReply: () => void
   onForward: () => void
 }) {
@@ -2001,6 +1934,15 @@ function EmailCard({
             }}
           >
             <SvgForward />
+          </button>
+          <button
+            type="button"
+            className="email-icon-btn"
+            title="In einen Ordner verschieben"
+            aria-label="In einen Ordner verschieben"
+            onClick={() => onRequestMove()}
+          >
+            <SvgMoveToFolder />
           </button>
           <button
             type="button"

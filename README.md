@@ -454,6 +454,26 @@ Nur bei GoCardless:
   die HabMail bedient. Ein Zugang für fremde Konten setzt die Zustimmung der
   Firma voraus — das ist keine technische, sondern eine rechtliche Grenze.
 
+## Ordner und Verschieben
+
+Links steht die Ordnerleiste: Posteingang und darunter der Baum, jeweils mit
+der Zahl der ungelesenen Nachrichten **in diesem Ordner** — nicht einschließlich
+der Unterordner, sonst stünde dieselbe Mail zweimal in der Leiste. Umbenennen
+und Löschen zeigen sich am überfahrenen Ordner; auf dem Handy in einer eigenen
+Zeile unter dem geöffneten.
+
+**Eine Unterhaltung verschieben**, zwei Wege:
+
+- **Ordner-Knopf an der Mail** — öffnet eine Liste aller Ordner, ein Tippen
+  genügt. Überall verfügbar und der einzige Weg auf dem Telefon.
+- **Ziehen** — Karte am linken Griff fassen und in der Ordnerleiste fallen
+  lassen. Nur am Rechner: Safari auf dem iPhone löst mit dem Finger keine
+  Drag-Ereignisse aus, es beginnt also nie ein Ziehen. Der Griff wird auf
+  schmalen Schirmen deshalb ausgeblendet.
+
+Verschoben wird die ganze Unterhaltung, nicht die einzelne Nachricht — jede
+Mail darin bekommt dieselbe `folderId`.
+
 ## Schreiben
 
 Antworten und Weiterleiten laufen über den Email-Proxy, aus dem Postfach heraus,
