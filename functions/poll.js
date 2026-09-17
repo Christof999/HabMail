@@ -13,6 +13,7 @@ const { categorizeMessage } = require("./categorize");
 const { mapWithConcurrency } = require("./concurrency");
 const { ackMessages, fetchMessages, listReceivableMailboxes } = require("./emailproxy");
 const { storeMessage } = require("./store");
+const { notifyNewMails } = require("./push");
 const { USER_DIRECTORY_PATH, userPollStatusPath } = require("./paths");
 
 const DEFAULT_LIMIT = 25;
@@ -68,6 +69,11 @@ async function pollMailbox(mailbox) {
     categorizeMessage(message),
   );
 
+  // Was wirklich neu dazugekommen ist — nur darüber wird benachrichtigt.
+  // Dubletten liefert der Proxy regelmäßig, und für die hat das Telefon
+  // schon einmal gebrummt.
+  const fresh = [];
+
   for (let i = 0; i < messages.length; i += 1) {
     const analysis = analyses[i];
     if (analysis.analyzed) summary.analyzed += 1;
@@ -77,8 +83,16 @@ async function pollMailbox(mailbox) {
 
     try {
       const outcome = await storeMessage(ownerUid, mailbox.id, messages[i], analysis);
-      if (outcome === "stored") summary.stored += 1;
-      else summary.duplicates += 1;
+      if (outcome === "stored") {
+        summary.stored += 1;
+        fresh.push({
+          sender: String(messages[i].from?.address ?? ""),
+          senderName: String(messages[i].from?.name ?? ""),
+          subject: String(messages[i].subject ?? ""),
+          categoryId: analysis.categoryId,
+          priority: analysis.priority,
+        });
+      } else summary.duplicates += 1;
     } catch (error) {
       summary.failed += 1;
       console.error(
@@ -93,6 +107,11 @@ async function pollMailbox(mailbox) {
     await ackMessages(mailbox.id, cursor, uidValidity);
     summary.acked = true;
   }
+
+  // Nach dem Bestätigen, nicht davor: Die Meldung ist das Beiwerk, die
+  // gespeicherte Mail die Hauptsache.
+  const push = await notifyNewMails(ownerUid, fresh);
+  if (push.sent > 0) summary.notified = push.sent;
 
   return summary;
 }

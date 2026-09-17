@@ -49,6 +49,15 @@ export const listUsers = callable<Record<string, never>, { users: ManagedUser[] 
   'listUsers',
 )
 
+/**
+ * Eine Probe aufs eigene Telefon. An wen, entscheidet der Server aus dem
+ * geprüften Token — mitgeben lässt sich das nicht.
+ */
+export const sendTestNotification = callable<
+  Record<string, never>,
+  { sent: number; failed: number }
+>('sendTestNotification')
+
 export const createUser = callable<
   { email: string; password: string; displayName?: string; isAdmin?: boolean },
   { user: ManagedUser }

@@ -454,6 +454,42 @@ Nur bei GoCardless:
   die HabMail bedient. Ein Zugang für fremde Konten setzt die Zustimmung der
   Firma voraus — das ist keine technische, sondern eine rechtliche Grenze.
 
+## Push-Benachrichtigungen aufs Telefon
+
+Neue Mails melden sich auf dem Sperrbildschirm, auch wenn HabMail geschlossen
+ist. Unter *Kontozeichen → Benachrichtigungen*: einschalten, und wahlweise
+*jede neue Mail* oder *nur Wichtiges* (Rechnungen, Mahnungen und was die KI als
+dringend einstuft). Ein Knopf schickt eine Probe, damit die Einrichtung nicht
+bis zur nächsten echten Mail ungewiss bleibt.
+
+Geschickt wird **nach jedem Abruf**, also höchstens alle fünf Minuten — nicht
+in dem Moment, in dem die Mail beim Anbieter eintrifft. Eine Mail: Absender als
+Titel, Betreff als Text. Mehrere: die Zahl und die ersten drei Absender. Alle
+Meldungen tragen dieselbe Kennung und ersetzen sich gegenseitig, statt den
+Sperrbildschirm zu füllen. Das Nachholen des Altbestands löst **nichts** aus —
+1400 Mails aus dem letzten Jahr wären 1400 Meldungen.
+
+**Einzurichten ist genau eines**: In der Firebase-Konsole unter
+Projekteinstellungen → Cloud Messaging → *Web-Push-Zertifikate* ein
+Schlüsselpaar erzeugen und den öffentlichen Teil als
+`VITE_FIREBASE_VAPID_KEY` in Vercel hinterlegen. Der private Teil bleibt bei
+Firebase; die Functions verschicken über `admin.messaging()` mit der
+Anmeldung, die sie ohnehin haben — kein zweiter Schlüssel, kein zusätzliches
+Paket. Danach müssen die Datenbankregeln neu ausgerollt werden
+(`firebase deploy --only database`), sonst lässt sich keine Gerätekennung
+speichern.
+
+**Auf iPhone und iPad nur vom Home-Bildschirm.** Apple erlaubt Web-Push
+ausschließlich für eine installierte App: in Safari auf *Teilen* → *Zum
+Home-Bildschirm*, von dort öffnen, dann einschalten. Im Safari-Tab ist die
+Schaltfläche deaktiviert und sagt genau das — sie fehlt nicht, weil etwas
+kaputt wäre.
+
+Eine Kennung gilt für einen Browser auf einem Gerät; wer HabMail auf dem
+Telefon und am Rechner benutzt, hat zwei und schaltet an beiden einzeln ein.
+Abgelaufene Kennungen (App gelöscht, Browser aufgeräumt) räumt der Server beim
+nächsten Versand von selbst weg.
+
 ## Ordner und Verschieben
 
 Links steht die Ordnerleiste: Posteingang und darunter der Baum, jeweils mit

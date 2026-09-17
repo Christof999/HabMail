@@ -68,6 +68,8 @@ import { folderRowMailDragLeave, MAIL_DROP_INBOX } from './folderDrop'
 import AccountMenu from './AccountMenu'
 import MailboxSettings from './MailboxSettings'
 import SignatureSettings from './SignatureSettings'
+import NotificationSettings from './NotificationSettings'
+import { showForegroundNotifications } from './push'
 import AccountingView from './AccountingView'
 import UserSettings from './UserSettings'
 import { whoAmI } from './usersApi'
@@ -221,6 +223,7 @@ export default function App() {
   const [showMailboxSettings, setShowMailboxSettings] = useState(false)
   const [showUserSettings, setShowUserSettings] = useState(false)
   const [showSignatures, setShowSignatures] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
   /** Posteingang oder Buchhaltung — zwei Sichten auf dieselben Daten. */
   const [view, setView] = useState<'inbox' | 'accounting'>('inbox')
   const [isAdmin, setIsAdmin] = useState(false)
@@ -315,6 +318,17 @@ export default function App() {
   useEffect(() => {
     if (!isCompactLayout) setFolderDrawerOpen(false)
   }, [isCompactLayout])
+
+  /*
+   * Solange das Fenster im Vordergrund steht, zeigt der Browser von sich aus
+   * nichts an — der Service Worker bekommt die Meldung gar nicht erst. Ohne
+   * diese Zeile bliebe ausgerechnet die Probe aus den Einstellungen
+   * ergebnislos, wenn man dabei zusieht.
+   */
+  useEffect(() => {
+    if (user === null) return
+    return showForegroundNotifications()
+  }, [user])
 
   useEffect(() => {
     if (!isCompactLayout || !folderDrawerOpen) return
@@ -1059,6 +1073,7 @@ export default function App() {
             isAdmin={isAdmin}
             onOpenMailboxes={() => setShowMailboxSettings(true)}
             onOpenSignatures={() => setShowSignatures(true)}
+            onOpenNotifications={() => setShowNotifications(true)}
             onOpenUsers={() => setShowUserSettings(true)}
             onLogout={handleLogout}
           />
@@ -1646,6 +1661,10 @@ export default function App() {
 
       {showMailboxSettings && user ? (
         <MailboxSettings user={user} onClose={() => setShowMailboxSettings(false)} />
+      ) : null}
+
+      {showNotifications && user ? (
+        <NotificationSettings user={user} onClose={() => setShowNotifications(false)} />
       ) : null}
 
       {showSignatures && user ? (

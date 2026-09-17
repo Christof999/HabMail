@@ -303,6 +303,43 @@
   color: var(--danger);
 }
 
+/* --- Benachrichtigungen --- */
+
+.push-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.push-device-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.push-device-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.push-device-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
 /* --- Verschieben-Fenster --- */
 
 .move-sheet-subject {
@@ -3114,7 +3151,7 @@ html[data-theme='dark'] .pill-paid {
   gap: 0.8rem;
 }
 
-.signature-choice-group {
+.choice-row-group {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
@@ -3122,7 +3159,7 @@ html[data-theme='dark'] .pill-paid {
 
 /* Zwei bis drei kurze Wörter nebeneinander: Man sieht die Möglichkeiten,
    ohne erst ein Auswahlfeld öffnen zu müssen. */
-.signature-choice {
+.choice-row {
   display: flex;
   gap: 0.25rem;
   padding: 0.2rem;
@@ -3131,7 +3168,7 @@ html[data-theme='dark'] .pill-paid {
   background: var(--input-bg);
 }
 
-.signature-choice button {
+.choice-row button {
   font: inherit;
   font-size: 0.82rem;
   padding: 0.32rem 0.6rem;
@@ -3147,17 +3184,17 @@ html[data-theme='dark'] .pill-paid {
 }
 
 /* Ein Knopf, der beim Drücken nachgibt, fühlt sich an, als hätte er zugehört. */
-.signature-choice button:active {
+.choice-row button:active {
   transform: scale(0.97);
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .signature-choice button:not(.is-active):hover {
+  .choice-row button:not(.is-active):hover {
     color: var(--text);
   }
 }
 
-.signature-choice button.is-active {
+.choice-row button.is-active {
   background: var(--pre-bg);
   color: var(--text);
   box-shadow: inset 0 0 0 1px var(--border);
@@ -3177,13 +3214,13 @@ html[data-theme='dark'] .pill-paid {
 /* Bewegung nur, wo sie nichts erklärt: Der Farbwechsel bleibt, das Nachgeben
    des Knopfes entfällt. */
 @media (prefers-reduced-motion: reduce) {
-  .signature-choice button {
+  .choice-row button {
     transition:
       background-color 160ms ease,
       color 160ms ease;
   }
 
-  .signature-choice button:active {
+  .choice-row button:active {
     transform: none;
   }
 }

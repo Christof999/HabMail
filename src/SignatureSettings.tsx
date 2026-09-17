@@ -21,6 +21,7 @@ import {
 } from './signatures'
 import { formatBytes } from './attachments'
 import { prepareSignatureImage } from './signatureImage'
+import { ChoiceRow } from './ChoiceRow'
 
 /**
  * Signaturen — eine je Postfach.
@@ -36,44 +37,6 @@ import { prepareSignatureImage } from './signatureImage'
 type Props = {
   user: User
   onClose: () => void
-}
-
-/**
- * Eine Reihe Knöpfe, von denen einer gedrückt ist.
- *
- * Ein Auswahlfeld wäre zwei Klicks und verbirgt die Möglichkeiten, bis man es
- * öffnet. Hier sind es zwei bis drei kurze Wörter — die passen nebeneinander,
- * und die Vorschau darunter ändert sich beim Drücken sofort mit.
- */
-function ChoiceRow<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string
-  value: T
-  options: readonly (readonly [T, string])[]
-  onChange: (value: T) => void
-}) {
-  return (
-    <div className="signature-choice-group">
-      <span className="account-section-label">{label}</span>
-      <div className="signature-choice" role="group" aria-label={label}>
-        {options.map(([option, text]) => (
-          <button
-            key={option}
-            type="button"
-            className={option === value ? 'is-active' : ''}
-            aria-pressed={option === value}
-            onClick={() => onChange(option)}
-          >
-            {text}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
 }
 
 const PLACEMENTS: readonly (readonly [SignatureImagePlacement, string])[] = [

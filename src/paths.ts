@@ -79,6 +79,25 @@ export function userImportStatusPath(uid: string): string {
   return `${userRootPath(uid)}/importStatus`
 }
 
+/**
+ * Push-Benachrichtigungen: die Gerätekennungen und die Einstellung dazu.
+ *
+ * Die Kennungen schreibt der Browser selbst — jedes Gerät seine eigene, denn
+ * eine Kennung gilt für genau einen Browser auf genau einem Telefon. Der
+ * Server liest sie beim Versenden und räumt dabei auf, was nicht mehr gilt.
+ */
+export function userPushPath(uid: string): string {
+  return `${userRootPath(uid)}/push`
+}
+
+export function userPushTokensPath(uid: string): string {
+  return `${userPushPath(uid)}/tokens`
+}
+
+export function userPushSettingsPath(uid: string): string {
+  return `${userPushPath(uid)}/settings`
+}
+
 /** Verzeichnis aller Benutzer — nur für Administratoren lesbar. */
 export const USER_DIRECTORY_PATH = 'userDirectory'
 

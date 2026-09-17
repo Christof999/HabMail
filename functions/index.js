@@ -35,6 +35,14 @@ exports.importOlderMails = users.importOlderMails;
 exports.stopOlderImport = users.stopOlderImport;
 exports.whoAmI = users.whoAmI;
 
+/**
+ * Eine Probe aufs Telefon. Ohne die bliebe „habe ich das richtig
+ * eingerichtet?" bis zur nächsten echten Mail offen — und wenn dann nichts
+ * kommt, weiß niemand, ob es an der Einrichtung lag oder gerade keine Mail da
+ * war.
+ */
+exports.sendTestNotification = require("./notify").sendTestNotification;
+
 /** Rechnungsdaten korrigieren — serverseitig, damit Mail und Index gleich bleiben. */
 exports.updateInvoice = require("./invoices").updateInvoice;
 

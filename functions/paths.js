@@ -50,6 +50,19 @@ function userImportStatusPath(uid) {
   return `${userRootPath(uid)}/importStatus`;
 }
 
+/** Gerätekennungen für Push und die Einstellung dazu. Siehe `src/paths.ts`. */
+function userPushPath(uid) {
+  return `${userRootPath(uid)}/push`;
+}
+
+function userPushTokensPath(uid) {
+  return `${userPushPath(uid)}/tokens`;
+}
+
+function userPushSettingsPath(uid) {
+  return `${userPushPath(uid)}/settings`;
+}
+
 /** Zuordnung Rückkehr-Kennung → Benutzer. Nur serverseitig lesbar. */
 const BANK_REQUISITIONS_PATH = "bankRequisitions";
 
@@ -64,6 +77,9 @@ module.exports = {
   userInvoiceIndexPath,
   userPollStatusPath,
   userImportStatusPath,
+  userPushPath,
+  userPushTokensPath,
+  userPushSettingsPath,
   BANK_REQUISITIONS_PATH,
   USER_DIRECTORY_PATH,
   ADMINS_PATH,

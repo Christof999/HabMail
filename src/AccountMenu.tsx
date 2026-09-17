@@ -21,6 +21,7 @@ type Props = {
   isAdmin: boolean
   onOpenMailboxes: () => void
   onOpenSignatures: () => void
+  onOpenNotifications: () => void
   onOpenUsers: () => void
   onLogout: () => void
 }
@@ -37,6 +38,7 @@ export default function AccountMenu({
   isAdmin,
   onOpenMailboxes,
   onOpenSignatures,
+  onOpenNotifications,
   onOpenUsers,
   onLogout,
 }: Props) {
@@ -118,6 +120,9 @@ export default function AccountMenu({
               </button>
               <button type="button" onClick={() => choose(onOpenSignatures)}>
                 Signaturen
+              </button>
+              <button type="button" onClick={() => choose(onOpenNotifications)}>
+                Benachrichtigungen
               </button>
               {isAdmin ? (
                 <button type="button" onClick={() => choose(onOpenUsers)}>
