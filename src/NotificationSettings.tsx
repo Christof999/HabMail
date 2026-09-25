@@ -50,11 +50,11 @@ function parseDevices(raw: unknown): DeviceEntry[] {
 }
 
 const SCOPES: readonly (readonly [PushScope, string, string])[] = [
-  ['all', 'Jede neue Mail', 'Eine Meldung, sobald ein Abruf etwas Neues bringt.'],
+  ['all', 'Neue Mails', 'Kurze KI-Zusammenfassungen, bei Rechnungen mit Aussteller und Betrag. Ohne Newsletter und Werbung.'],
   [
     'important',
     'Nur Wichtiges',
-    'Nur Rechnungen, Mahnungen und was die KI als dringend einstuft.',
+    'Nur Rechnungen, Mahnungen und was die KI als dringend einstuft. Ohne Newsletter und Werbung.',
   ],
 ]
 

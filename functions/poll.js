@@ -91,6 +91,9 @@ async function pollMailbox(mailbox) {
           subject: String(messages[i].subject ?? ""),
           categoryId: analysis.categoryId,
           priority: analysis.priority,
+          summary: analysis.summary,
+          notificationSummary: analysis.notificationSummary,
+          invoice: analysis.invoice,
         });
       } else summary.duplicates += 1;
     } catch (error) {

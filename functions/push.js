@@ -29,6 +29,32 @@ function isImportant(item) {
   return String(item.priority ?? "").toLowerCase() === "hoch";
 }
 
+function isPromotional(item) {
+  return ["newsletter", "werbung"].includes(String(item.categoryId ?? "").toLowerCase());
+}
+
+function shortText(value, limit = 160) {
+  const text = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  return text.length > limit ? `${text.slice(0, limit - 1).trimEnd()}…` : text;
+}
+
+function preview(item) {
+  if (IMPORTANT_CATEGORIES.has(item.categoryId)) {
+    const invoice = item.invoice ?? {};
+    const vendor = shortText(invoice.vendor || item.senderName || item.sender, 70);
+    const currency = shortText(invoice.currency).toUpperCase();
+    const hasAmount = typeof invoice.amountCents === "number" && Number.isFinite(invoice.amountCents);
+    const amount = hasAmount
+      ? new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(invoice.amountCents / 100)
+      : "";
+    if (amount) {
+      const label = item.categoryId === "mahnung" ? "Mahnung" : "Rechnung";
+      return shortText(`${label}${vendor ? ` von ${vendor}` : ""}: ${amount}${/^[A-Z]{3}$/.test(currency) ? ` ${currency}` : " (Währung unbekannt)"}`);
+    }
+  }
+  return shortText(item.notificationSummary) || shortText(item.summary) || shortText(item.subject) || "(Ohne Betreff)";
+}
+
 async function readSettings(uid) {
   const snapshot = await admin.database().ref(userPushSettingsPath(uid)).get();
   const raw = snapshot.val();
@@ -49,24 +75,25 @@ async function readTokens(uid) {
 /**
  * Was auf dem Sperrbildschirm steht.
  *
- * Eine Mail: Absender oben, Betreff darunter — die Frage „muss ich rangehen?"
- * beantwortet sich damit, ohne die App zu öffnen. Mehrere: die Zahl oben und
- * die Absender darunter, weil drei Namen mehr sagen als drei Betreffzeilen.
+ * Eine Mail: Absender und kurze KI-Zusammenfassung. Bei mehreren Mails
+ * zeigen wir bis zu drei Kurzfassungen; weitere werden gezählt.
  */
 function compose(items) {
   if (items.length === 1) {
     const [only] = items;
     return {
-      title: only.senderName || only.sender || "Neue Mail",
-      body: only.subject || "(Ohne Betreff)",
+      title: shortText(only.senderName || only.sender || "Neue Mail", 80),
+      body: preview(only),
     };
   }
 
-  const named = items.slice(0, MAX_NAMED).map((i) => i.senderName || i.sender || "Unbekannt");
+  const named = items.slice(0, MAX_NAMED).map((item) =>
+    `${shortText(item.senderName || item.sender || "Unbekannt", 40)}: ${preview(item)}`,
+  );
   const rest = items.length - named.length;
   return {
     title: `${items.length} neue Mails`,
-    body: rest > 0 ? `${named.join(", ")} und ${rest} weitere` : named.join(", "),
+    body: rest > 0 ? `${named.join("\n")}\n+ ${rest} weitere` : named.join("\n"),
   };
 }
 
@@ -143,8 +170,10 @@ async function notifyNewMails(uid, items) {
     const settings = await readSettings(uid);
     if (!settings.enabled) return { sent: 0, failed: 0, skipped: "ausgeschaltet" };
 
-    const relevant = settings.scope === "important" ? items.filter(isImportant) : items;
-    if (relevant.length === 0) return { sent: 0, failed: 0, skipped: "nichts Wichtiges dabei" };
+    const relevant = items.filter((item) =>
+      !isPromotional(item) && (settings.scope !== "important" || isImportant(item)),
+    );
+    if (relevant.length === 0) return { sent: 0, failed: 0, skipped: "keine relevanten Mails" };
 
     return await sendToUser(uid, compose(relevant));
   } catch (error) {
