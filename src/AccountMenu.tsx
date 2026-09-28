@@ -19,6 +19,8 @@ type Props = {
   /** Nur zur Fehlersuche interessant, deshalb ganz unten und kleingedruckt. */
   databasePath: string
   isAdmin: boolean
+  /** Büro eines Betriebs mit gebuchtem Post. Alte Konten bleiben berechtigt. */
+  canManageMailboxes?: boolean
   onOpenMailboxes: () => void
   onOpenSignatures: () => void
   onOpenNotifications: () => void
@@ -36,6 +38,7 @@ export default function AccountMenu({
   email,
   databasePath,
   isAdmin,
+  canManageMailboxes = true,
   onOpenMailboxes,
   onOpenSignatures,
   onOpenNotifications,
@@ -115,9 +118,11 @@ export default function AccountMenu({
             </div>
 
             <div className="account-section account-actions">
-              <button type="button" onClick={() => choose(onOpenMailboxes)}>
-                Postfächer verwalten
-              </button>
+              {canManageMailboxes ? (
+                <button type="button" onClick={() => choose(onOpenMailboxes)}>
+                  Postfächer verwalten
+                </button>
+              ) : null}
               <button type="button" onClick={() => choose(onOpenSignatures)}>
                 Signaturen
               </button>

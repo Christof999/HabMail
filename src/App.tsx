@@ -74,6 +74,7 @@ import AccountingView from './AccountingView'
 import UserSettings from './UserSettings'
 import { whoAmI } from './usersApi'
 import { userEmailsPath, userFoldersPath } from './paths'
+import { canManageMailboxes, dataOwnerId, postGate } from './owner'
 import {
   CATEGORY_LABELS,
   EMAIL_CATEGORIES,
@@ -164,6 +165,10 @@ function threadFromDragMemberIds(
 export default function App() {
   const [configError, setConfigError] = useState<string | null>(null)
   const [user, setUser] = useState<import('firebase/auth').User | null>(null)
+  /** `null`, solange die Claims noch nicht gelesen sind. */
+  const [ownerId, setOwnerId] = useState<string | null>(null)
+  const [postBlocked, setPostBlocked] = useState<string | null>(null)
+  const [mayManageMailboxes, setMayManageMailboxes] = useState(true)
   const [authReady, setAuthReady] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -215,8 +220,8 @@ export default function App() {
     string | null
   >(null)
   // Jeder Benutzer hat seinen eigenen Zweig; ohne Anmeldung gibt es keinen.
-  const emailsPath = user ? userEmailsPath(user.uid) : ''
-  const foldersPath = user ? userFoldersPath(user.uid) : ''
+  const emailsPath = ownerId ? userEmailsPath(ownerId) : ''
+  const foldersPath = ownerId ? userFoldersPath(ownerId) : ''
 
   const [categoryFilter, setCategoryFilter] = useState<EmailCategory | null>(null)
   const [mailboxFilter, setMailboxFilter] = useState<string | null>(null)
@@ -238,6 +243,11 @@ export default function App() {
       const auth = getFirebaseAuth()
       return onAuthStateChanged(auth, (u) => {
         setUser(u)
+        if (!u) {
+          setOwnerId(null)
+          setPostBlocked(null)
+          setMayManageMailboxes(true)
+        }
         setAuthReady(true)
       })
     } catch (e) {
@@ -246,6 +256,29 @@ export default function App() {
       return () => {}
     }
   }, [])
+
+  useEffect(() => {
+    if (!user) return
+    let active = true
+    user
+      .getIdTokenResult(true)
+      .then((result) => {
+        if (!active) return
+        const claims = result.claims as Record<string, unknown>
+        setOwnerId(dataOwnerId(user.uid, claims))
+        setPostBlocked(postGate(claims))
+        setMayManageMailboxes(canManageMailboxes(claims))
+      })
+      .catch(() => {
+        if (!active) return
+        setOwnerId(user.uid)
+        setPostBlocked(null)
+        setMayManageMailboxes(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [user])
 
   useEffect(() => {
     if (!user) {
@@ -268,7 +301,7 @@ export default function App() {
   }, [user])
 
   useEffect(() => {
-    if (!user || configError) return
+    if (!ownerId || postBlocked || configError) return
     setRtdbListenError(null)
     const db = getFirebaseDb()
     return onValue(
@@ -284,10 +317,10 @@ export default function App() {
         setRows([])
       },
     )
-  }, [user, configError, emailsPath])
+  }, [ownerId, postBlocked, configError, emailsPath])
 
   useEffect(() => {
-    if (!user || configError) return
+    if (!ownerId || postBlocked || configError) return
     const db = getFirebaseDb()
     return onValue(
       ref(db, foldersPath),
@@ -298,7 +331,7 @@ export default function App() {
         /* optional: setFolders([]) */
       },
     )
-  }, [user, configError, foldersPath])
+  }, [ownerId, postBlocked, configError, foldersPath])
 
   useEffect(() => {
     if (!user) {
@@ -860,6 +893,10 @@ export default function App() {
     )
   }
 
+  const werkbankLogin = (import.meta.env.VITE_FIREBASE_PROJECT_ID ?? '').startsWith(
+    'werkbank',
+  )
+
   if (!user) {
     return (
       <div className="shell narrow">
@@ -867,8 +904,12 @@ export default function App() {
           <div className="app-brand">
             <AppLogoMark className="app-logo--hero" />
             <div className="app-brand-text">
-              <h1>HabMail</h1>
-              <p className="muted">Anmeldung für Mitarbeitende</p>
+              <h1>{werkbankLogin ? 'Werkbank Post' : 'HabMail'}</h1>
+              <p className="muted">
+                {werkbankLogin
+                  ? 'Dasselbe Konto wie bei Zeit und Büro'
+                  : 'Anmeldung für Mitarbeitende'}
+              </p>
             </div>
           </div>
         </header>
@@ -917,6 +958,28 @@ export default function App() {
             {busy ? 'Bitte warten…' : 'Anmelden'}
           </button>
         </form>
+      </div>
+    )
+  }
+
+  if (!ownerId) {
+    return (
+      <div className="shell narrow">
+        <p className="muted">Konto wird gelesen…</p>
+      </div>
+    )
+  }
+
+  if (postBlocked) {
+    return (
+      <div className="shell narrow">
+        <header className="top">
+          <h1>{werkbankLogin ? 'Werkbank Post' : 'HabMail'}</h1>
+        </header>
+        <p>{postBlocked}</p>
+        <button type="button" onClick={() => void signOut(getFirebaseAuth())}>
+          Abmelden
+        </button>
       </div>
     )
   }
@@ -1071,6 +1134,7 @@ export default function App() {
             email={user.email ?? ''}
             databasePath={emailsPath}
             isAdmin={isAdmin}
+            canManageMailboxes={mayManageMailboxes}
             onOpenMailboxes={() => setShowMailboxSettings(true)}
             onOpenSignatures={() => setShowSignatures(true)}
             onOpenNotifications={() => setShowNotifications(true)}
@@ -1089,7 +1153,7 @@ export default function App() {
       ) : null}
 
       {view === 'accounting' ? (
-        <AccountingView rows={rows} uid={user.uid} />
+        <AccountingView rows={rows} uid={ownerId} />
       ) : (
       <div className={`app-body${isCompactLayout ? ' app-body--compact' : ''}`}>
         {folderSidebar}
@@ -1660,15 +1724,23 @@ export default function App() {
       ) : null}
 
       {showMailboxSettings && user ? (
-        <MailboxSettings user={user} onClose={() => setShowMailboxSettings(false)} />
+        <MailboxSettings
+          user={user}
+          ownerId={ownerId}
+          onClose={() => setShowMailboxSettings(false)}
+        />
       ) : null}
 
       {showNotifications && user ? (
-        <NotificationSettings user={user} onClose={() => setShowNotifications(false)} />
+        <NotificationSettings ownerId={ownerId} onClose={() => setShowNotifications(false)} />
       ) : null}
 
       {showSignatures && user ? (
-        <SignatureSettings user={user} onClose={() => setShowSignatures(false)} />
+        <SignatureSettings
+          user={user}
+          ownerId={ownerId}
+          onClose={() => setShowSignatures(false)}
+        />
       ) : null}
 
       {showUserSettings && user && isAdmin ? (
@@ -1678,6 +1750,7 @@ export default function App() {
       <SendMailModal
         compose={compose}
         user={user}
+        ownerId={ownerId}
         onClose={() => setCompose(null)}
       />
     </div>

@@ -10,7 +10,15 @@
  * Wer hier etwas ändert, muss `database.rules.json` mitändern.
  */
 
+/**
+ * Besitzer der Daten.
+ *
+ * Ein einzelnes HabMail-Konto bleibt unter `users/{uid}`. Ein Werkbank-Betrieb
+ * teilt sich den Posteingang: die Kennung beginnt dann mit `t:` und die Daten
+ * liegen unter `tenants/{betrieb}`.
+ */
 export function userRootPath(uid: string): string {
+  if (uid.startsWith('t:')) return `tenants/${uid.slice(2)}`
   return `users/${uid}`
 }
 
@@ -92,6 +100,11 @@ export function userPushPath(uid: string): string {
 
 export function userPushTokensPath(uid: string): string {
   return `${userPushPath(uid)}/tokens`
+}
+
+/** Web-Push-Anmeldungen (derselbe Schlüssel wie bei Werkbank Zeit). */
+export function userPushWebPath(uid: string): string {
+  return `${userPushPath(uid)}/web`
 }
 
 export function userPushSettingsPath(uid: string): string {

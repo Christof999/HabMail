@@ -33,7 +33,8 @@ function resolveFirebaseProjectId(): string {
 async function requireFirebaseAuth(
   req: VercelRequest,
 ): Promise<
-  { ok: true; uid: string } | { ok: false; status: number; body: Record<string, string> }
+  | { ok: true; uid: string; payload: jose.JWTPayload }
+  | { ok: false; status: number; body: Record<string, string> }
 > {
   const projectId = resolveFirebaseProjectId()
   if (!projectId) {
@@ -70,7 +71,7 @@ async function requireFirebaseAuth(
         body: { error: 'invalid_token', hint: 'Im Token fehlt die Benutzerkennung.' },
       }
     }
-    return { ok: true, uid }
+    return { ok: true, uid, payload }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error('firebase_id_token_verify', projectId, msg)
@@ -107,6 +108,58 @@ const ALLOWED_FIELDS = new Set([
   'imapPassword',
   'imapFolder',
 ])
+
+const TENANT_ID = /^[a-z][a-z0-9-]{2,31}$/
+const MAILBOX_LIMITS: Record<1 | 2 | 3, number> = { 1: 2, 2: 5, 3: 15 }
+const TIER_NAMES: Record<1 | 2 | 3, string> = {
+  1: 'Posteingang',
+  2: 'Buchhaltung',
+  3: 'Team',
+}
+
+/**
+ * Wohin das Postfach gehört.
+ *
+ * Ein Werkbank-Token bindet es an den Betrieb (`t:{id}`), damit das Büro
+ * denselben Posteingang sieht. Die Stufe aus dem Token deckelt die Anzahl.
+ * Ohne Claim bleibt die Firebase-UID — die bestehenden Konten bleiben einzeln.
+ */
+function resolveSubject(
+  uid: string,
+  payload: jose.JWTPayload,
+):
+  | { ok: true; subject: string; limit: number | null; tierName: string | null }
+  | { ok: false; status: number; body: Record<string, string> } {
+  const tenant = typeof payload.t === 'string' ? payload.t.trim() : ''
+  if (!TENANT_ID.test(tenant)) {
+    return { ok: true, subject: uid, limit: null, tierName: null }
+  }
+  if (payload.r !== 'owner' && payload.r !== 'office') {
+    return {
+      ok: false,
+      status: 403,
+      body: { error: 'forbidden', hint: 'Postfächer legt das Büro an, nicht die Baustelle.' },
+    }
+  }
+  const modules = payload.m
+  const tier =
+    modules && typeof modules === 'object' && !Array.isArray(modules)
+      ? (modules as Record<string, unknown>).p
+      : 0
+  if (tier !== 1 && tier !== 2 && tier !== 3) {
+    return {
+      ok: false,
+      status: 403,
+      body: { error: 'not_booked', hint: 'Werkbank Post ist für diesen Betrieb nicht gebucht.' },
+    }
+  }
+  return {
+    ok: true,
+    subject: `t:${tenant}`,
+    limit: MAILBOX_LIMITS[tier],
+    tierName: TIER_NAMES[tier],
+  }
+}
 
 function pickAllowed(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
@@ -149,7 +202,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const auth = await requireFirebaseAuth(req)
-  if (!auth.ok) return res.status(auth.status).json(auth.body)
+  if (auth.ok === false) return res.status(auth.status).json(auth.body)
+
+  const scope = resolveSubject(auth.uid, auth.payload)
+  if (scope.ok === false) return res.status(scope.status).json(scope.body)
 
   const config = proxyConfig()
   if (config === null) {
@@ -162,14 +218,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   }
 
-  const path = buildProxyPath(req, method, auth.uid)
+  const path = buildProxyPath(req, method, scope.subject)
   // subject immer aus dem geprüften Token — was im Body stand, ist irrelevant.
   const body =
     method === 'GET' || method === 'DELETE'
       ? undefined
-      : { ...parseBody(req), subject: auth.uid }
+      : { ...parseBody(req), subject: scope.subject }
 
   try {
+    if (method === 'POST' && scope.limit !== null) {
+      const current = await countMailboxes(config, scope.subject)
+      if (current >= scope.limit) {
+        return res.status(403).json({
+          error: 'mailbox_limit',
+          hint: `Die Stufe ${scope.tierName} umfasst ${scope.limit} Postfächer. Für mehr braucht der Betrieb die nächste Stufe.`,
+        })
+      }
+    }
+
     const response = await fetch(`${config.url}${path}`, {
       method,
       headers: {
@@ -194,6 +260,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       hint: e instanceof Error ? e.message.slice(0, 200) : 'unbekannt',
     })
   }
+}
+
+async function countMailboxes(
+  config: { url: string; apiKey: string },
+  subject: string,
+): Promise<number> {
+  const response = await fetch(
+    `${config.url}/api/mailboxes?subject=${encodeURIComponent(subject)}`,
+    { headers: { Authorization: `Bearer ${config.apiKey}` } },
+  )
+  const raw = await response.text()
+  let data: unknown = {}
+  try {
+    data = raw ? JSON.parse(raw) : {}
+  } catch {
+    return 0
+  }
+  if (!response.ok || data === null || typeof data !== 'object') return 0
+  const list = (data as { mailboxes?: unknown }).mailboxes
+  return Array.isArray(list) ? list.length : 0
 }
 
 function buildProxyPath(req: VercelRequest, method: string, uid: string): string {

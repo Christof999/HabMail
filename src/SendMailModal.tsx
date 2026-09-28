@@ -60,10 +60,11 @@ function toBase64(bytes: Uint8Array): string {
 type Props = {
   compose: ComposeState | null
   user: User
+  ownerId: string
   onClose: () => void
 }
 
-export function SendMailModal({ compose, user, onClose }: Props) {
+export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
   const [to, setTo] = useState('')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
@@ -79,10 +80,10 @@ export function SendMailModal({ compose, user, onClose }: Props) {
 
   useEffect(
     () =>
-      onValue(ref(getFirebaseDb(), userSignaturesPath(user.uid)), (snap) =>
+      onValue(ref(getFirebaseDb(), userSignaturesPath(ownerId)), (snap) =>
         setSignatures(parseSignatures(snap.val())),
       ),
-    [user.uid],
+    [ownerId],
   )
 
   /**

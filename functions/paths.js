@@ -7,6 +7,8 @@
  */
 
 function userRootPath(uid) {
+  // `t:` ist ein Werkbank-Betrieb. Alles andere bleibt das einzelne Konto.
+  if (typeof uid === "string" && uid.startsWith("t:")) return `tenants/${uid.slice(2)}`;
   return `users/${uid}`;
 }
 
@@ -63,6 +65,10 @@ function userPushSettingsPath(uid) {
   return `${userPushPath(uid)}/settings`;
 }
 
+function userPushWebPath(uid) {
+  return `${userPushPath(uid)}/web`;
+}
+
 /** Zuordnung Rückkehr-Kennung → Benutzer. Nur serverseitig lesbar. */
 const BANK_REQUISITIONS_PATH = "bankRequisitions";
 
@@ -80,6 +86,7 @@ module.exports = {
   userPushPath,
   userPushTokensPath,
   userPushSettingsPath,
+  userPushWebPath,
   BANK_REQUISITIONS_PATH,
   USER_DIRECTORY_PATH,
   ADMINS_PATH,

@@ -26,6 +26,7 @@ const admin = require("firebase-admin");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const { ACCOUNTING_CATEGORIES } = require("./categories");
+const { ownerFromAuth } = require("./owner");
 const { ownInvoiceReasonFor } = require("./ownInvoices");
 const { userEmailsPath } = require("./paths");
 
@@ -288,8 +289,7 @@ function describe(error) {
  * Dokument-ID, ein zweiter Aufruf legt nichts doppelt an.
  */
 const syncAccounting = onCall({ timeoutSeconds: 540, memory: "1GiB" }, async (request) => {
-  const uid = request.auth?.uid;
-  if (!uid) throw new HttpsError("unauthenticated", "Nicht angemeldet.");
+  const uid = ownerFromAuth(request);
 
   const settings = config();
   if (settings === null) {

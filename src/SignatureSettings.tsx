@@ -36,6 +36,7 @@ import { ChoiceRow } from './ChoiceRow'
 
 type Props = {
   user: User
+  ownerId: string
   onClose: () => void
 }
 
@@ -50,7 +51,7 @@ const ALIGNMENTS: readonly (readonly [SignatureImageAlign, string])[] = [
   ['right', 'Rechts'],
 ]
 
-export default function SignatureSettings({ user, onClose }: Props) {
+export default function SignatureSettings({ user, ownerId, onClose }: Props) {
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
   const [signatures, setSignatures] = useState<Record<string, Signature>>({})
   const [loading, setLoading] = useState(true)
@@ -63,11 +64,11 @@ export default function SignatureSettings({ user, onClose }: Props) {
   useEffect(
     () =>
       onValue(
-        ref(getFirebaseDb(), userSignaturesPath(user.uid)),
+        ref(getFirebaseDb(), userSignaturesPath(ownerId)),
         (snap) => setSignatures(parseSignatures(snap.val())),
         (e) => setError(e.message),
       ),
-    [user.uid],
+    [ownerId],
   )
 
   useEffect(() => {
@@ -90,7 +91,7 @@ export default function SignatureSettings({ user, onClose }: Props) {
   async function save(mailboxId: string, signature: Signature) {
     setError(null)
     try {
-      const target = ref(getFirebaseDb(), `${userSignaturesPath(user.uid)}/${mailboxKey(mailboxId)}`)
+      const target = ref(getFirebaseDb(), `${userSignaturesPath(ownerId)}/${mailboxKey(mailboxId)}`)
       // Leer heißt: keine Signatur. Ein leerer Eintrag wäre nur Ballast.
       await (isSignatureEmpty(signature)
         ? remove(target)

@@ -8,7 +8,10 @@ const { timingSafeEqual } = require("node:crypto");
 setGlobalOptions({ region: "europe-west1", maxInstances: 10 });
 
 if (!admin.apps.length) {
-  admin.initializeApp();
+  const databaseURL = process.env.POST_DATABASE_URL;
+  admin.initializeApp(
+    typeof databaseURL === "string" && databaseURL !== "" ? { databaseURL } : undefined,
+  );
 }
 
 const { pollAllMailboxes } = require("./poll");

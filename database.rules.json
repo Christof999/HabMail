@@ -51,6 +51,18 @@
               "$other": { ".validate": false }
             }
           },
+          "web": {
+            "$id": {
+              ".write": "auth != null && auth.uid === $uid",
+              ".validate": "!newData.exists() || (newData.hasChild('endpoint') && newData.hasChild('p256dh') && newData.hasChild('auth'))",
+              "endpoint": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 2000" },
+              "p256dh": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 200" },
+              "auth": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 200" },
+              "createdAt": { ".validate": "newData.isNumber()" },
+              "label": { ".validate": "newData.isString() && newData.val().length <= 60" },
+              "$other": { ".validate": false }
+            }
+          },
           "$other": { ".validate": false }
         },
         "signatures": {
@@ -89,6 +101,83 @@
             },
             "userRead": {
               ".write": "auth != null && auth.uid === $uid",
+              ".validate": "newData.isBoolean()"
+            }
+          }
+        }
+      }
+    },
+    "tenants": {
+      "$tenantId": {
+        ".read": "auth != null && auth.token.t === $tenantId && (auth.token.r === 'owner' || auth.token.r === 'office') && auth.token.m.p >= 1",
+        "mailFolders": {
+          "$folderId": {
+            ".write": "auth != null && auth.token.t === $tenantId && (auth.token.r === 'owner' || auth.token.r === 'office') && auth.token.m.p >= 1",
+            ".validate": "!newData.exists() || (newData.hasChild('name') && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 120)"
+          }
+        },
+        "companies": {
+          "$companyId": {
+            ".write": "auth != null && auth.token.t === $tenantId && (auth.token.r === 'owner' || auth.token.r === 'office') && auth.token.m.p >= 1",
+            ".validate": "!newData.exists() || (newData.hasChild('name') && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 120)",
+            "name": { ".validate": "newData.isString() && newData.val().length <= 120" },
+            "mailboxIds": { "$index": { ".validate": "newData.isString() && newData.val().length <= 200" } },
+            "matchTerms": { "$index": { ".validate": "newData.isString() && newData.val().length <= 120" } },
+            "$other": { ".validate": false }
+          }
+        },
+        "push": {
+          "settings": {
+            ".write": "auth != null && auth.token.t === $tenantId && (auth.token.r === 'owner' || auth.token.r === 'office') && auth.token.m.p >= 1",
+            "enabled": { ".validate": "newData.isBoolean()" },
+            "scope": { ".validate": "newData.val() === 'all' || newData.val() === 'important'" },
+            "$other": { ".validate": false }
+          },
+          "tokens": {
+            "$token": {
+              ".write": "auth != null && auth.token.t === $tenantId && (auth.token.r === 'owner' || auth.token.r === 'office') && auth.token.m.p >= 1",
+              ".validate": "!newData.exists() || newData.hasChild('createdAt')",
+              "createdAt": { ".validate": "newData.isNumber()" },
+              "label": { ".validate": "newData.isString() && newData.val().length <= 60" },
+              "$other": { ".validate": false }
+            }
+          },
+          "web": {
+            "$id": {
+              ".write": "auth != null && auth.token.t === $tenantId && (auth.token.r === 'owner' || auth.token.r === 'office') && auth.token.m.p >= 1",
+              ".validate": "!newData.exists() || (newData.hasChild('endpoint') && newData.hasChild('p256dh') && newData.hasChild('auth'))",
+              "endpoint": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 2000" },
+              "p256dh": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 200" },
+              "auth": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 200" },
+              "createdAt": { ".validate": "newData.isNumber()" },
+              "label": { ".validate": "newData.isString() && newData.val().length <= 60" },
+              "$other": { ".validate": false }
+            }
+          },
+          "$other": { ".validate": false }
+        },
+        "signatures": {
+          "$mailboxId": {
+            ".write": "auth != null && auth.token.t === $tenantId && (auth.token.r === 'owner' || auth.token.r === 'office') && auth.token.m.p >= 1",
+            ".validate": "!newData.exists() || newData.isString() || (newData.hasChildren() && newData.child('text').isString())",
+            "text": { ".validate": "newData.isString() && newData.val().length <= 2000" },
+            "imageBase64": { ".validate": "newData.isString() && newData.val().length <= 400000" },
+            "imageType": { ".validate": "newData.isString() && newData.val().length <= 60" },
+            "imagePlacement": { ".validate": "newData.val() === 'above' || newData.val() === 'below'" },
+            "imageAlign": { ".validate": "newData.val() === 'left' || newData.val() === 'center' || newData.val() === 'right'" },
+            "imageWidth": { ".validate": "newData.isNumber() && newData.val() >= 80 && newData.val() <= 600" },
+            "$other": { ".validate": false }
+          }
+        },
+        "emails": {
+          "$emailId": {
+            ".write": "auth != null && auth.token.t === $tenantId && (auth.token.r === 'owner' || auth.token.r === 'office') && auth.token.m.p >= 1 && !newData.exists()",
+            "folderId": {
+              ".write": "auth != null && auth.token.t === $tenantId && (auth.token.r === 'owner' || auth.token.r === 'office') && auth.token.m.p >= 1",
+              ".validate": "!newData.exists() || newData.isString() || newData.val() == null"
+            },
+            "userRead": {
+              ".write": "auth != null && auth.token.t === $tenantId && (auth.token.r === 'owner' || auth.token.r === 'office') && auth.token.m.p >= 1",
               ".validate": "newData.isBoolean()"
             }
           }

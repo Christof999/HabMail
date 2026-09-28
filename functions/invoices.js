@@ -14,6 +14,7 @@ const admin = require("firebase-admin");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const { ACCOUNTING_CATEGORIES, periodFromDate } = require("./categories");
+const { ownerFromAuth } = require("./owner");
 const { userEmailsPath, userInvoiceIndexPath } = require("./paths");
 const { forwardInvoice } = require("./rechnungsprogramm");
 
@@ -70,8 +71,7 @@ async function listOpenInvoices(uid) {
  * in einer Steuersumme landen.
  */
 const updateInvoice = onCall(async (request) => {
-  const uid = request.auth?.uid;
-  if (!uid) throw new HttpsError("unauthenticated", "Nicht angemeldet.");
+  const uid = ownerFromAuth(request);
 
   const emailId = String(request.data?.emailId ?? "").trim();
   if (emailId === "" || emailId.includes("/")) {

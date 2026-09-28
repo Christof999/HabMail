@@ -16,6 +16,7 @@ const admin = require("firebase-admin");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const { ACCOUNTING_CATEGORIES, CATEGORY_LABELS, periodFromDate } = require("./categories");
+const { ownerFromAuth } = require("./owner");
 const { attachmentContent, categorizeMessage, isConfigured } = require("./categorize");
 const { updateIndexEntry } = require("./invoices");
 const { userEmailsPath } = require("./paths");
@@ -89,8 +90,7 @@ function toMessage(record) {
 const reanalyzeInvoices = onCall(
   { timeoutSeconds: 540, memory: "1GiB" },
   async (request) => {
-    const uid = request.auth?.uid;
-    if (!uid) throw new HttpsError("unauthenticated", "Nicht angemeldet.");
+    const uid = ownerFromAuth(request);
 
     if (!isConfigured()) {
       throw new HttpsError(

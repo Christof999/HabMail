@@ -118,10 +118,11 @@ function OlderMailImport({ uid }: { uid: string }) {
 
   return (
     <section className="older-import">
-      <h4>Ältere Mails nachholen</h4>
+      <h4>Weitere Mails laden</h4>
       <p className="muted small">
-        Holt Mails, die schon vor dem Einrichten im Postfach lagen. Der laufende
-        Abruf bleibt davon unberührt.
+        Der letzte Monat kommt beim Anlegen von allein. Hier gehst du weiter
+        zurück. Der laufende Abruf neuer Mails bleibt davon unberührt, und für
+        den Altbestand gibt es keine Benachrichtigung.
       </p>
 
       <div className="older-import-row">
@@ -305,6 +306,7 @@ function AutomaticPollStatus({ uid }: { uid: string }) {
 
 type Props = {
   user: User
+  ownerId: string
   onClose: () => void
 }
 
@@ -403,7 +405,15 @@ function toNumberOrUndefined(value: string): number | undefined {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 }
 
-export default function MailboxSettings({ user, onClose }: Props) {
+function monthAgo(): string {
+  const date = new Date()
+  date.setMonth(date.getMonth() - 1)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+export default function MailboxSettings({ user, ownerId, onClose }: Props) {
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -498,11 +508,25 @@ export default function MailboxSettings({ user, onClose }: Props) {
       setForm(EMPTY_FORM)
       setShowAdvanced(false)
       setShowForm(false)
-      setNotice(
-        created.imap === undefined
-          ? `Postfach „${created.id}" angelegt. Ohne IMAP-Server werden von hier keine Mails abgeholt.`
-          : `Postfach „${created.id}" angelegt. Der nächste Abruf holt die letzten Mails.`,
-      )
+      if (created.imap === undefined) {
+        setNotice(
+          `Postfach „${created.id}" angelegt. Ohne IMAP-Server werden von hier keine Mails abgeholt.`,
+        )
+      } else {
+        const since = monthAgo()
+        try {
+          await importOlderMails({ since })
+          setNotice(
+            `Postfach „${created.id}" angelegt. Die Mails seit ${since} werden geladen. Weitere Monate holst du unten nach.`,
+          )
+        } catch (importError) {
+          const detail =
+            importError instanceof Error ? importError.message : 'Unbekannter Fehler'
+          setNotice(
+            `Postfach „${created.id}" angelegt. Die Mails des letzten Monats ließen sich nicht starten: ${detail}`,
+          )
+        }
+      }
       await load(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
@@ -697,14 +721,16 @@ export default function MailboxSettings({ user, onClose }: Props) {
         <p className="muted small">
           Zugangsdaten liegen verschlüsselt im Email-Proxy, nicht in HabMail. Ein
           Postfach mit IMAP-Server wird alle paar Minuten auf neue Mails geprüft.
+          Beim Anlegen werden die Mails des letzten Monats geladen. Wie viele
+          Postfächer möglich sind, hängt an der gebuchten Stufe: 2, 5 oder 15.
         </p>
 
         {error ? <p className="mailbox-error">{error}</p> : null}
         {notice ? <p className="muted small">{notice}</p> : null}
 
-        <AutomaticPollStatus uid={user.uid} />
+        <AutomaticPollStatus uid={ownerId} />
 
-        <OlderMailImport uid={user.uid} />
+        <OlderMailImport uid={ownerId} />
 
         {pollReport !== null && pollReport.mailboxes.length > 0 ? (
           <ul className="poll-report">

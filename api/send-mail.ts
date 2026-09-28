@@ -198,7 +198,7 @@ async function authorizeRequest(req: VercelRequest): Promise<Caller> {
     return { ok: true, uid: key.uid, agent: key }
   }
   const auth = await requireFirebaseAuth(req)
-  if (!auth.ok) return auth
+  if (auth.ok === false) return auth
   return { ok: true, uid: auth.uid, agent: null }
 }
 
@@ -490,7 +490,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' })
 
   const auth = await authorizeRequest(req)
-  if (!auth.ok) return res.status(auth.status).json(auth.body)
+  if (auth.ok === false) return res.status(auth.status).json(auth.body)
 
   const payload = parsePayload(req)
   if (payload === 'too_large') {

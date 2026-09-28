@@ -178,8 +178,19 @@ async function pollAllMailboxes({ onlySubject, trigger = "manuell" } = {}) {
     return { ok: false, mailboxes: [], error: message };
   }
 
+  // Zwei Läufe dürfen nicht dieselben Mails bestätigen. Der Bestand (HabMail)
+  // lässt Betriebs-Postfächer aus; der Werkbank-Lauf holt nur die, per
+  // POLL_SUBJECT_PREFIX=t:.
+  const prefix = process.env.POLL_SUBJECT_PREFIX || "";
+  const forThisDeployment = all.filter((box) => {
+    const subject = typeof box.subject === "string" ? box.subject : "";
+    return prefix === "" ? !subject.startsWith("t:") : subject.startsWith(prefix);
+  });
+
   const mailboxes =
-    onlySubject === undefined ? all : all.filter((box) => box.subject === onlySubject);
+    onlySubject === undefined
+      ? forThisDeployment
+      : forThisDeployment.filter((box) => box.subject === onlySubject);
 
   if (mailboxes.length === 0) {
     return {

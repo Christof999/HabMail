@@ -364,8 +364,14 @@ async function stopImport(uid) {
  * fortsetzen; wer das Fenster offen lässt, ist nur schneller fertig.
  */
 async function continueImports({ budgetMs = BACKGROUND_SLICE_MS } = {}) {
-  const snapshot = await admin.database().ref(USER_DIRECTORY_PATH).get();
-  const uids = Object.keys(snapshot.val() ?? {});
+  const [directory, tenants] = await Promise.all([
+    admin.database().ref(USER_DIRECTORY_PATH).get(),
+    admin.database().ref("tenants").get(),
+  ]);
+  const uids = [
+    ...Object.keys(directory.val() ?? {}),
+    ...Object.keys(tenants.val() ?? {}).map((id) => `t:${id}`),
+  ];
   const deadline = Date.now() + budgetMs;
   const worked = [];
 

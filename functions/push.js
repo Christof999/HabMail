@@ -13,7 +13,14 @@
 
 const admin = require("firebase-admin");
 
-const { userPushSettingsPath, userPushTokensPath } = require("./paths");
+const { userPushSettingsPath, userPushTokensPath, userPushWebPath } = require("./paths");
+
+let webpush = null;
+try {
+  webpush = require("web-push");
+} catch {
+  webpush = null;
+}
 
 /** Was als „wichtig" gilt, wenn jemand nicht über jede Mail gemeldet haben will. */
 const IMPORTANT_CATEGORIES = new Set(["rechnung", "mahnung"]);
@@ -127,9 +134,96 @@ async function dropTokens(uid, tokens) {
  *
  * @returns {Promise<{sent: number, failed: number, skipped?: string}>}
  */
+function vapidConfigured() {
+  return (
+    webpush !== null &&
+    typeof process.env.PUSH_VAPID_PUBLIC_KEY === "string" &&
+    process.env.PUSH_VAPID_PUBLIC_KEY !== "" &&
+    typeof process.env.PUSH_VAPID_PRIVATE_KEY === "string" &&
+    process.env.PUSH_VAPID_PRIVATE_KEY !== ""
+  );
+}
+
+async function readWebSubscriptions(uid) {
+  const snapshot = await admin.database().ref(userPushWebPath(uid)).get();
+  const raw = snapshot.val();
+  if (raw === null || typeof raw !== "object") return [];
+  return Object.entries(raw)
+    .map(([id, value]) => {
+      const entry = value && typeof value === "object" ? value : {};
+      return {
+        id,
+        endpoint: typeof entry.endpoint === "string" ? entry.endpoint : "",
+        p256dh: typeof entry.p256dh === "string" ? entry.p256dh : "",
+        auth: typeof entry.auth === "string" ? entry.auth : "",
+      };
+    })
+    .filter((entry) => entry.endpoint !== "" && entry.p256dh !== "" && entry.auth !== "");
+}
+
+async function dropWebSubscriptions(uid, ids) {
+  if (ids.length === 0) return;
+  const updates = {};
+  for (const id of ids) updates[`${userPushWebPath(uid)}/${id}`] = null;
+  try {
+    await admin.database().ref().update(updates);
+  } catch (error) {
+    console.error(`Abgelaufene Web-Push-Anmeldungen nicht entfernt (${uid}):`, error);
+  }
+}
+
+/**
+ * Derselbe Schlüssel wie bei Werkbank Zeit. Die Anmeldung gilt nur für diese
+ * Adresse; geschickt wird mit dem privaten Schlüssel, den Zeit schon nutzt.
+ */
+async function sendWebPush(uid, { title, body, tag }) {
+  if (!vapidConfigured()) return { sent: 0, failed: 0, skipped: "kein Web-Push-Schlüssel" };
+  const subscriptions = await readWebSubscriptions(uid);
+  if (subscriptions.length === 0) return { sent: 0, failed: 0, skipped: "kein Gerät angemeldet" };
+
+  webpush.setVapidDetails(
+    process.env.PUSH_VAPID_SUBJECT || "mailto:push@werkbank.de",
+    process.env.PUSH_VAPID_PUBLIC_KEY,
+    process.env.PUSH_VAPID_PRIVATE_KEY,
+  );
+
+  const payload = JSON.stringify({
+    notification: { title, body },
+    data: { title, body, tag, at: String(Date.now()), url: "/" },
+  });
+
+  let sent = 0;
+  let failed = 0;
+  const dead = [];
+  for (const subscription of subscriptions) {
+    try {
+      await webpush.sendNotification(
+        {
+          endpoint: subscription.endpoint,
+          keys: { p256dh: subscription.p256dh, auth: subscription.auth },
+        },
+        payload,
+        { TTL: 3600, urgency: "high" },
+      );
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      const status = error && typeof error === "object" ? error.statusCode : 0;
+      if (status === 404 || status === 410) dead.push(subscription.id);
+      else console.warn(`Web-Push fehlgeschlagen (${uid}): ${status || error}`);
+    }
+  }
+  await dropWebSubscriptions(uid, dead);
+  return { sent, failed };
+}
+
 async function sendToUser(uid, { title, body, tag = "habmail-neu" }) {
+  const web = await sendWebPush(uid, { title, body, tag });
   const tokens = await readTokens(uid);
-  if (tokens.length === 0) return { sent: 0, failed: 0, skipped: "kein Gerät angemeldet" };
+  if (tokens.length === 0) {
+    if (web.sent > 0 || web.failed > 0) return web;
+    return { sent: 0, failed: 0, skipped: "kein Gerät angemeldet" };
+  }
 
   const response = await admin.messaging().sendEachForMulticast({
     tokens,
@@ -154,7 +248,10 @@ async function sendToUser(uid, { title, body, tag = "habmail-neu" }) {
   });
   await dropTokens(uid, dead);
 
-  return { sent: response.successCount, failed: response.failureCount };
+  return {
+    sent: response.successCount + web.sent,
+    failed: response.failureCount + web.failed,
+  };
 }
 
 /**

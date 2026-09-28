@@ -10,12 +10,10 @@
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const { sendToUser } = require("./push");
+const { ownerFromAuth } = require("./owner");
 
 exports.sendTestNotification = onCall(async (request) => {
-  const uid = request.auth?.uid;
-  if (typeof uid !== "string" || uid === "") {
-    throw new HttpsError("unauthenticated", "Bitte zuerst anmelden.");
-  }
+  const uid = ownerFromAuth(request);
 
   const result = await sendToUser(uid, {
     title: "HabMail",

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { User } from 'firebase/auth'
 import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
-import { userPushSettingsPath, userPushTokensPath } from './paths'
+import { userPushPath } from './paths'
 import {
   DEFAULT_PUSH_SETTINGS,
   disablePush,
@@ -29,7 +28,7 @@ import { sendTestNotification } from './usersApi'
  */
 
 type Props = {
-  user: User
+  ownerId: string
   onClose: () => void
 }
 
@@ -58,7 +57,7 @@ const SCOPES: readonly (readonly [PushScope, string, string])[] = [
   ],
 ]
 
-export default function NotificationSettings({ user, onClose }: Props) {
+export default function NotificationSettings({ ownerId, onClose }: Props) {
   const [settings, setSettings] = useState<PushSettings>(DEFAULT_PUSH_SETTINGS)
   const [devices, setDevices] = useState<DeviceEntry[]>([])
   const [thisDevice, setThisDevice] = useState<boolean | null>(null)
@@ -71,23 +70,18 @@ export default function NotificationSettings({ user, onClose }: Props) {
 
   useEffect(
     () =>
-      onValue(ref(getFirebaseDb(), userPushSettingsPath(user.uid)), (snap) =>
-        setSettings(parsePushSettings(snap.val())),
-      ),
-    [user.uid],
-  )
-
-  useEffect(
-    () =>
-      onValue(ref(getFirebaseDb(), userPushTokensPath(user.uid)), (snap) =>
-        setDevices(parseDevices(snap.val())),
-      ),
-    [user.uid],
+      onValue(ref(getFirebaseDb(), userPushPath(ownerId)), (snap) => {
+        const raw = snap.val()
+        const tree = raw !== null && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+        setSettings(parsePushSettings(tree.settings))
+        setDevices([...parseDevices(tree.tokens), ...parseDevices(tree.web)])
+      }),
+    [ownerId],
   )
 
   const refreshThisDevice = useCallback(() => {
-    void thisDeviceRegistered(user).then(setThisDevice)
-  }, [user])
+    void thisDeviceRegistered(ownerId).then(setThisDevice)
+  }, [ownerId])
 
   useEffect(refreshThisDevice, [refreshThisDevice])
 
@@ -96,7 +90,7 @@ export default function NotificationSettings({ user, onClose }: Props) {
     setNotice(null)
     setBusy(true)
     try {
-      await enablePush(user, scope)
+      await enablePush(ownerId, scope)
       setThisDevice(true)
       setNotice('Eingeschaltet. Dieses Gerät bekommt ab jetzt Meldungen.')
     } catch (e) {
@@ -110,7 +104,7 @@ export default function NotificationSettings({ user, onClose }: Props) {
     setError(null)
     setNotice(null)
     try {
-      await setPushScope(user, scope)
+      await setPushScope(ownerId, scope)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ändern fehlgeschlagen')
     }
@@ -121,7 +115,7 @@ export default function NotificationSettings({ user, onClose }: Props) {
     setNotice(null)
     setBusy(true)
     try {
-      await disablePush(user)
+      await disablePush(ownerId)
       setThisDevice(false)
       setNotice('Dieses Gerät bekommt keine Meldungen mehr.')
     } catch (e) {

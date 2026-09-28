@@ -11,10 +11,9 @@
  * eine Liste und kein einzelner Wert.
  */
 import { get, ref, remove, serverTimestamp, set, update } from 'firebase/database'
-import type { User } from 'firebase/auth'
 import { getMessaging, getToken, deleteToken, isSupported, onMessage } from 'firebase/messaging'
 import { getFirebaseApp, getFirebaseDb } from './firebase'
-import { userPushSettingsPath, userPushTokensPath } from './paths'
+import { userPushSettingsPath, userPushTokensPath, userPushWebPath } from './paths'
 
 /** Was gemeldet wird. */
 export type PushScope = 'all' | 'important'
@@ -87,8 +86,34 @@ function vapidKey(): string {
   return (import.meta.env.VITE_FIREBASE_VAPID_KEY ?? '').trim()
 }
 
+/** Der Schlüssel von Werkbank Zeit. Gilt für jede Adresse, die Anmeldung nicht. */
+function werkbankVapidKey(): string {
+  return (import.meta.env.VITE_PUSH_VAPID_PUBLIC_KEY ?? '').trim()
+}
+
+export function usesWerkbankPush(): boolean {
+  return werkbankVapidKey() !== ''
+}
+
 export function hasVapidKey(): boolean {
-  return vapidKey() !== ''
+  return werkbankVapidKey() !== '' || vapidKey() !== ''
+}
+
+function applicationServerKey(base64: string): Uint8Array<ArrayBuffer> {
+  const normalized = base64.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+  const raw = atob(padded)
+  const output = new Uint8Array(new ArrayBuffer(raw.length))
+  for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i)
+  return output
+}
+
+async function subscriptionId(endpoint: string): Promise<string> {
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(endpoint))
+  return Array.from(new Uint8Array(hash))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 32)
 }
 
 async function registration(): Promise<ServiceWorkerRegistration> {
@@ -108,15 +133,15 @@ async function messaging() {
  * Gibt die Kennung zurück, damit die Oberfläche „dieses Gerät ist dabei"
  * anzeigen kann, ohne sie ein zweites Mal zu erfragen.
  */
-export async function enablePush(user: User, scope: PushScope): Promise<string> {
+export async function enablePush(ownerId: string, scope: PushScope): Promise<string> {
   const blocked = pushBlockedReason()
   if (blocked !== null) throw new Error(blocked)
   if (!hasVapidKey()) {
     throw new Error(
-      'Es ist kein VAPID-Schlüssel hinterlegt (VITE_FIREBASE_VAPID_KEY). ' +
-        'Ohne ihn kann dieser Browser keine Kennung für Benachrichtigungen holen.',
+      'Es ist kein VAPID-Schlüssel hinterlegt. Ohne ihn kann dieser Browser keine Benachrichtigungen empfangen.',
     )
   }
+  if (usesWerkbankPush()) return enableWerkbankPush(ownerId, scope)
 
   const permission = await Notification.requestPermission()
   if (permission !== 'granted') {
@@ -139,13 +164,56 @@ export async function enablePush(user: User, scope: PushScope): Promise<string> 
   if (!token) throw new Error('Der Browser hat keine Kennung herausgegeben.')
 
   const db = getFirebaseDb()
-  await set(ref(db, `${userPushTokensPath(user.uid)}/${token}`), {
+  await set(ref(db, `${userPushTokensPath(ownerId)}/${token}`), {
     createdAt: serverTimestamp(),
     // Nur zum Wiedererkennen in der Geräteliste, nicht zur Auswertung.
     label: deviceLabel(),
   })
-  await update(ref(db, userPushSettingsPath(user.uid)), { enabled: true, scope })
+  await update(ref(db, userPushSettingsPath(ownerId)), { enabled: true, scope })
   return token
+}
+
+/**
+ * Web Push mit dem Schlüsselpaar von Werkbank Zeit.
+ *
+ * Firebase Cloud Messaging nimmt nur den Schlüssel des eigenen Firebase-Projekts.
+ * Zeit und Post sollen denselben Schlüssel benutzen, deshalb abonniert der
+ * Browser hier direkt und der Abhol-Lauf schickt mit dem privaten Schlüssel.
+ */
+async function enableWerkbankPush(ownerId: string, scope: PushScope): Promise<string> {
+  const permission = await Notification.requestPermission()
+  if (permission !== 'granted') {
+    throw new Error(
+      permission === 'denied'
+        ? 'Benachrichtigungen sind für diese Seite abgelehnt. Das lässt sich nur in den Einstellungen des Browsers wieder zurücknehmen.'
+        : 'Ohne Erlaubnis gibt es keine Benachrichtigungen.',
+    )
+  }
+
+  const reg = await registration()
+  const subscription = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: applicationServerKey(werkbankVapidKey()),
+  })
+  const json = subscription.toJSON()
+  const endpoint = json.endpoint ?? ''
+  const p256dh = json.keys?.p256dh ?? ''
+  const authKey = json.keys?.auth ?? ''
+  if (endpoint === '' || p256dh === '' || authKey === '') {
+    throw new Error('Der Browser hat keine Anmeldung herausgegeben.')
+  }
+
+  const id = await subscriptionId(endpoint)
+  const db = getFirebaseDb()
+  await set(ref(db, `${userPushWebPath(ownerId)}/${id}`), {
+    endpoint,
+    p256dh,
+    auth: authKey,
+    createdAt: Date.now(),
+    label: deviceLabel(),
+  })
+  await update(ref(db, userPushSettingsPath(ownerId)), { enabled: true, scope })
+  return id
 }
 
 /**
@@ -156,8 +224,8 @@ export async function enablePush(user: User, scope: PushScope): Promise<string> 
  * „nur Wichtiges" am Rechner nach der Erlaubnis für Benachrichtigungen — die
  * dort niemand haben wollte.
  */
-export async function setPushScope(user: User, scope: PushScope): Promise<void> {
-  await update(ref(getFirebaseDb(), userPushSettingsPath(user.uid)), { scope })
+export async function setPushScope(ownerId: string, scope: PushScope): Promise<void> {
+  await update(ref(getFirebaseDb(), userPushSettingsPath(ownerId)), { scope })
 }
 
 /**
@@ -167,29 +235,41 @@ export async function setPushScope(user: User, scope: PushScope): Promise<void> 
  * entfernt. Andere Geräte bleiben unberührt; erst wenn keines mehr übrig ist,
  * steht auch der Schalter auf aus.
  */
-export async function disablePush(user: User): Promise<void> {
+export async function disablePush(ownerId: string): Promise<void> {
   const db = getFirebaseDb()
   let token = ''
   try {
-    const service = await messaging()
-    if (service !== null && hasVapidKey()) {
-      token = await getToken(service, {
-        vapidKey: vapidKey(),
-        serviceWorkerRegistration: await registration(),
-      })
-      await deleteToken(service)
+    if (usesWerkbankPush()) {
+      const reg = await registration()
+      const subscription = await reg.pushManager.getSubscription()
+      if (subscription) {
+        token = await subscriptionId(subscription.endpoint)
+        await subscription.unsubscribe()
+        await remove(ref(db, `${userPushWebPath(ownerId)}/${token}`))
+      }
+    } else {
+      const service = await messaging()
+      if (service !== null && vapidKey() !== '') {
+        token = await getToken(service, {
+          vapidKey: vapidKey(),
+          serviceWorkerRegistration: await registration(),
+        })
+        await deleteToken(service)
+        if (token !== '') await remove(ref(db, `${userPushTokensPath(ownerId)}/${token}`))
+      }
     }
   } catch {
     // Die Kennung war vielleicht längst ungültig. Der Eintrag in der Datenbank
     // muss trotzdem weg, sonst schickt der Server weiter ins Leere.
   }
 
-  if (token !== '') await remove(ref(db, `${userPushTokensPath(user.uid)}/${token}`))
-
-  const rest = await get(ref(db, userPushTokensPath(user.uid)))
-  const remaining = rest.exists() ? Object.keys(rest.val() ?? {}).length : 0
+  const tokens = await get(ref(db, userPushTokensPath(ownerId)))
+  const web = await get(ref(db, userPushWebPath(ownerId)))
+  const remaining =
+    (tokens.exists() ? Object.keys(tokens.val() ?? {}).length : 0) +
+    (web.exists() ? Object.keys(web.val() ?? {}).length : 0)
   if (remaining === 0) {
-    await update(ref(db, userPushSettingsPath(user.uid)), { enabled: false })
+    await update(ref(db, userPushSettingsPath(ownerId)), { enabled: false })
   }
 }
 
@@ -200,10 +280,17 @@ export async function disablePush(user: User): Promise<void> {
  * davor. Ein zweites Telefon fände den Schalter sonst auf „an", ohne je eine
  * Meldung zu bekommen.
  */
-export async function thisDeviceRegistered(user: User): Promise<boolean> {
+export async function thisDeviceRegistered(ownerId: string): Promise<boolean> {
   if (pushBlockedReason() !== null || !hasVapidKey()) return false
   if (notificationPermission() !== 'granted') return false
   try {
+    if (usesWerkbankPush()) {
+      const subscription = await (await registration()).pushManager.getSubscription()
+      if (!subscription) return false
+      const id = await subscriptionId(subscription.endpoint)
+      const snap = await get(ref(getFirebaseDb(), `${userPushWebPath(ownerId)}/${id}`))
+      return snap.exists()
+    }
     const service = await messaging()
     if (service === null) return false
     const token = await getToken(service, {
@@ -211,7 +298,7 @@ export async function thisDeviceRegistered(user: User): Promise<boolean> {
       serviceWorkerRegistration: await registration(),
     })
     if (!token) return false
-    const snap = await get(ref(getFirebaseDb(), `${userPushTokensPath(user.uid)}/${token}`))
+    const snap = await get(ref(getFirebaseDb(), `${userPushTokensPath(ownerId)}/${token}`))
     return snap.exists()
   } catch {
     return false

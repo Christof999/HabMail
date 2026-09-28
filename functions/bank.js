@@ -18,6 +18,7 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 
 const gocardless = require("./gocardless");
+const { ownerFromAuth } = require("./owner");
 const { listOpenInvoices } = require("./invoices");
 const { matchTransactions, normalizeTransaction } = require("./matching");
 const { parseStatement } = require("./statement");
@@ -39,9 +40,7 @@ const INITIAL_HISTORY_DAYS = 90;
 const OVERLAP_DAYS = 7;
 
 function requireUid(request) {
-  const uid = request.auth?.uid;
-  if (!uid) throw new HttpsError("unauthenticated", "Nicht angemeldet.");
-  return uid;
+  return ownerFromAuth(request);
 }
 
 function assertConfigured() {
