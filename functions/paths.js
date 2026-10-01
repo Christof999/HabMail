@@ -16,6 +16,15 @@ function userEmailsPath(uid) {
   return `${userRootPath(uid)}/emails`;
 }
 
+/**
+ * Gesendete Mails — getrennt vom Posteingang. Sie haben keine Kategorie,
+ * keine Rechnung und keinen Push; im selben Baum müsste jede Stelle, die den
+ * Posteingang liest, sie erst wieder heraussortieren.
+ */
+function userSentEmailsPath(uid) {
+  return `${userRootPath(uid)}/sentEmails`;
+}
+
 function userFoldersPath(uid) {
   return `${userRootPath(uid)}/mailFolders`;
 }
@@ -52,6 +61,11 @@ function userImportStatusPath(uid) {
   return `${userRootPath(uid)}/importStatus`;
 }
 
+/** Dasselbe für den Gesendet-Ordner — ein eigener Auftrag mit eigenem Stand. */
+function userSentImportStatusPath(uid) {
+  return `${userRootPath(uid)}/sentImportStatus`;
+}
+
 /** Gerätekennungen für Push und die Einstellung dazu. Siehe `src/paths.ts`. */
 function userPushPath(uid) {
   return `${userRootPath(uid)}/push`;
@@ -78,11 +92,13 @@ const ADMINS_PATH = "admins";
 module.exports = {
   userRootPath,
   userEmailsPath,
+  userSentEmailsPath,
   userFoldersPath,
   userBankPath,
   userInvoiceIndexPath,
   userPollStatusPath,
   userImportStatusPath,
+  userSentImportStatusPath,
   userPushPath,
   userPushTokensPath,
   userPushSettingsPath,

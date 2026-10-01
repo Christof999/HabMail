@@ -19,7 +19,7 @@ import {
   buildGeminiItems,
   requestGeminiSearch,
 } from './geminiSearch'
-import type { EmailAttachment, EmailRow } from './types'
+import type { EmailRow } from './types'
 import {
   addSavedFilter,
   loadSavedFilters,
@@ -49,17 +49,9 @@ import {
   threadKeysMatchingQuery,
   type EmailThread,
 } from './threading'
-import {
-  attachmentBytes,
-  attachmentIsUsable,
-  attachmentIsViewable,
-  attachmentMimeType,
-  attachmentName,
-  downloadAttachment,
-  formatBytes,
-  omittedReason,
-  openAttachment,
-} from './attachments'
+import { attachmentIsUsable, omittedReason } from './attachments'
+import { AttachmentList } from './AttachmentList'
+import { SentView } from './SentView'
 import { mailboxLabel } from './mailboxesApi'
 import { MoveToFolderSheet } from './MoveToFolderSheet'
 import { SvgMoveToFolder } from './icons'
@@ -192,6 +184,8 @@ export default function App() {
   const [compose, setCompose] = useState<ComposeState | null>(null)
   const [folders, setFolders] = useState<MailFolder[]>([])
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
+  /** Der Ordner „Gesendet" — eigene Ansicht, eigene Daten. */
+  const [showSent, setShowSent] = useState(false)
   const [showFolderModal, setShowFolderModal] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [newFolderParentId, setNewFolderParentId] = useState<string | null>(
@@ -860,6 +854,12 @@ export default function App() {
 
   function selectFolder(folderId: string | null) {
     setSelectedFolderId(folderId)
+    setShowSent(false)
+    if (isCompactLayout) setFolderDrawerOpen(false)
+  }
+
+  function selectSent() {
+    setShowSent(true)
     if (isCompactLayout) setFolderDrawerOpen(false)
   }
 
@@ -1043,6 +1043,8 @@ export default function App() {
           <FolderNav
             tree={folderTree}
             selectedId={selectedFolderId}
+            sentSelected={showSent}
+            onSelectSent={selectSent}
             unreadByFolder={unreadByFolder}
             mailDropHighlightId={mailDropHighlightId}
             onSelect={selectFolder}
@@ -1159,6 +1161,15 @@ export default function App() {
         {folderSidebar}
 
         <div className="app-main">
+      {showSent && ownerId ? (
+        <SentView
+          key={ownerId}
+          ownerId={ownerId}
+          onForward={(row) => setCompose({ mode: 'forward', row })}
+          onOpenImport={() => setShowMailboxSettings(true)}
+        />
+      ) : (
+      <>
       <section className="toolbar">
         <div
           className="mode-switch segmented"
@@ -1488,6 +1499,8 @@ export default function App() {
           )}
         </div>
       ) : null}
+      </>
+      )}
 
         </div>
       </div>
@@ -1798,68 +1811,6 @@ function AttachmentMissingDataHint({ row }: { row: EmailRow }) {
       {reason ?? 'Zu dieser Mail liegen keine Anhangdaten in der Datenbank.'} Zum
       Öffnen bleibt der Weg über das Postfach selbst.
     </p>
-  )
-}
-
-function AttachmentList({
-  attachments,
-  idPrefix,
-  heading,
-  titleTag: TitleTag = 'h4',
-}: {
-  attachments: EmailAttachment[]
-  idPrefix: string
-  heading: string
-  titleTag?: 'h3' | 'h4'
-}) {
-  if (!attachments.length) return null
-  return (
-    <div className="atts thread-atts">
-      <TitleTag className="attachment-list-title">{heading}</TitleTag>
-      <ul className="attachment-list">
-        {attachments.map((a, i) => {
-          const name = attachmentName(a)
-          const usable = attachmentIsUsable(a)
-          const missing = usable ? null : omittedReason(a)
-          const size = formatBytes(attachmentBytes(a))
-          return (
-            <li key={`${idPrefix}-${name}-${i}`}>
-              <span className="attachment-meta">
-                <strong>{name}</strong>
-                <span className="muted small">
-                  {attachmentMimeType(a)}
-                  {size === '' ? '' : ` · ${size}`}
-                </span>
-              </span>
-              {missing === null ? (
-                <div className="attachment-actions">
-                  {/* Ansehen zuerst: eine Rechnung will man meist lesen, nicht
-                      auf dem Gerät ablegen. */}
-                  {attachmentIsViewable(a) ? (
-                    <button
-                      type="button"
-                      className="ghost small-btn"
-                      onClick={() => openAttachment(a)}
-                    >
-                      Öffnen
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="ghost small-btn"
-                    onClick={() => downloadAttachment(a)}
-                  >
-                    Speichern
-                  </button>
-                </div>
-              ) : (
-                <span className="muted small attachment-missing">{missing}</span>
-              )}
-            </li>
-          )
-        })}
-      </ul>
-    </div>
   )
 }
 

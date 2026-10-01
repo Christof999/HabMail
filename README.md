@@ -276,6 +276,34 @@ Mails, die schon in HabMail liegen, werden beim Nachholen erkannt und
 > Das braucht einen Email-Proxy, der `since` beim Abholen kennt. Ältere Stände
 > antworten darauf mit „nichts Neues", und der Nachlauf findet nichts.
 
+## Gesendet
+
+In der Ordnerleiste steht unter dem Posteingang der Ordner **Gesendet**. Dort
+landen Mails auf zwei Wegen:
+
+1. **Aus HabMail verschickt** — sofort nach dem Senden, ohne auf den Abruf zu
+   warten. Der Email-Proxy legt zusätzlich eine Kopie in den Gesendet-Ordner
+   des Postfachs; damit steht die Mail auch in Outlook oder auf dem Handy.
+2. **Aus dem Postfach abgeholt** — der Fünf-Minuten-Lauf holt den
+   Gesendet-Ordner jedes Postfachs mit, also auch, was aus anderen Programmen
+   verschickt wurde. Beim ersten Mal die letzten 25.
+
+Beide Wege benutzen denselben Schlüssel aus der Message-ID; eine Mail steht nie
+doppelt da. Gesendete Mails liegen unter `sentEmails`, getrennt vom
+Posteingang: keine KI, keine Buchhaltung, kein Push. Geladen wird der Ordner
+erst, wenn man ihn öffnet.
+
+**Ältere gesendete Mails** holt *Postfächer → Gesendete Mails laden* — wie beim
+Posteingang erst zählen, dann nachholen, mit eigenem Auftrag
+(`sentImportStatus`), der im Hintergrund weiterläuft. Anhänge werden dabei nur
+vermerkt, außer der Haken „Anhänge mit übernehmen" ist gesetzt.
+
+> Das braucht einen Email-Proxy, der `folder=sent` kennt. Ein älterer Proxy wird
+> erkannt: dann bleibt „Gesendet" leer bzw. zeigt nur, was aus HabMail ging, und
+> unter *Postfächer* steht der Grund — Posteingang und Abruf laufen unverändert.
+> Nach dem Update außerdem die Regeln einspielen:
+> `firebase deploy --only database`.
+
 ## Buchhaltung
 
 Zweite Ansicht neben dem Posteingang, oben rechts umschaltbar. Sie zeigt alles,

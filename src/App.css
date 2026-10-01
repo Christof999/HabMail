@@ -3224,3 +3224,59 @@ html[data-theme='dark'] .pill-paid {
     transform: none;
   }
 }
+
+/*
+ * „Gesendet" sitzt direkt unter dem Posteingang. Die beiden gehören zusammen
+ * und rücken deshalb eng aneinander; der Abstand danach trennt sie von den
+ * eigenen Ordnern.
+ */
+.folder-item-root:has(+ .folder-item-sent) {
+  margin-bottom: 0.1rem;
+}
+
+.folder-item-sent {
+  margin-bottom: 0.6rem;
+}
+
+.sent-view-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.sent-view-title {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.sent-view-loading {
+  margin: 1rem 0;
+}
+
+/* Die erste Zeile der Mail als Vorschau — eine Zeile, nicht ein Absatz. */
+.sent-card-preview {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sent-view-more {
+  display: flex;
+  justify-content: center;
+  margin: 0.5rem 0 1.5rem;
+}
+
+/* Ein Knopf, der im Fließtext wie ein Verweis aussieht. */
+.link-btn {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}

@@ -284,7 +284,7 @@ const countOlderMails = onCall({ timeoutSeconds: 120, memory: "256MiB" }, async 
       : undefined;
 
   try {
-    return await importer.countOlderMails(uid, since, mailboxId);
+    return await importer.countOlderMails(uid, since, mailboxId, request.data?.folder);
   } catch (error) {
     throw new HttpsError("internal", `Zählen fehlgeschlagen: ${error?.message}`);
   }
@@ -310,6 +310,7 @@ const importOlderMails = onCall({ timeoutSeconds: 540, memory: "512MiB" }, async
   try {
     return await importer.importOlderMails(uid, since, mailboxId, {
       allAttachments: request.data?.allAttachments === true,
+      folder: request.data?.folder,
     });
   } catch (error) {
     throw new HttpsError("internal", `Nachholen fehlgeschlagen: ${error?.message}`);
@@ -319,7 +320,7 @@ const importOlderMails = onCall({ timeoutSeconds: 540, memory: "512MiB" }, async
 /** Den Nachlauf anhalten — auch den, der im Hintergrund weiterläuft. */
 const stopOlderImport = onCall(async (request) => {
   const uid = ownerFromAuth(request);
-  return importer.stopImport(uid);
+  return importer.stopImport(uid, request.data?.folder);
 });
 
 /** Damit die Oberfläche weiß, ob sie die Verwaltung überhaupt anbieten soll. */

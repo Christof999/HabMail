@@ -147,6 +147,10 @@ export type PollStatus = {
   analyzed?: number
   failed?: number
   error?: string
+  /** Neu aus dem Gesendet-Ordner. */
+  sentStored?: number
+  /** Gesendet ließ sich nicht abholen — der Posteingang kann trotzdem laufen. */
+  sentError?: string
 }
 
 /*
@@ -179,8 +183,11 @@ export type OlderCountReport = {
 }
 
 /** Nur zählen. Überträgt keine einzige Mail. */
+/** Welcher Ordner nachgeholt wird. Ohne Angabe der Posteingang. */
+export type ImportFolder = 'inbox' | 'sent'
+
 export const countOlderMails = callable<
-  { since: string; mailboxId?: string },
+  { since: string; mailboxId?: string; folder?: ImportFolder },
   OlderCountReport
 >('countOlderMails')
 
@@ -213,12 +220,12 @@ export type ImportReport = {
  * danach sagt `hasMore`, ob es weitergeht.
  */
 export const importOlderMails = callable<
-  { since: string; mailboxId?: string; allAttachments?: boolean },
+  { since: string; mailboxId?: string; allAttachments?: boolean; folder?: ImportFolder },
   ImportReport
 >('importOlderMails', { timeout: 300_000 })
 
 /** Anhalten — auch den Nachlauf, der ohne offenes Fenster weiterläuft. */
-export const stopOlderImport = callable<Record<string, never>, { ok: boolean }>(
+export const stopOlderImport = callable<{ folder?: ImportFolder }, { ok: boolean }>(
   'stopOlderImport',
 )
 

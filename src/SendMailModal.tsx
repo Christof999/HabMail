@@ -18,6 +18,7 @@ import {
   requestSendMail,
   type SendMailComposeKind,
 } from './sendMailApi'
+import { recordSentMail } from './sentMail'
 
 /**
  * Was gerade geschrieben wird.
@@ -236,7 +237,7 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
               originalBody: active.row.originalBody || '',
             }
 
-      await requestSendMail(token, {
+      const result = await requestSendMail(token, {
         kind: active.mode,
         to: to.trim(),
         subject: subject.trim(),
@@ -262,6 +263,15 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
               },
             }),
         context,
+      })
+      // Gleich in „Gesendet" zeigen, nicht erst nach dem nächsten Abruf.
+      await recordSentMail(ownerId, {
+        messageId: result.messageId,
+        mailboxId: result.mailbox ?? fromId,
+        to: to.trim(),
+        subject: subject.trim(),
+        text: result.text ?? body,
+        attachments,
       })
       onClose()
     } catch (err) {

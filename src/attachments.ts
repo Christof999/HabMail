@@ -101,6 +101,11 @@ export function omittedReason(attachment: EmailAttachment): string | null {
         'Beim Nachholen alter Mails wurden nur die Anhänge von Rechnungen und ' +
         'Mahnungen übernommen — die Datei liegt weiterhin im Postfach.'
       )
+    case 'gesendet_nachgeholt':
+      return (
+        'Beim Nachholen gesendeter Mails wurden die Anhänge nicht übernommen — ' +
+        'die Datei liegt weiterhin im Gesendet-Ordner des Postfachs.'
+      )
     case 'no_content':
       return 'Der Server hat zu diesem Anhang keinen Inhalt geliefert.'
     case undefined:

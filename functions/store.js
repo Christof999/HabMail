@@ -10,7 +10,7 @@
 const { createHash } = require("node:crypto");
 const admin = require("firebase-admin");
 const { CATEGORY_LABELS, periodFromDate } = require("./categories");
-const { userEmailsPath } = require("./paths");
+const { userEmailsPath, userSentEmailsPath } = require("./paths");
 const { updateIndexEntry } = require("./invoices");
 const { forwardInvoice } = require("./rechnungsprogramm");
 
@@ -173,4 +173,86 @@ async function messageExists(ownerUid, mailboxId, message) {
   return snapshot.exists();
 }
 
-module.exports = { storeMessage, buildRecord, recordKey, messageExists };
+/*
+ * ---------------------------------------------------------------------------
+ * Gesendete Mails
+ *
+ * Sie liegen in einem eigenen Zweig und durchlaufen nichts von dem, was eine
+ * eingehende Mail durchläuft: keine KI, kein Rechnungsindex, keine Übergabe
+ * ans Rechnungsprogramm, kein Push. Was man selbst geschrieben hat, muss man
+ * sich nicht zusammenfassen lassen — und eine eigene Rechnung im
+ * Gesendet-Ordner ist keine Verbindlichkeit.
+ *
+ * Der Schlüssel kommt aus derselben Message-ID wie beim Posteingang. Die
+ * Oberfläche legt eine Mail gleich nach dem Senden unter genau diesem
+ * Schlüssel an; holt der Lauf sie danach aus dem Gesendet-Ordner, ist sie
+ * schon da und bleibt eine.
+ * ---------------------------------------------------------------------------
+ */
+
+function addressList(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry) => entry && typeof entry.address === "string" && entry.address !== "")
+    .map((entry) => ({
+      address: String(entry.address),
+      ...(typeof entry.name === "string" && entry.name !== "" ? { name: entry.name } : {}),
+    }));
+}
+
+function buildSentRecord(mailboxId, message) {
+  const attachments = toAttachments(message);
+  const to = addressList(message.to);
+  const cc = addressList(message.cc);
+  const record = {
+    sender: String(message.from?.address ?? ""),
+    subject: String(message.subject ?? ""),
+    originalBody: String(message.text ?? ""),
+    sentAt: String(message.date ?? new Date().toISOString()),
+    mailboxId,
+    hasAttachment: attachments.length > 0,
+    ingestedAt: Date.now(),
+    source: "postfach",
+  };
+  if (to.length > 0) record.to = to;
+  if (cc.length > 0) record.cc = cc;
+  if (typeof message.from?.name === "string" && message.from.name !== "") {
+    record.senderName = message.from.name;
+  }
+  if (attachments.length > 0) record.attachments = attachments;
+  if (typeof message.messageId === "string" && message.messageId !== "") {
+    record.messageId = message.messageId;
+  }
+  if (typeof message.inReplyTo === "string" && message.inReplyTo !== "") {
+    record.inReplyTo = message.inReplyTo;
+  }
+  return record;
+}
+
+/** @returns {Promise<"stored"|"duplicate">} */
+async function storeSentMessage(ownerUid, mailboxId, message) {
+  const key = recordKey(mailboxId, message);
+  const ref = admin.database().ref(`${userSentEmailsPath(ownerUid)}/${key}`);
+  const record = buildSentRecord(mailboxId, message);
+  const result = await ref.transaction((current) => (current === null ? record : undefined));
+  return result.committed ? "stored" : "duplicate";
+}
+
+async function sentMessageExists(ownerUid, mailboxId, message) {
+  const key = recordKey(mailboxId, message);
+  const snapshot = await admin
+    .database()
+    .ref(`${userSentEmailsPath(ownerUid)}/${key}/sentAt`)
+    .get();
+  return snapshot.exists();
+}
+
+module.exports = {
+  storeMessage,
+  buildRecord,
+  recordKey,
+  messageExists,
+  storeSentMessage,
+  buildSentRecord,
+  sentMessageExists,
+};

@@ -11,6 +11,10 @@
  * Wasserstand. Der laufende Betrieb bleibt davon unberührt; ein Nachlauf darf
  * über Tage gehen.
  *
+ * Dasselbe geht für den Gesendet-Ordner (`folder: "sent"`): eigener Auftrag,
+ * eigener Fortschritt, eigener Wasserstand beim Proxy — und ohne KI, denn
+ * selbst geschriebene Mails muss niemand zusammenfassen.
+ *
  * Ein Aufruf arbeitet einen Abschnitt ab und gibt zurück, wie weit er gekommen
  * ist. Weitergemacht wird durch den nächsten Aufruf — eine Cloud Function hat
  * ein Zeitlimit, und ein Posteingang mit Tausenden Mails passt da nicht hinein.
@@ -27,8 +31,26 @@ const {
   fetchOlderMessages,
   listReceivableMailboxes,
 } = require("./emailproxy");
-const { messageExists, storeMessage } = require("./store");
-const { USER_DIRECTORY_PATH, userImportStatusPath } = require("./paths");
+const {
+  messageExists,
+  sentMessageExists,
+  storeMessage,
+  storeSentMessage,
+} = require("./store");
+const {
+  USER_DIRECTORY_PATH,
+  userImportStatusPath,
+  userSentImportStatusPath,
+} = require("./paths");
+
+/** "inbox" oder "sent" — alles andere ist der Posteingang. */
+function normalizeFolder(folder) {
+  return folder === "sent" ? "sent" : "inbox";
+}
+
+function statusPath(uid, folder) {
+  return folder === "sent" ? userSentImportStatusPath(uid) : userImportStatusPath(uid);
+}
 
 /**
  * Mails je Stapel. Klein gehalten, weil die Gegenstelle 30 Sekunden Zeit hat
@@ -72,11 +94,11 @@ const ATTACHMENTS_FOR = new Set(ACCOUNTING_CATEGORIES);
  * bleiben stehen, damit in der Mail sichtbar ist, dass da etwas hängt und wo
  * es liegt.
  */
-function withoutAttachmentContent(message) {
+function withoutAttachmentContent(message, reason = "nur_belege") {
   const attachments = (message.attachments ?? []).map((attachment) => ({
     ...attachment,
     contentBase64: undefined,
-    omitted: attachment.omitted ?? "nur_belege",
+    omitted: attachment.omitted ?? reason,
   }));
   return { ...message, attachments };
 }
@@ -97,13 +119,13 @@ async function ownMailboxes(uid, mailboxId) {
  * gewachsenen Posteingang sind es schnell Tausende, und jede davon landet
  * danach in der Datenbank und in der KI-Auswertung.
  */
-async function countOlderMails(uid, since, mailboxId) {
+async function countOlderMails(uid, since, mailboxId, folder = "inbox") {
   const boxes = await ownMailboxes(uid, mailboxId);
 
   const mailboxes = await Promise.all(
     boxes.map(async (box) => {
       try {
-        const count = await countOlderMessages(box.id, since);
+        const count = await countOlderMessages(box.id, since, normalizeFolder(folder));
         return { mailbox: box.id, ...count };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -122,6 +144,7 @@ async function countOlderMails(uid, since, mailboxId) {
 
   return {
     since,
+    folder: normalizeFolder(folder),
     mailboxes,
     remaining: mailboxes.reduce((sum, box) => sum + box.remaining, 0),
     remainingBytes: mailboxes.reduce((sum, box) => sum + box.remainingBytes, 0),
@@ -129,9 +152,9 @@ async function countOlderMails(uid, since, mailboxId) {
 }
 
 /** Den Fortschritt festhalten, damit die Oberfläche mitlaufen kann. */
-async function writeStatus(uid, status) {
+async function writeStatus(uid, status, folder = "inbox") {
   try {
-    await admin.database().ref(userImportStatusPath(uid)).set(status);
+    await admin.database().ref(statusPath(uid, folder)).set(status);
   } catch (error) {
     // Der Bericht ist Beiwerk. Er darf einen erfolgreichen Lauf nicht kippen.
     console.error(`Importstatus konnte nicht geschrieben werden (${uid}):`, error);
@@ -146,6 +169,7 @@ async function writeStatus(uid, status) {
  * harmlos, weil der Schlüssel aus der Message-ID stammt, fehlend wäre es nicht.
  */
 async function importMailbox(uid, box, since, deadline, options) {
+  if (options.folder === "sent") return importSentFolder(uid, box, since, deadline, options);
   const summary = {
     mailbox: box.id,
     stored: 0,
@@ -233,9 +257,82 @@ async function importMailbox(uid, box, since, deadline, options) {
   return summary;
 }
 
+/**
+ * Den Gesendet-Ordner eines Postfachs nachholen.
+ *
+ * Wie oben, nur schlanker: keine KI, und Anhänge kommen nur mit, wenn
+ * ausdrücklich „alle Anhänge" gewählt ist. Eigene Rechnungen, Angebote und
+ * Fotos aus Jahren würden die Datenbank sonst schnell füllen — und die
+ * Dateien liegen ja weiterhin im Postfach.
+ */
+async function importSentFolder(uid, box, since, deadline, options) {
+  const summary = {
+    mailbox: box.id,
+    stored: 0,
+    skipped: 0,
+    failed: 0,
+    analyzed: 0,
+    attachmentsDropped: 0,
+    remaining: null,
+    total: null,
+    done: false,
+  };
+
+  let erster = true;
+  while (erster || Date.now() < deadline) {
+    erster = false;
+    const batch = await fetchOlderMessages(box.id, since, CHUNK_SIZE, "sent");
+    summary.total = batch.total;
+    summary.remaining = batch.remaining;
+
+    if (batch.messages.length === 0) {
+      summary.done = true;
+      break;
+    }
+
+    const known = await Promise.all(
+      batch.messages.map((message) => sentMessageExists(uid, box.id, message)),
+    );
+
+    for (let i = 0; i < batch.messages.length; i += 1) {
+      if (known[i]) {
+        summary.skipped += 1;
+        continue;
+      }
+      const original = batch.messages[i];
+      const keep = options.allAttachments === true;
+      const message = keep ? original : withoutAttachmentContent(original, "gesendet_nachgeholt");
+      if (!keep && (original.attachments ?? []).length > 0) summary.attachmentsDropped += 1;
+
+      try {
+        const outcome = await storeSentMessage(uid, box.id, message);
+        if (outcome === "stored") summary.stored += 1;
+        else summary.skipped += 1;
+      } catch (error) {
+        summary.failed += 1;
+        console.error(
+          `Gesendet nachholen: Speichern fehlgeschlagen (${box.id}, UID ${original.uid}):`,
+          error,
+        );
+      }
+    }
+
+    if (summary.failed > 0) break;
+
+    await ackOlderMessages(box.id, batch.oldestDelivered, batch.uidValidity, since, "sent");
+    summary.remaining = batch.remaining;
+    if (batch.done) {
+      summary.done = true;
+      break;
+    }
+  }
+
+  return summary;
+}
+
 /** Den laufenden Auftrag lesen. */
-async function readJob(uid) {
-  const snapshot = await admin.database().ref(userImportStatusPath(uid)).get();
+async function readJob(uid, folder = "inbox") {
+  const snapshot = await admin.database().ref(statusPath(uid, folder)).get();
   const value = snapshot.val();
   return value !== null && typeof value === "object" ? value : null;
 }
@@ -249,8 +346,8 @@ async function readJob(uid) {
  * geschlossene Tab ein Abbruch. So macht der Fünf-Minuten-Lauf weiter, und
  * das Fenster ist nur noch Anzeige — und Beschleuniger, solange es offen ist.
  */
-async function runImportSlice(uid, { budgetMs, trigger }) {
-  const job = await readJob(uid);
+async function runImportSlice(uid, { budgetMs, trigger, folder = "inbox" }) {
+  const job = await readJob(uid, folder);
   if (job === null || job.running !== true) {
     return { ok: true, running: false, hasMore: false, hint: "Kein Nachlauf angefordert." };
   }
@@ -258,7 +355,7 @@ async function runImportSlice(uid, { budgetMs, trigger }) {
   const startedAt = Date.now();
   const deadline = startedAt + budgetMs;
   const since = job.since;
-  const options = { allAttachments: job.allAttachments === true };
+  const options = { allAttachments: job.allAttachments === true, folder };
   const boxes = await ownMailboxes(uid, job.mailboxId ?? undefined);
 
   if (boxes.length === 0) {
@@ -267,7 +364,7 @@ async function runImportSlice(uid, { budgetMs, trigger }) {
       running: false,
       updatedAt: Date.now(),
       error: "Für dich ist kein empfangsfähiges Postfach hinterlegt.",
-    });
+    }, folder);
     return { ok: false, running: false, hasMore: false, mailboxes: [] };
   }
 
@@ -309,7 +406,7 @@ async function runImportSlice(uid, { budgetMs, trigger }) {
     ...(failure === undefined ? {} : { error: failure.error }),
     ...(hasMore ? {} : { finishedAt: Date.now() }),
   };
-  await writeStatus(uid, status);
+  await writeStatus(uid, status, folder);
 
   return { ok: failure === undefined, since, mailboxes: results, hasMore, status };
 }
@@ -321,7 +418,8 @@ async function runImportSlice(uid, { budgetMs, trigger }) {
  * etwas passiert — und nicht bis zum nächsten Fünf-Minuten-Takt nichts.
  */
 async function importOlderMails(uid, since, mailboxId, options = {}) {
-  const existing = await readJob(uid);
+  const folder = normalizeFolder(options.folder);
+  const existing = await readJob(uid, folder);
   const fortsetzung =
     existing !== null && existing.running === true && existing.since === since;
 
@@ -338,20 +436,25 @@ async function importOlderMails(uid, since, mailboxId, options = {}) {
       failed: 0,
       attachmentsDropped: 0,
       remaining: 0,
-    });
+    }, folder);
   }
 
   return runImportSlice(uid, {
     budgetMs: options.budgetMs ?? UI_SLICE_MS,
     trigger: "manuell",
+    folder,
   });
 }
 
 /** Anhalten. Ein neuer Start macht dort weiter, wo dieser aufgehört hat. */
-async function stopImport(uid) {
-  const job = await readJob(uid);
+async function stopImport(uid, folder = "inbox") {
+  const job = await readJob(uid, normalizeFolder(folder));
   if (job === null) return { ok: true, running: false };
-  await writeStatus(uid, { ...job, running: false, updatedAt: Date.now(), stopped: true });
+  await writeStatus(
+    uid,
+    { ...job, running: false, updatedAt: Date.now(), stopped: true },
+    normalizeFolder(folder),
+  );
   return { ok: true, running: false };
 }
 
@@ -376,16 +479,18 @@ async function continueImports({ budgetMs = BACKGROUND_SLICE_MS } = {}) {
   const worked = [];
 
   for (const uid of uids) {
-    if (Date.now() >= deadline) break;
-    const job = await readJob(uid);
-    if (job === null || job.running !== true) continue;
+    for (const folder of ["inbox", "sent"]) {
+      if (Date.now() >= deadline) break;
+      const job = await readJob(uid, folder);
+      if (job === null || job.running !== true) continue;
 
-    const rest = deadline - Date.now();
-    try {
-      const result = await runImportSlice(uid, { budgetMs: rest, trigger: "geplant" });
-      worked.push({ uid, hasMore: result.hasMore, stored: result.status?.stored ?? 0 });
-    } catch (error) {
-      console.error(`Nachlauf im Hintergrund fehlgeschlagen (${uid}):`, error);
+      const rest = deadline - Date.now();
+      try {
+        const result = await runImportSlice(uid, { budgetMs: rest, trigger: "geplant", folder });
+        worked.push({ uid, folder, hasMore: result.hasMore, stored: result.status?.stored ?? 0 });
+      } catch (error) {
+        console.error(`Nachlauf im Hintergrund fehlgeschlagen (${uid}, ${folder}):`, error);
+      }
     }
   }
 

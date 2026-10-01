@@ -1,6 +1,6 @@
 import type { DragEvent } from 'react'
 import type { FolderTreeNode } from './mailFolders'
-import { SvgFolder, SvgInbox } from './icons'
+import { SvgFolder, SvgInbox, SvgSent } from './icons'
 import { MAIL_DROP_INBOX } from './folderDrop'
 
 function FolderTreeNav({
@@ -136,6 +136,8 @@ function FolderTreeNav({
 export function FolderNav({
   tree,
   selectedId,
+  sentSelected,
+  onSelectSent,
   unreadByFolder,
   mailDropHighlightId,
   onSelect,
@@ -146,6 +148,9 @@ export function FolderNav({
 }: {
   tree: FolderTreeNode[]
   selectedId: string | null
+  /** Der Ordner „Gesendet" ist offen — dann ist kein anderer aktiv. */
+  sentSelected: boolean
+  onSelectSent: () => void
   unreadByFolder: Map<string, number>
   mailDropHighlightId: string | null
   onSelect: (folderId: string | null) => void
@@ -170,7 +175,7 @@ export function FolderNav({
       <button
         type="button"
         className={[
-          selectedId === null
+          selectedId === null && !sentSelected
             ? 'folder-item folder-item-root active'
             : 'folder-item folder-item-root',
           mailDropHighlightId === MAIL_DROP_INBOX
@@ -193,9 +198,26 @@ export function FolderNav({
           </span>
         ) : null}
       </button>
+      {/*
+        Gleich unter dem Posteingang, wie in jedem Mailprogramm — und ohne
+        Ablegen per Ziehen: dorthin kommt nur, was verschickt wurde.
+      */}
+      <button
+        type="button"
+        className={
+          sentSelected
+            ? 'folder-item folder-item-root folder-item-sent active'
+            : 'folder-item folder-item-root folder-item-sent'
+        }
+        aria-current={sentSelected ? 'page' : undefined}
+        onClick={onSelectSent}
+      >
+        <SvgSent />
+        <span className="folder-name">Gesendet</span>
+      </button>
       <FolderTreeNav
         nodes={tree}
-        selectedId={selectedId}
+        selectedId={sentSelected ? null : selectedId}
         onSelect={onSelect}
         onRequestRename={onRequestRename}
         onRequestDelete={onRequestDelete}

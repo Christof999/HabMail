@@ -637,8 +637,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
-    // Damit die Oberfläche zeigen kann, von welcher Adresse tatsächlich ging.
-    return res.status(200).json({ ok: true, mailbox: data.mailbox, from: data.from })
+    // Damit die Oberfläche zeigen kann, von welcher Adresse tatsächlich ging —
+    // und die Mail gleich im Ordner „Gesendet" ablegen kann: unter der
+    // Message-ID, unter der sie der Abruf später aus dem Postfach wiederfindet.
+    return res.status(200).json({
+      ok: true,
+      mailbox: data.mailbox,
+      from: data.from,
+      messageId: typeof data.messageId === 'string' ? data.messageId : undefined,
+      text: composeText(payload),
+      sentCopy: data.sentCopy,
+    })
   } catch (e) {
     console.error('emailproxy_send_failed', e)
     return res.status(502).json({

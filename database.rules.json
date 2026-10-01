@@ -92,6 +92,12 @@
             }
           }
         },
+        "sentEmails": {
+          "$emailId": {
+            ".write": "auth != null && auth.uid === $uid && !data.exists() && newData.exists()",
+            ".validate": "newData.hasChildren(['subject', 'sentAt', 'messageId']) && newData.child('subject').isString() && newData.child('subject').val().length <= 500 && newData.child('sentAt').isString() && newData.child('originalBody').isString() && newData.child('originalBody').val().length <= 120000"
+          }
+        },
         "emails": {
           "$emailId": {
             ".write": "auth != null && auth.uid === $uid && !newData.exists()",
@@ -167,6 +173,12 @@
             "imageAlign": { ".validate": "newData.val() === 'left' || newData.val() === 'center' || newData.val() === 'right'" },
             "imageWidth": { ".validate": "newData.isNumber() && newData.val() >= 80 && newData.val() <= 600" },
             "$other": { ".validate": false }
+          }
+        },
+        "sentEmails": {
+          "$emailId": {
+            ".write": "auth != null && auth.token.t === $tenantId && (auth.token.r === 'owner' || auth.token.r === 'office') && auth.token.m.p >= 1 && !data.exists() && newData.exists()",
+            ".validate": "newData.hasChildren(['subject', 'sentAt', 'messageId']) && newData.child('subject').isString() && newData.child('subject').val().length <= 500 && newData.child('sentAt').isString() && newData.child('originalBody').isString() && newData.child('originalBody').val().length <= 120000"
           }
         },
         "emails": {

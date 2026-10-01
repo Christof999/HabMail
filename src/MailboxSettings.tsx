@@ -14,13 +14,14 @@ import {
 } from './mailboxesApi'
 import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
-import { userImportStatusPath, userPollStatusPath } from './paths'
+import { userImportStatusPath, userPollStatusPath, userSentImportStatusPath } from './paths'
 import { formatBytes } from './attachments'
 import {
   countOlderMails,
   importOlderMails,
   pollNow,
   stopOlderImport,
+  type ImportFolder,
   type ImportStatus,
   type OlderCountReport,
   type PollReport,
@@ -46,7 +47,14 @@ import {
  * Fünf-Minuten-Lauf treibt ihn weiter; wer das Fenster offen lässt, ist nur
  * schneller fertig, weil dann zusätzlich von hier aus gearbeitet wird.
  */
-function OlderMailImport({ uid }: { uid: string }) {
+/*
+ * Dasselbe gibt es für den Gesendet-Ordner, als eigener Abschnitt mit eigenem
+ * Auftrag: gesendete Mails laufen ohne KI und deshalb um ein Vielfaches
+ * schneller durch, und wer nur sie nachholen will, soll nicht den Posteingang
+ * mitnehmen müssen.
+ */
+function OlderMailImport({ uid, folder = 'inbox' }: { uid: string; folder?: ImportFolder }) {
+  const sent = folder === 'sent'
   const [since, setSince] = useState(() => `${new Date().getFullYear()}-01-01`)
   const [allAttachments, setAllAttachments] = useState(false)
   const [count, setCount] = useState<OlderCountReport | null>(null)
@@ -63,18 +71,21 @@ function OlderMailImport({ uid }: { uid: string }) {
   const [status, setStatus] = useState<ImportStatus | null>(null)
   useEffect(
     () =>
-      onValue(ref(getFirebaseDb(), userImportStatusPath(uid)), (snap) => {
-        const value = snap.val()
-        setStatus(value !== null && typeof value === 'object' ? (value as ImportStatus) : null)
-      }),
-    [uid],
+      onValue(
+        ref(getFirebaseDb(), sent ? userSentImportStatusPath(uid) : userImportStatusPath(uid)),
+        (snap) => {
+          const value = snap.val()
+          setStatus(value !== null && typeof value === 'object' ? (value as ImportStatus) : null)
+        },
+      ),
+    [uid, sent],
   )
 
   async function look() {
     setError(null)
     setCounting(true)
     try {
-      setCount(await countOlderMails({ since }))
+      setCount(await countOlderMails({ since, folder }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
     } finally {
@@ -88,7 +99,7 @@ function OlderMailImport({ uid }: { uid: string }) {
     stop.current = false
     try {
       for (;;) {
-        const report = await importOlderMails({ since, allAttachments })
+        const report = await importOlderMails({ since, allAttachments, folder })
         const failed = report.mailboxes.find((box) => box.error !== undefined)
         if (failed !== undefined) {
           setError(`${failed.mailbox}: ${failed.error}`)
@@ -107,7 +118,7 @@ function OlderMailImport({ uid }: { uid: string }) {
   async function halt() {
     stop.current = true
     try {
-      await stopOlderImport({})
+      await stopOlderImport({ folder })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
     }
@@ -118,12 +129,26 @@ function OlderMailImport({ uid }: { uid: string }) {
 
   return (
     <section className="older-import">
-      <h4>Weitere Mails laden</h4>
-      <p className="muted small">
-        Der letzte Monat kommt beim Anlegen von allein. Hier gehst du weiter
-        zurück. Der laufende Abruf neuer Mails bleibt davon unberührt, und für
-        den Altbestand gibt es keine Benachrichtigung.
-      </p>
+      {sent ? (
+        <>
+          <h4>Gesendete Mails laden</h4>
+          <p className="muted small">
+            Holt den Gesendet-Ordner deiner Postfächer in den Ordner „Gesendet" —
+            auch, was du aus Outlook oder vom Handy verschickt hast. Neu Gesendetes
+            kommt von allein; hier gehst du zurück. Ohne KI, deshalb deutlich
+            schneller als beim Posteingang.
+          </p>
+        </>
+      ) : (
+        <>
+          <h4>Weitere Mails laden</h4>
+          <p className="muted small">
+            Der letzte Monat kommt beim Anlegen von allein. Hier gehst du weiter
+            zurück. Der laufende Abruf neuer Mails bleibt davon unberührt, und für
+            den Altbestand gibt es keine Benachrichtigung.
+          </p>
+        </>
+      )}
 
       <div className="older-import-row">
         <label>
@@ -176,10 +201,18 @@ function OlderMailImport({ uid }: { uid: string }) {
                   onChange={(e) => setAllAttachments(e.target.checked)}
                   disabled={working || laufend}
                 />
-                Alle Anhänge übernehmen, nicht nur die von Rechnungen und Mahnungen
+                {sent
+                  ? 'Anhänge mit übernehmen'
+                  : 'Alle Anhänge übernehmen, nicht nur die von Rechnungen und Mahnungen'}
               </label>
               <p className="muted small">
-                {allAttachments
+                {sent
+                  ? allAttachments
+                    ? 'Achtung: eigene Angebote, Rechnungen und Fotos aus dem ganzen ' +
+                      'Zeitraum landen dann in der Datenbank.'
+                    : 'Anhänge werden mit Namen und Größe vermerkt; die Dateien bleiben ' +
+                      'im Gesendet-Ordner des Postfachs.'
+                  : allAttachments
                   ? 'Achtung: damit landen auch Werbe-PDFs und Newsletter-Bilder in der ' +
                     'Datenbank. HabMail lädt den Posteingang beim Öffnen am Stück — bei ' +
                     'einem ganzen Jahr macht sich das bemerkbar.'
@@ -281,8 +314,10 @@ function AutomaticPollStatus({ uid }: { uid: string }) {
     <p className={!automatic || overdue ? 'mailbox-error' : 'muted small'}>
       Zuletzt {label} abgeholt: {when}
       {status.ok
-        ? `${status.stored ? ` · ${status.stored} neu` : ''}`
+        ? `${status.stored ? ` · ${status.stored} neu` : ''}` +
+          `${status.sentStored ? ` · ${status.sentStored} gesendet` : ''}`
         : ` · fehlgeschlagen${status.error ? `: ${status.error}` : ''}`}
+      {status.sentError ? ` · Gesendet: ${status.sentError}` : ''}
       {(!automatic || overdue) && status.ok ? (
         <>
           {' '}
@@ -514,6 +549,10 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
         )
       } else {
         const since = monthAgo()
+        // Der Gesendet-Ordner des letzten Monats gleich mit — als Auftrag in
+        // der Datenbank, den der Fünf-Minuten-Lauf zu Ende bringt. Scheitert
+        // das (etwa ein älterer Proxy), bleibt der Posteingang davon unberührt.
+        void importOlderMails({ since, folder: 'sent' }).catch(() => {})
         try {
           await importOlderMails({ since })
           setNotice(
@@ -731,6 +770,8 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
         <AutomaticPollStatus uid={ownerId} />
 
         <OlderMailImport uid={ownerId} />
+
+        <OlderMailImport uid={ownerId} folder="sent" />
 
         {pollReport !== null && pollReport.mailboxes.length > 0 ? (
           <ul className="poll-report">

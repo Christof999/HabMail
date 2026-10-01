@@ -79,3 +79,22 @@ export function SvgCheck({ className }: IconProps) {
     </svg>
   )
 }
+
+/** Papierflieger — der Ordner „Gesendet". */
+export function SvgSent({ className }: IconProps) {
+  return (
+    <svg
+      className={className ?? 'folder-glyph'}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="m22 2-7 20-4-9-9-4Z" />
+      <path d="M22 2 11 13" />
+    </svg>
+  )
+}

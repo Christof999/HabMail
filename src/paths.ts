@@ -26,6 +26,11 @@ export function userEmailsPath(uid: string): string {
   return `${userRootPath(uid)}/emails`
 }
 
+/** Gesendete Mails — eigener Zweig, siehe `functions/paths.js`. */
+export function userSentEmailsPath(uid: string): string {
+  return `${userRootPath(uid)}/sentEmails`
+}
+
 export function userFoldersPath(uid: string): string {
   return `${userRootPath(uid)}/mailFolders`
 }
@@ -85,6 +90,11 @@ export function userPollStatusPath(uid: string): string {
  */
 export function userImportStatusPath(uid: string): string {
   return `${userRootPath(uid)}/importStatus`
+}
+
+/** Fortschritt beim Nachholen des Gesendet-Ordners. */
+export function userSentImportStatusPath(uid: string): string {
+  return `${userRootPath(uid)}/sentImportStatus`
 }
 
 /**

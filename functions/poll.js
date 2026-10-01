@@ -11,8 +11,13 @@ const admin = require("firebase-admin");
 
 const { categorizeMessage } = require("./categorize");
 const { mapWithConcurrency } = require("./concurrency");
-const { ackMessages, fetchMessages, listReceivableMailboxes } = require("./emailproxy");
-const { storeMessage } = require("./store");
+const {
+  ackMessages,
+  fetchMessages,
+  listReceivableMailboxes,
+  supportsSentFolder,
+} = require("./emailproxy");
+const { storeMessage, storeSentMessage } = require("./store");
 const { notifyNewMails } = require("./push");
 const { USER_DIRECTORY_PATH, userPollStatusPath } = require("./paths");
 
@@ -120,6 +125,45 @@ async function pollMailbox(mailbox) {
 }
 
 /**
+ * Den Gesendet-Ordner eines Postfachs abholen.
+ *
+ * Derselbe Ablauf wie beim Posteingang — holen, speichern, erst dann
+ * bestätigen —, nur ohne KI und ohne Benachrichtigung. Beim allerersten Mal
+ * liefert der Proxy die letzten 25 gesendeten Mails; was davor liegt, holt
+ * „Ältere Mails nachholen" mit „Gesendet".
+ */
+async function pollSentFolder(mailbox) {
+  const ownerUid = typeof mailbox.subject === "string" ? mailbox.subject : "";
+  const summary = { fetched: 0, stored: 0, duplicates: 0, failed: 0, acked: false };
+  if (ownerUid === "") return summary;
+
+  const { messages, cursor, uidValidity, hasMore } = await fetchMessages(
+    mailbox.id,
+    messageLimit(),
+    "sent",
+  );
+  summary.fetched = messages.length;
+  summary.hasMore = hasMore;
+
+  for (const message of messages) {
+    try {
+      const outcome = await storeSentMessage(ownerUid, mailbox.id, message);
+      if (outcome === "stored") summary.stored += 1;
+      else summary.duplicates += 1;
+    } catch (error) {
+      summary.failed += 1;
+      console.error(`Gesendet: Speichern fehlgeschlagen (${mailbox.id}, UID ${message.uid}):`, error);
+    }
+  }
+
+  if (summary.failed === 0 && typeof cursor === "number" && typeof uidValidity === "number") {
+    await ackMessages(mailbox.id, cursor, uidValidity, "sent");
+    summary.acked = true;
+  }
+  return summary;
+}
+
+/**
  * Festhalten, dass und mit welchem Ergebnis ein Lauf stattgefunden hat.
  *
  * Ohne das ist „die Mails kommen nur, wenn ich sie von Hand hole" nicht zu
@@ -205,13 +249,30 @@ async function pollAllMailboxes({ onlySubject, trigger = "manuell" } = {}) {
 
   const results = [];
   for (const mailbox of mailboxes) {
+    let result;
     try {
-      results.push(await pollMailbox(mailbox));
+      result = await pollMailbox(mailbox);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Abholen fehlgeschlagen (${mailbox.id}):`, error);
-      results.push({ mailbox: mailbox.id, owner: mailbox.subject ?? null, error: message });
+      result = { mailbox: mailbox.id, owner: mailbox.subject ?? null, error: message };
     }
+
+    /*
+     * Gesendet hinterher und für sich: ein Postfach ohne erkennbaren
+     * Gesendet-Ordner darf den Posteingang nicht als gestört melden. Der
+     * Fehler steht deshalb in `sentError`, nicht in `error`.
+     */
+    if (supportsSentFolder(mailbox)) {
+      try {
+        result.sent = await pollSentFolder(mailbox);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`Gesendet abholen fehlgeschlagen (${mailbox.id}):`, error);
+        result.sentError = message.slice(0, 400);
+      }
+    }
+    results.push(result);
   }
 
   // Je Besitzer zusammenfassen: der geplante Lauf geht über alle Postfächer,
@@ -229,6 +290,7 @@ async function pollAllMailboxes({ onlySubject, trigger = "manuell" } = {}) {
       stored: 0,
       analyzed: 0,
       failed: 0,
+      sentStored: 0,
     };
     const result = results[i];
     current.mailboxes += 1;
@@ -236,6 +298,8 @@ async function pollAllMailboxes({ onlySubject, trigger = "manuell" } = {}) {
     current.stored += result.stored ?? 0;
     current.analyzed += result.analyzed ?? 0;
     current.failed += result.failed ?? 0;
+    current.sentStored += result.sent?.stored ?? 0;
+    if (result.sentError !== undefined) current.sentError = result.sentError;
     if (result.error !== undefined) {
       current.ok = false;
       current.error = String(result.error).slice(0, 400);
@@ -247,4 +311,4 @@ async function pollAllMailboxes({ onlySubject, trigger = "manuell" } = {}) {
   return { ok: results.every((r) => r.error === undefined), mailboxes: results };
 }
 
-module.exports = { pollAllMailboxes, pollMailbox };
+module.exports = { pollAllMailboxes, pollMailbox, pollSentFolder };

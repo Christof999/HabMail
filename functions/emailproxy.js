@@ -73,10 +73,42 @@ async function listReceivableMailboxes() {
   return Array.isArray(data.mailboxes) ? data.mailboxes : [];
 }
 
+/**
+ * Welcher Ordner: "inbox" (Standard) oder "sent".
+ *
+ * Bei "sent" wird zusätzlich geprüft, dass der Proxy das auch verstanden hat.
+ * Ein älterer Proxy kennt den Parameter nicht, ignoriert ihn und liefert den
+ * Posteingang — dessen Mails landeten dann als „gesendet" in der Datenbank,
+ * und bestätigt würde obendrein der Wasserstand des Posteingangs.
+ */
+function folderQuery(folder) {
+  return folder === "sent" ? "&folder=sent" : "";
+}
+
+function folderBody(folder) {
+  return folder === "sent" ? { folder: "sent" } : {};
+}
+
+class SentFolderUnsupportedError extends Error {
+  constructor() {
+    super(
+      "Der Email-Proxy kennt den Gesendet-Ordner noch nicht (folder=sent). " +
+        "Erst den Proxy aktualisieren, dann holt HabMail gesendete Mails ab.",
+    );
+  }
+}
+
+function assertFolder(data, folder) {
+  if (folder === "sent" && data?.role !== "sent") throw new SentFolderUnsupportedError();
+}
+
 /** Neue Mails eines Postfachs. Der Wasserstand rückt dabei noch nicht vor. */
-async function fetchMessages(mailboxId, limit) {
-  const query = `?mailbox=${encodeURIComponent(mailboxId)}&limit=${encodeURIComponent(limit)}`;
+async function fetchMessages(mailboxId, limit, folder = "inbox") {
+  const query =
+    `?mailbox=${encodeURIComponent(mailboxId)}&limit=${encodeURIComponent(limit)}` +
+    folderQuery(folder);
   const data = await request(`/api/receive${query}`);
+  assertFolder(data, folder);
   return {
     messages: Array.isArray(data.messages) ? data.messages : [],
     cursor: data.cursor,
@@ -90,10 +122,10 @@ async function fetchMessages(mailboxId, limit) {
  * Proxy als erledigt — deshalb wird das ausschließlich nach erfolgreichem
  * Speichern aufgerufen.
  */
-async function ackMessages(mailboxId, cursor, uidValidity) {
+async function ackMessages(mailboxId, cursor, uidValidity, folder = "inbox") {
   await request("/api/receive", {
     method: "POST",
-    body: { mailbox: mailboxId, ack: cursor, uidValidity },
+    body: { mailbox: mailboxId, ack: cursor, uidValidity, ...folderBody(folder) },
   });
 }
 
@@ -111,11 +143,13 @@ async function ackMessages(mailboxId, cursor, uidValidity) {
 const OLDER_TIMEOUT_MS = 35_000;
 
 /** Nur zählen — kostet beim Proxy eine Verbindung, überträgt keine Mail. */
-async function countOlderMessages(mailboxId, since) {
+async function countOlderMessages(mailboxId, since, folder = "inbox") {
   const query =
     `?mailbox=${encodeURIComponent(mailboxId)}` +
-    `&since=${encodeURIComponent(since)}&count=1`;
+    `&since=${encodeURIComponent(since)}&count=1` +
+    folderQuery(folder);
   const data = await request(`/api/receive${query}`, { timeoutMs: OLDER_TIMEOUT_MS });
+  assertFolder(data, folder);
   return {
     total: Number(data.total) || 0,
     remaining: Number(data.remaining) || 0,
@@ -125,11 +159,13 @@ async function countOlderMessages(mailboxId, since) {
 }
 
 /** Der nächste Stapel Altbestand, von der jüngsten offenen Mail abwärts. */
-async function fetchOlderMessages(mailboxId, since, limit) {
+async function fetchOlderMessages(mailboxId, since, limit, folder = "inbox") {
   const query =
     `?mailbox=${encodeURIComponent(mailboxId)}` +
-    `&since=${encodeURIComponent(since)}&limit=${encodeURIComponent(limit)}`;
+    `&since=${encodeURIComponent(since)}&limit=${encodeURIComponent(limit)}` +
+    folderQuery(folder);
   const data = await request(`/api/receive${query}`, { timeoutMs: OLDER_TIMEOUT_MS });
+  assertFolder(data, folder);
   return {
     messages: Array.isArray(data.messages) ? data.messages : [],
     oldestDelivered: data.oldestDelivered,
@@ -145,15 +181,22 @@ async function fetchOlderMessages(mailboxId, since, limit) {
  * der niedrigsten gelieferten UID, nicht mit der höchsten: der Nachlauf zählt
  * abwärts.
  */
-async function ackOlderMessages(mailboxId, oldestDelivered, uidValidity, since) {
+async function ackOlderMessages(mailboxId, oldestDelivered, uidValidity, since, folder = "inbox") {
   await request("/api/receive", {
     method: "POST",
-    body: { mailbox: mailboxId, olderAck: oldestDelivered, uidValidity, since },
+    body: { mailbox: mailboxId, olderAck: oldestDelivered, uidValidity, since, ...folderBody(folder) },
   });
+}
+
+/** Meldet die Übersicht des Proxys, dass er gesendete Mails liefern kann? */
+function supportsSentFolder(mailbox) {
+  return Array.isArray(mailbox?.folders) && mailbox.folders.includes("sent");
 }
 
 module.exports = {
   ProxyNotConfiguredError,
+  SentFolderUnsupportedError,
+  supportsSentFolder,
   isProxyConfigured,
   listReceivableMailboxes,
   fetchMessages,

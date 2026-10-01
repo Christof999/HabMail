@@ -55,9 +55,11 @@ export function sendMailApiUrl(): string {
 export type SendMailResult = {
   mailbox?: string
   from?: string
-  /** Nur bei dryRun: die fertige Mail, so wie sie rausgegangen wäre. */
+  /** Die fertige Mail, so wie sie rausging (bzw. bei dryRun rausgegangen wäre). */
   text?: string
   dryRun?: boolean
+  /** Message-ID der verschickten Mail — der Schlüssel im Ordner „Gesendet". */
+  messageId?: string
 }
 
 export async function requestSendMail(
@@ -94,6 +96,8 @@ export async function requestSendMail(
   return {
     mailbox: data.mailbox,
     from: data.from,
-    ...(data.dryRun === true ? { dryRun: true, text: data.text } : {}),
+    text: data.text,
+    ...(data.dryRun === true ? { dryRun: true } : {}),
+    ...(typeof data.messageId === 'string' ? { messageId: data.messageId } : {}),
   }
 }
