@@ -27,3 +27,4 @@ dist-ssr
 # Vom Deploy-Workflow erzeugt, gehört nicht ins Repo
 functions/.env
 functions/.env.*
+.vercel

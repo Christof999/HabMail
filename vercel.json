@@ -5,6 +5,9 @@
   "functions": {
     "api/send-mail.ts": {
       "maxDuration": 60
+    },
+    "api/mcp.ts": {
+      "maxDuration": 60
     }
   }
 }

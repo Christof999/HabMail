@@ -8,7 +8,7 @@ meldet sich an wie ein Mensch und arbeitet als dieser Nutzer.
 |---|---|---|
 | 1. `window.habmail` | Agent, der einen Browser fernsteuert | keine |
 | 2. Oberfläche anklicken | Screenshot- und Klick-Agenten | keine |
-| 3. HTTP mit Agent-Key | Agent ohne Browser: Auftrag im Hintergrund, n8n, Cron, Skript | Key in Vercel |
+| 3. HTTP mit Agent-Key | Agent ohne Browser: Auftrag im Hintergrund, n8n, Cron, Skript, MCP im Chat | Key in Vercel |
 
 Verschickt wird immer über den [Email-Proxy](https://github.com/Christof999/Emailproxy)
 aus einem Postfach des jeweiligen Nutzers. Die Wege 1 und 2 handeln als der
@@ -156,6 +156,35 @@ tatsächlich ging.
 
 Der Key darf auch als `Authorization: Bearer <key>` kommen; alles, was kein
 JWT ist, wird als Agent-Key gelesen.
+
+### Als MCP-Server im Chat
+
+Derselbe Key öffnet auch `/api/mcp` — damit hängt HabMail als Werkzeug in
+Claude Code oder Codex, statt dass der Agent curl-Aufrufe baut:
+
+```bash
+claude mcp add --transport http habmail https://hab-mail.vercel.app/api/mcp \
+  --header "Authorization: Bearer $HABMAIL_AGENT_KEY"
+```
+
+| Werkzeug | Zweck |
+|---|---|
+| `habmail_overview` | Postfächer des Eigentümers, Vorgabe-Postfach, erlaubte Empfänger |
+| `send_mail` | Dieselben Felder wie unten. **Hier ist `dryRun` die Vorgabe** — verschickt wird erst mit `dryRun: false` |
+
+Der Endpunkt reicht den Versand an `/api/send-mail` weiter; `allowedTo` und
+alle Fehler gelten unverändert. Eine Signatur hängt HabMail auf diesem Weg
+nicht an, sie gehört in den Text. Was rausging, holt der nächste Abruf aus
+dem Postfach in den Ordner „Gesendet".
+
+Anhänge nimmt `send_mail` nur als Base64 im Aufruf. Für Bilder und Dokumente
+von der Platte gibt es deshalb ein Skript, das die Dateien selbst liest und
+denselben Key benutzt — ohne `--send` ein Probelauf:
+
+```bash
+node scripts/habmail-send.mjs --to kunde@firma.de --subject "Angebot" \
+  --body-file text.txt --attach angebot.pdf --attach foto.jpg --send
+```
 
 ### Felder
 
