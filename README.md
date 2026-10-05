@@ -695,7 +695,7 @@ Mails je Aufruf) und gibt einen Cursor zurück; die Oberfläche ruft so lange au
 bis `done` kommt. Eine Mail mit PDF wiegt schnell ein Megabyte — ein Jahr
 Posteingang passt weder in den Speicher der Function noch in ihr Zeitbudget.
 
-Anhänge über `MAX_INLINE_ATTACHMENT_BYTES` (Standard 1 MB) liegen gar nicht in
+Anhänge über `MAX_INLINE_ATTACHMENT_BYTES` (Standard 7 MB) liegen gar nicht in
 der Datenbank und lassen sich deshalb auch nicht nachträglich auswerten. Für die
 kommen die Beträge nur über *Betrag korrigieren* herein.
 
@@ -797,15 +797,18 @@ werden.
   die Liste selbst merkt sich der Browser ([`src/inboxCache.ts`](src/inboxCache.ts))
   und zeigt sie beim nächsten Start sofort. Bestand aus der Zeit davor zieht
   `scripts/migrate-attachments.mjs` um: sichern, kopieren, prüfen, erst dann
-  entfernen. Dateien über 1 MB werden weiterhin nur mit Namen und Größe
-  gespeichert (`MAX_INLINE_ATTACHMENT_BYTES`). Für ein echtes Belegarchiv
-  gehören sie nach Firebase Storage.
-- **Anhänge über 1 MB fehlen im Sammel-PDF**, lassen sich nicht öffnen und auch
+  entfernen. Dateien über 7 MB werden weiterhin nur mit Namen und Größe
+  gespeichert (`MAX_INLINE_ATTACHMENT_BYTES`): ein einzelner Wert darf in der
+  Realtime Database höchstens 10 MB groß sein, und als Base64 sind 7 MB schon
+  9,4. Für ein echtes Belegarchiv gehören sie nach Firebase Storage.
+- **Anhänge über 7 MB fehlen im Sammel-PDF**, lassen sich nicht öffnen und auch
   nicht nachträglich auswerten. Sie liegen gar nicht erst in der Datenbank
-  (siehe oben). Beim Abholen sieht die KI sie noch — der Proxy liefert bis 2 MB
-  —, aber danach findet sie niemand mehr. In der Mail steht dann, warum; bis die
-  Dateien nach Firebase Storage umziehen, muss man sie von Hand aus dem Postfach
-  holen.
+  (siehe oben). In der Mail steht dann, warum; bis die Dateien nach Firebase
+  Storage umziehen, muss man sie von Hand aus dem Postfach holen. Zwischen 2
+  und 7 MB liefert der Proxy eine Datei nicht mit dem Abruf, sondern auf
+  Nachfrage in Stücken ([`functions/largeAttachments.js`](functions/largeAttachments.js));
+  das braucht einen Email-Proxy, der `&attachment=` kennt. Mails, die vor
+  dieser Änderung kamen, behalten ihren Vermerk „zu groß".
 - **Der Ingest-Endpunkt** (`ingest_k7mN9pQ2wR4xY8z`, für n8n) nimmt ohne
   gesetztes `INGEST_TOKEN` weiterhin Daten von jedem an — und schreibt an die
   alte, flache Stelle, die die App nicht mehr liest. Wer noch n8n benutzt,

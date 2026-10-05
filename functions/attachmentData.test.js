@@ -94,7 +94,8 @@ test("der Inhalt der Anhänge liegt neben der Mail, nicht in ihr", async () => {
     2: "/9j/4AAQ",
   });
   // Erst der Inhalt, dann die Mail.
-  assert.deepEqual(writes, [`users/user/attachmentData/emails/${key}`, `users/user/emails/${key}`]);
+  assert.equal(writes[0], `users/user/attachmentData/emails/${key}`);
+  assert.equal(writes.at(-1), `users/user/emails/${key}`);
   // Das Rechnungsprogramm bekommt die Belege weiterhin mit.
   assert.equal(forwarded[0].attachments[0].dataBase64, "JVBERi0=");
 });

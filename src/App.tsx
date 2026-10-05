@@ -49,7 +49,6 @@ import {
   threadKeysMatchingQuery,
   type EmailThread,
 } from './threading'
-import { attachmentIsUsable, omittedReason } from './attachments'
 import {
   clearCachedInbox,
   loadCachedInbox,
@@ -1829,25 +1828,21 @@ function fromLineForRow(row: EmailRow): string {
 }
 
 /**
- * Hinweis, wenn eine Mail als „hat Anhang“ markiert ist, aber kein einziger
- * Anhang Inhalt hat.
+ * Hinweis, wenn eine Mail als „hat Anhang“ markiert ist, zu den Anhängen
+ * aber gar nichts in der Datenbank steht — nicht einmal ein Name.
  *
- * Früher stand hier eine Anleitung für n8n. Die Mails kommen inzwischen über
- * den Email-Proxy, und dort hat das genau einen Grund: die Datei war größer
- * als MAX_INLINE_ATTACHMENT_BYTES und wurde deshalb nicht in die Datenbank
- * geschrieben. Im Postfach liegt sie weiterhin.
+ * Steht dort eine Liste, sagt die bei jeder Datei selbst, warum sie fehlt.
+ * Derselbe Satz noch einmal darüber wäre nur doppelt.
  */
 function AttachmentMissingDataHint({ row }: { row: EmailRow }) {
-  const list = row.attachments ?? []
   if (!row.hasAttachment) return null
-  if (list.some((a) => attachmentIsUsable(a))) return null
+  if ((row.attachments ?? []).length > 0) return null
 
-  const reason = list.length > 0 ? omittedReason(list[0]) : null
   return (
     <p className="muted small attachment-nodata">
-      <strong>Anhang vorhanden, aber nicht gespeichert.</strong>{' '}
-      {reason ?? 'Zu dieser Mail liegen keine Anhangdaten in der Datenbank.'} Zum
-      Öffnen bleibt der Weg über das Postfach selbst.
+      <strong>Anhang vorhanden, aber nicht gespeichert.</strong> Zu dieser Mail
+      liegen keine Anhangdaten in der Datenbank. Zum Öffnen bleibt der Weg über
+      das Postfach selbst.
     </p>
   )
 }

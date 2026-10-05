@@ -193,8 +193,52 @@ function supportsSentFolder(mailbox) {
   return Array.isArray(mailbox?.folders) && mailbox.folders.includes("sent");
 }
 
+/**
+ * Ein älterer Proxy kennt den stückweisen Abruf nicht, übergeht die Angabe und
+ * antwortet mit dem gewöhnlichen Abruf — daran ist er zu erkennen.
+ */
+class AttachmentSlicesUnsupportedError extends Error {
+  constructor() {
+    super("Der Email-Proxy liefert große Anhänge noch nicht stückweise aus.");
+  }
+}
+
+/** Mehr Stücke als das gibt es bei keiner Datei, die der Proxy herausgibt. */
+const MAX_ATTACHMENT_SLICES = 40;
+
+/**
+ * Einen Anhang holen, den der Abruf nur mit Namen und Größe gemeldet hat.
+ *
+ * Kommt in Stücken, weil eine Antwort des Proxys nicht beliebig groß werden
+ * darf. Die Stücke sind so geschnitten, dass sich ihr Base64 einfach
+ * aneinanderhängen lässt.
+ */
+async function fetchAttachment(mailboxId, uid, index, folder = "inbox") {
+  const parts = [];
+  let offset = 0;
+
+  for (let i = 0; i < MAX_ATTACHMENT_SLICES; i += 1) {
+    const query =
+      `?mailbox=${encodeURIComponent(mailboxId)}&uid=${encodeURIComponent(uid)}` +
+      `&attachment=${index}&offset=${offset}` +
+      folderQuery(folder);
+    const data = await request(`/api/receive${query}`, { timeoutMs: OLDER_TIMEOUT_MS });
+    if (typeof data.contentBase64 !== "string" || typeof data.length !== "number") {
+      throw new AttachmentSlicesUnsupportedError();
+    }
+
+    parts.push(data.contentBase64);
+    offset += data.length;
+    if (data.done === true || data.length === 0) return parts.join("");
+  }
+
+  throw new Error("Der Anhang kam nicht zu einem Ende.");
+}
+
 module.exports = {
   ProxyNotConfiguredError,
+  AttachmentSlicesUnsupportedError,
+  fetchAttachment,
   SentFolderUnsupportedError,
   supportsSentFolder,
   isProxyConfigured,

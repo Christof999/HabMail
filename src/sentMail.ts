@@ -116,8 +116,11 @@ export async function sentRecordKey(messageId: string): Promise<string> {
   return `mid_${hex.slice(0, 32)}`
 }
 
-/** Wie beim Abholen: größere Dateien nur mit Namen und Größe. */
-const MAX_INLINE_ATTACHMENT_BYTES = 1024 * 1024
+/**
+ * Größere Dateien nur mit Namen und Größe. Mehr als das geht beim Senden
+ * ohnehin nicht durch: /api/send-mail nimmt zusammen 3 MB an.
+ */
+const MAX_INLINE_ATTACHMENT_BYTES = 3 * 1024 * 1024
 
 function splitRecipients(raw: string): SentAddress[] {
   return raw

@@ -133,8 +133,8 @@ export function omittedReason(attachment: EmailAttachment): string | null {
     case 'too_large_for_db':
     case 'too_large':
       return (
-        `Zu groß für die Datenbank${size > 0 ? ` (${formatBytes(size)})` : ''} — ` +
-        'die Datei liegt weiterhin im Postfach.'
+        `Zu groß zum Speichern${size > 0 ? ` (${formatBytes(size)})` : ''} — ` +
+        'die Datei liegt im Postfach und lässt sich dort öffnen.'
       )
     case 'budget_exceeded':
       // Sollte seit dem Abbruch-vor-der-Nachricht im Proxy nicht mehr neu

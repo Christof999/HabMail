@@ -40,13 +40,18 @@ function splitAttachments(attachments) {
   return { slim, data };
 }
 
-/** Den Inhalt ablegen. Zweimal dasselbe zu schreiben ist harmlos. */
+/**
+ * Den Inhalt ablegen. Zweimal dasselbe zu schreiben ist harmlos.
+ *
+ * Jede Datei in einem eigenen Schreibzugriff: zusammen können die Anhänge
+ * einer Mail größer sein, als die Datenbank in einem Stück annimmt.
+ */
 async function writeAttachmentData(ownerUid, branch, key, data) {
   if (Object.keys(data).length === 0) return;
-  await admin
-    .database()
-    .ref(`${userAttachmentDataPath(ownerUid, branch)}/${key}`)
-    .update(data);
+  const ref = admin.database().ref(`${userAttachmentDataPath(ownerUid, branch)}/${key}`);
+  for (const [dataKey, dataBase64] of Object.entries(data)) {
+    await ref.update({ [dataKey]: dataBase64 });
+  }
 }
 
 /**

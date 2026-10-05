@@ -18,6 +18,7 @@ const {
   supportsSentFolder,
 } = require("./emailproxy");
 const { storeMessage, storeSentMessage } = require("./store");
+const { fillLargeAttachments } = require("./largeAttachments");
 const { notifyNewMails } = require("./push");
 const { USER_DIRECTORY_PATH, userPollStatusPath } = require("./paths");
 
@@ -69,6 +70,9 @@ async function pollMailbox(mailbox) {
     }
     return summary;
   }
+
+  // Vor der KI: was sie lesen kann, soll sie auch bei einer großen Datei sehen.
+  await fillLargeAttachments(mailbox.id, messages);
 
   const analyses = await mapWithConcurrency(messages, ANALYSIS_CONCURRENCY, (message) =>
     categorizeMessage(message),
@@ -144,6 +148,7 @@ async function pollSentFolder(mailbox) {
   );
   summary.fetched = messages.length;
   summary.hasMore = hasMore;
+  await fillLargeAttachments(mailbox.id, messages, "sent");
 
   for (const message of messages) {
     try {

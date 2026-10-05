@@ -1556,10 +1556,10 @@ h3.attachment-list-title {
   gap: 0.35rem;
 }
 
-/* Warum ein einzelner Anhang fehlt — steht statt der Knöpfe da. */
+/* Warum ein einzelner Anhang fehlt — steht statt der Knöpfe da. Kein Rot:
+   dass eine Datei nur im Postfach liegt, ist eine Auskunft und kein Fehler. */
 .attachment-missing {
   flex: 1 1 100%;
-  color: var(--danger);
   line-height: 1.4;
 }
 
@@ -2258,6 +2258,13 @@ code {
     align-items: stretch;
     align-content: flex-start;
     gap: 0.5rem;
+  }
+
+  /* Untereinander ist die Grundbreite von oben eine Grundhöhe — die Karte
+     bekäme zehn Zeilen Luft unter dem Dateinamen. */
+  .attachment-meta,
+  .attachment-missing {
+    flex: 0 0 auto;
   }
 
   .attachment-actions {

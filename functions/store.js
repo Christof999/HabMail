@@ -15,18 +15,7 @@ const { updateIndexEntry } = require("./invoices");
 const { forwardInvoice } = require("./rechnungsprogramm");
 const { splitAttachments, writeAttachmentData } = require("./attachmentData");
 
-/**
- * Anhänge über dieser Grenze werden nur mit Namen und Größe gespeichert.
- * Der Inhalt liegt zwar nicht mehr in der Mail, aber weiterhin in der
- * Realtime Database — und die ist kein Dateispeicher. Für ein echtes
- * Belegarchiv gehören die Dateien später in Firebase Storage.
- */
-const DEFAULT_MAX_INLINE_ATTACHMENT_BYTES = 1024 * 1024;
-
-function maxInlineAttachmentBytes() {
-  const raw = Number.parseInt(process.env.MAX_INLINE_ATTACHMENT_BYTES || "", 10);
-  return Number.isFinite(raw) && raw >= 0 ? raw : DEFAULT_MAX_INLINE_ATTACHMENT_BYTES;
-}
+const { maxInlineAttachmentBytes } = require("./attachmentLimits");
 
 /** Realtime-Database-Schlüssel dürfen . # $ [ ] / nicht enthalten. */
 function safeKeySegment(value) {
