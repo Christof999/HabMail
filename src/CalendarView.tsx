@@ -75,7 +75,10 @@ function formFrom(draft: CalendarDraft, fallbackDay: Date): FormState {
 }
 
 /** Aus dem Formular der Termin — oder der Grund, warum es noch keiner ist. */
-function eventFrom(form: FormState, emailId?: string): CalendarEventInput | string {
+function eventFrom(
+  form: FormState,
+  kept?: { emailId?: string; icalUid?: string },
+): CalendarEventInput | string {
   if (form.title.trim() === '') return 'Der Termin braucht einen Titel.'
   if (form.startDate === '' || form.endDate === '') return 'Datum fehlt.'
 
@@ -94,7 +97,8 @@ function eventFrom(form: FormState, emailId?: string): CalendarEventInput | stri
     ...(form.location.trim() ? { location: form.location } : {}),
     ...(form.notes.trim() ? { notes: form.notes } : {}),
     ...(form.reminder === '' ? {} : { reminderMinutes: Number(form.reminder) }),
-    ...(emailId ? { emailId } : {}),
+    ...(kept?.emailId ? { emailId: kept.emailId } : {}),
+    ...(kept?.icalUid ? { icalUid: kept.icalUid } : {}),
   }
 }
 
@@ -115,7 +119,10 @@ function EventDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const parsed = eventFrom(form, editing.draft.emailId)
+  const parsed = eventFrom(form, {
+    emailId: editing.draft.emailId,
+    icalUid: editing.draft.icalUid,
+  })
   // Schon beim Tippen zeigen, was im Weg steht — nicht erst nach dem Speichern.
   const conflicts =
     typeof parsed === 'string' || parsed.allDay
@@ -454,10 +461,13 @@ function SubscribeDialog({ uid, onClose }: { uid: string; onClose: () => void })
 export default function CalendarView({
   uid,
   draft,
+  eventId = null,
   onDraftHandled,
 }: {
   uid: string
   draft?: CalendarDraft | null
+  /** Gesetzt, wenn der Vorschlag einen bestehenden Termin ändert statt einen neuen anzulegen. */
+  eventId?: string | null
   onDraftHandled?: () => void
 }) {
   const [events, setEvents] = useState<CalendarEvent[]>([])
@@ -500,7 +510,12 @@ export default function CalendarView({
   const [takenDraft, setTakenDraft] = useState<CalendarDraft | null>(null)
   if (draft && draft !== takenDraft) {
     setTakenDraft(draft)
-    setEditing({ id: null, draft })
+    setEditing({ id: eventId, draft })
+    if (typeof draft.start === 'number') {
+      const day = startOfDay(new Date(draft.start))
+      setSelected(day)
+      setMonth(new Date(day.getFullYear(), day.getMonth(), 1))
+    }
   }
   useEffect(() => {
     if (draft) onDraftHandled?.()

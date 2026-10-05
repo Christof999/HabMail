@@ -14,6 +14,7 @@ const { userEmailsPath, userSentEmailsPath } = require("./paths");
 const { updateIndexEntry } = require("./invoices");
 const { forwardInvoice } = require("./rechnungsprogramm");
 const { splitAttachments, writeAttachmentData } = require("./attachmentData");
+const { invitationFromMessage, isCalendarAttachment } = require("./icalParse");
 
 const { maxInlineAttachmentBytes } = require("./attachmentLimits");
 
@@ -42,7 +43,12 @@ function toAttachments(message) {
   return list.map((attachment) => {
     const size = typeof attachment.size === "number" ? attachment.size : 0;
     const base = {
-      filename: String(attachment.filename ?? "anhang"),
+      // Eine Einladung im Mailtext hat keinen Dateinamen — „anhang" verriete
+      // nicht, was das ist, und ohne Endung öffnet es kein Kalenderprogramm.
+      filename:
+        attachment.filename === "anhang" && isCalendarAttachment(attachment)
+          ? "einladung.ics"
+          : String(attachment.filename ?? "anhang"),
       mimeType: String(attachment.contentType ?? "application/octet-stream"),
       size,
     };
@@ -111,6 +117,13 @@ function buildRecord(mailboxId, message, analysis) {
   }
   if (period !== undefined) record.period = period;
   if (analysis.invoice !== undefined) record.invoice = analysis.invoice;
+  /*
+   * Ein Termin, den die Oberfläche an der Mail zum Eintragen anbietet. Eine
+   * echte Einladung geht vor dem, was die KI aus dem Text liest: sie ist die
+   * Angabe des Absenders und nicht eine Deutung.
+   */
+  const appointment = invitationFromMessage(message) ?? analysis.appointment;
+  if (appointment !== undefined && appointment !== null) record.appointment = appointment;
 
   return record;
 }

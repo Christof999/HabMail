@@ -1,5 +1,5 @@
 import { normalizeCategory, periodFromDate } from './categories'
-import type { EmailAttachment, EmailRow, InvoiceDetails } from './types'
+import type { EmailAttachment, EmailRow, InvoiceDetails, MailAppointment } from './types'
 
 function pickStr(o: Record<string, unknown>, keys: string[]): string {
   for (const k of keys) {
@@ -264,6 +264,7 @@ export function normalizeEmailEntry(id: string, raw: unknown, attachmentRoot = '
   const mailboxId = pickStr(o, ['mailboxId', 'postfach', 'mailbox'])
   const messageId = pickStr(o, ['messageId', 'message_id'])
   const invoice = parseInvoice(o.invoice ?? o.rechnung)
+  const appointment = parseAppointment(o.appointment ?? o.termin)
 
   // Kategorie kommt aus alten Datensätzen als Freitext; categoryId ist die
   // Fassung, nach der gefiltert und archiviert wird.
@@ -299,6 +300,34 @@ export function normalizeEmailEntry(id: string, raw: unknown, attachmentRoot = '
     messageId: messageId || undefined,
     period,
     invoice,
+    ...(appointment === undefined ? {} : { appointment }),
+  }
+}
+
+/** Termin aus einer Mail — nur, wenn Zeiten und Herkunft tragen. */
+function parseAppointment(value: unknown): MailAppointment | undefined {
+  if (value === null || typeof value !== 'object') return undefined
+  const o = value as Record<string, unknown>
+  const title = typeof o.title === 'string' ? o.title.trim() : ''
+  if (title === '') return undefined
+  if (typeof o.start !== 'number' || typeof o.end !== 'number' || !(o.end > o.start)) return undefined
+  const source = o.source === 'einladung' || o.source === 'ki' ? o.source : undefined
+  if (source === undefined) return undefined
+
+  const location = typeof o.location === 'string' ? o.location.trim() : ''
+  const organizer = typeof o.organizer === 'string' ? o.organizer.trim() : ''
+  const uid = typeof o.uid === 'string' ? o.uid.trim() : ''
+  return {
+    title,
+    start: o.start,
+    end: o.end,
+    allDay: o.allDay === true,
+    ...(location === '' ? {} : { location }),
+    ...(organizer === '' ? {} : { organizer }),
+    ...(uid === '' ? {} : { uid }),
+    ...(o.cancelled === true ? { cancelled: true } : {}),
+    ...(o.recurring === true ? { recurring: true } : {}),
+    source,
   }
 }
 

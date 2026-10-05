@@ -113,6 +113,7 @@
               "updatedAt": { ".validate": "newData.isNumber()" },
               "source": { ".validate": "newData.isString() && newData.val().length <= 20" },
               "emailId": { ".validate": "newData.isString() && newData.val().length <= 80" },
+              "icalUid": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 300" },
               "$other": { ".validate": false }
             }
           }

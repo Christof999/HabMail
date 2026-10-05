@@ -15,7 +15,14 @@ const admin = require("firebase-admin");
 const { onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 
-const { BERLIN, berlinDate, berlinLabel, berlinMidnight, berlinTime } = require("./berlinTime");
+const {
+  BERLIN,
+  berlinDate,
+  berlinLabel,
+  berlinMidnight,
+  berlinTime,
+  parseWhen,
+} = require("./berlinTime");
 const { buildCalendar } = require("./ical");
 const {
   CALENDAR_REMINDERS_PATH,
@@ -41,31 +48,6 @@ function midnightAfter(ms) {
   // Über den Mittag zum nächsten Tag: ein Tag hat bei der Zeitumstellung
   // 23 oder 25 Stunden, plus 24 landete dann daneben.
   return berlinMidnight(berlinDate(berlinTime(berlinDate(ms), 12) + DAY));
-}
-
-/**
- * Eine Zeitangabe von außen lesen.
- *
- *   "2026-10-06"              der ganze Tag
- *   "2026-10-06T14:00"        Berliner Zeit
- *   "2026-10-06T14:00+02:00"  mit Zone, wie angegeben
- *
- * @returns {{ ms: number, dateOnly: boolean } | null}
- */
-function parseWhen(value) {
-  if (typeof value === "number" && Number.isFinite(value)) return { ms: value, dateOnly: false };
-  if (typeof value !== "string") return null;
-  const text = value.trim();
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return { ms: berlinMidnight(text), dateOnly: true };
-
-  const local = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})(?::\d{2})?$/.exec(text);
-  if (local !== null) {
-    return { ms: berlinTime(local[1], Number(local[2]), Number(local[3])), dateOnly: false };
-  }
-
-  const ms = Date.parse(text);
-  return Number.isNaN(ms) ? null : { ms, dateOnly: false };
 }
 
 /* ---------------------------------------------------------------- Termine */
@@ -132,6 +114,9 @@ function normalizeEvent(input, base = null) {
 
   if (base?.emailId) event.emailId = base.emailId;
   if (typeof input.emailId === "string" && input.emailId !== "") event.emailId = input.emailId.slice(0, 80);
+  // Die Einladungs-UID bleibt beim Ändern erhalten, sonst träfe die nächste
+  // Mail zur selben Einladung den Termin nicht mehr.
+  if (typeof base?.icalUid === "string" && base.icalUid !== "") event.icalUid = base.icalUid;
 
   return event;
 }

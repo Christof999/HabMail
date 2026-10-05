@@ -47,6 +47,16 @@ test("Unsinn wird abgelehnt statt gespeichert", () => {
   );
 });
 
+test("Ändern behält die Einladung, aus der der Termin stammt", () => {
+  const base = normalizeEvent({ title: "Abnahme", start: "2026-10-06T14:00" });
+  base.emailId = "mid_abc";
+  base.icalUid = "bau-mueller-1";
+  const moved = normalizeEvent({ start: "2026-10-07T09:00" }, base);
+  assert.equal(moved.emailId, "mid_abc");
+  assert.equal(moved.icalUid, "bau-mueller-1");
+  assert.equal(moved.end - moved.start, 60 * 60_000);
+});
+
 test("Ändern verschiebt, ohne die Dauer zu verlieren", () => {
   const base = normalizeEvent({ title: "Abnahme", start: "2026-10-06T14:00", end: "2026-10-06T16:30", reminderMinutes: 30 });
   const moved = normalizeEvent({ start: "2026-10-07T09:00" }, base);

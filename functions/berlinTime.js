@@ -63,4 +63,37 @@ function berlinLabel(ms, allDay = false) {
   }).format(new Date(ms));
 }
 
-module.exports = { BERLIN, berlinDate, berlinLabel, berlinMidnight, berlinOffsetMinutes, berlinTime };
+/**
+ * Eine Zeitangabe von außen lesen.
+ *
+ *   "2026-10-06"              der ganze Tag
+ *   "2026-10-06T14:00"        Berliner Zeit
+ *   "2026-10-06T14:00+02:00"  mit Zone, wie angegeben
+ *
+ * @returns {{ ms: number, dateOnly: boolean } | null}
+ */
+function parseWhen(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return { ms: value, dateOnly: false };
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return { ms: berlinMidnight(text), dateOnly: true };
+
+  const local = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})(?::\d{2})?$/.exec(text);
+  if (local !== null) {
+    return { ms: berlinTime(local[1], Number(local[2]), Number(local[3])), dateOnly: false };
+  }
+
+  const ms = Date.parse(text);
+  return Number.isNaN(ms) ? null : { ms, dateOnly: false };
+}
+
+module.exports = {
+  BERLIN,
+  berlinDate,
+  berlinLabel,
+  berlinMidnight,
+  berlinOffsetMinutes,
+  berlinTime,
+  parseWhen,
+};

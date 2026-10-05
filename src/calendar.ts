@@ -28,6 +28,8 @@ export type CalendarEvent = {
   reminderMinutes?: number
   /** Die Mail, aus der der Termin stammt. */
   emailId?: string
+  /** UID einer Einladung. Eine spätere Mail zur selben Einladung trifft diesen Termin. */
+  icalUid?: string
 }
 
 export type CalendarEventInput = Omit<CalendarEvent, 'id'>
@@ -51,6 +53,7 @@ export function parseEventsTree(data: unknown): CalendarEvent[] {
       ...(typeof o.notes === 'string' && o.notes !== '' ? { notes: o.notes } : {}),
       ...(typeof o.reminderMinutes === 'number' ? { reminderMinutes: o.reminderMinutes } : {}),
       ...(typeof o.emailId === 'string' ? { emailId: o.emailId } : {}),
+      ...(typeof o.icalUid === 'string' && o.icalUid !== '' ? { icalUid: o.icalUid } : {}),
     })
   }
   return events.sort((a, b) => a.start - b.start)
@@ -116,6 +119,7 @@ export async function saveEvent(
   if (input.notes?.trim()) record.notes = input.notes.trim().slice(0, 4000)
   if (input.reminderMinutes !== undefined) record.reminderMinutes = input.reminderMinutes
   if (input.emailId) record.emailId = input.emailId
+  if (input.icalUid) record.icalUid = input.icalUid.slice(0, 300)
 
   await update(ref(db), writes(uid, key, record as unknown as CalendarEventInput))
   return key
@@ -194,6 +198,34 @@ export function eventsOnDay(events: CalendarEvent[], day: Date): CalendarEvent[]
   const from = startOfDay(day).getTime()
   const to = addDays(day, 1).getTime()
   return events.filter((e) => e.start < to && e.end > from)
+}
+
+/**
+ * Was eine Mail anbietet, gemessen am Kalender.
+ *
+ * `existing` ist der Termin, der schon zu dieser Mail oder zu derselben
+ * Einladung gehört. `changed` heißt: die Mail nennt andere Zeiten als der
+ * Kalender. `overlaps` sind andere Termine, die im Weg stehen — ganztägige
+ * zählen dabei nicht, wie auch sonst im Kalender.
+ */
+export function matchAppointment(
+  events: CalendarEvent[],
+  emailId: string,
+  appointment: { start: number; end: number; allDay: boolean; uid?: string },
+): { existing: CalendarEvent | null; changed: boolean; overlaps: CalendarEvent[] } {
+  const byMail = events.find((event) => event.emailId === emailId)
+  const byUid =
+    appointment.uid === undefined ? undefined : events.find((event) => event.icalUid === appointment.uid)
+  const existing = byMail ?? byUid ?? null
+  const changed =
+    existing !== null &&
+    (existing.start !== appointment.start ||
+      existing.end !== appointment.end ||
+      existing.allDay !== appointment.allDay)
+  const overlaps = appointment.allDay
+    ? []
+    : overlapping(events, appointment.start, appointment.end, existing?.id)
+  return { existing, changed, overlaps }
 }
 
 /** Was sich mit diesem Zeitraum überschneidet. Ganztägiges zählt nicht als Kollision. */

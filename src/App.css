@@ -3142,6 +3142,54 @@ html[data-theme='dark'] .pill-paid {
   font-size: 0.75rem;
 }
 
+.mail-appointments {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.mail-appointment {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--input-bg);
+}
+
+.mail-appointment--cancelled {
+  border-left-color: var(--muted);
+}
+
+.mail-appointment-kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.mail-appointment-title {
+  margin: 0.1rem 0 0;
+  font-weight: 600;
+}
+
+.mail-appointment-when {
+  margin: 0.15rem 0 0;
+}
+
+.mail-appointment-status {
+  margin: 0.35rem 0 0;
+  line-height: 1.4;
+}
+
+.mail-appointment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+}
+
 /* --- Signaturbild --- */
 
 .signature-image {

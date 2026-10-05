@@ -70,6 +70,8 @@ import NotificationSettings from './NotificationSettings'
 import { showForegroundNotifications } from './push'
 import AccountingView from './AccountingView'
 import CalendarView, { type CalendarDraft } from './CalendarView'
+import MailAppointments from './MailAppointment'
+import { watchEvents, type CalendarEvent } from './calendar'
 import UserSettings from './UserSettings'
 import { whoAmI } from './usersApi'
 import { userAttachmentDataPath, userEmailsPath, userFoldersPath } from './paths'
@@ -233,10 +235,21 @@ export default function App() {
   const [showNotifications, setShowNotifications] = useState(false)
   /** Posteingang oder Buchhaltung — zwei Sichten auf dieselben Daten. */
   const [view, setView] = useState<'inbox' | 'accounting' | 'calendar'>('inbox')
-  // Ein Terminvorschlag von außen (Agent, später eine Einladung aus einer
-  // Mail): der Kalender öffnet damit sein Formular.
+  // Ein Terminvorschlag von außen (Agent oder Einladung aus einer Mail): der
+  // Kalender öffnet damit sein Formular. eventId ist gesetzt, wenn ein
+  // bestehender Termin angepasst wird.
   const [calendarDraft, setCalendarDraft] = useState<CalendarDraft | null>(null)
-  const clearCalendarDraft = useCallback(() => setCalendarDraft(null), [])
+  const [calendarEditId, setCalendarEditId] = useState<string | null>(null)
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const clearCalendarDraft = useCallback(() => {
+    setCalendarDraft(null)
+    setCalendarEditId(null)
+  }, [])
+  const showCalendar = useCallback((draft: CalendarDraft, eventId: string | null = null) => {
+    setCalendarEditId(eventId)
+    setCalendarDraft(draft)
+    setView('calendar')
+  }, [])
   const [isAdmin, setIsAdmin] = useState(false)
   const [isCompactLayout, setIsCompactLayout] = useState(() => {
     if (typeof globalThis.window === 'undefined') return false
@@ -394,6 +407,16 @@ export default function App() {
     return showForegroundNotifications()
   }, [user])
 
+  // Für den Abgleich an der Mail. Der Kalender selbst liest dieselben Termine
+  // noch einmal, sobald die Ansicht offen ist.
+  useEffect(() => {
+    if (user === null) {
+      setCalendarEvents([])
+      return
+    }
+    return watchEvents(user.uid, setCalendarEvents, () => {})
+  }, [user])
+
   useEffect(() => {
     if (!isCompactLayout || !folderDrawerOpen) return
     const onKey = (e: KeyboardEvent) => {
@@ -432,13 +455,10 @@ export default function App() {
       getUser: () => agentStateRef.current.user,
       getRows: () => agentStateRef.current.rows,
       openCompose: (input) => openNewCompose(input),
-      openCalendar: (draft) => {
-        setCalendarDraft(draft)
-        setView('calendar')
-      },
+      openCalendar: (draft) => showCalendar(draft),
     })
     return installAgentApi(api)
-  }, [openNewCompose])
+  }, [openNewCompose, showCalendar])
 
   /** „n“ öffnet eine neue Mail — außerhalb von Eingabefeldern. */
   useEffect(() => {
@@ -1211,7 +1231,12 @@ export default function App() {
       {view === 'calendar' ? (
         // Der Kalender gehört der Person, nicht dem Posteingang — deshalb die
         // eigene Kennung und nicht die des Betriebs.
-        <CalendarView uid={user.uid} draft={calendarDraft} onDraftHandled={clearCalendarDraft} />
+        <CalendarView
+          uid={user.uid}
+          draft={calendarDraft}
+          eventId={calendarEditId}
+          onDraftHandled={clearCalendarDraft}
+        />
       ) : view === 'accounting' ? (
         <AccountingView rows={rows} uid={ownerId} />
       ) : (
@@ -1515,6 +1540,8 @@ export default function App() {
                 onForward={() =>
                   setCompose({ mode: 'forward', row: head })
                 }
+                calendarEvents={calendarEvents}
+                onOpenCalendar={showCalendar}
               />
             </li>
           )
@@ -1932,6 +1959,8 @@ function EmailCard({
   onRequestMove,
   onReply,
   onForward,
+  calendarEvents,
+  onOpenCalendar,
 }: {
   thread: EmailThread
   unread: boolean
@@ -1941,6 +1970,8 @@ function EmailCard({
   onRequestMove: () => void
   onReply: () => void
   onForward: () => void
+  calendarEvents: CalendarEvent[]
+  onOpenCalendar: (draft: CalendarDraft, eventId?: string | null) => void
 }) {
   const [open, setOpen] = useState(false)
   const head = thread.membersDesc[0]
@@ -2082,6 +2113,11 @@ function EmailCard({
             : 'Zusammenfassung nur aus dem Mailtext — kein Anhang war lesbar.'}
         </p>
       ) : null}
+      <MailAppointments
+        rows={thread.membersDesc}
+        events={calendarEvents}
+        onOpen={(eventId, draft) => onOpenCalendar(draft, eventId)}
+      />
       <p className="muted small">
         Zuletzt: {head.receivedAt || '—'}
         {multi ? (

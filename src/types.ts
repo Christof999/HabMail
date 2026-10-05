@@ -76,6 +76,31 @@ export type EmailRecord = {
   period?: string
   /** Nur bei Rechnungen und Mahnungen gefüllt. */
   invoice?: InvoiceDetails
+  /**
+   * Termin, den die Mail anbietet: eine echte Einladung oder ein Vorschlag
+   * der KI. Die Oberfläche trägt ihn auf Wunsch in den Kalender ein.
+   */
+  appointment?: MailAppointment
+}
+
+/**
+ * Ein Termin aus einer Mail. Zeiten in Millisekunden, ganztägig von
+ * Mitternacht bis Mitternacht danach — wie im Kalender.
+ */
+export type MailAppointment = {
+  title: string
+  start: number
+  end: number
+  allDay: boolean
+  location?: string
+  organizer?: string
+  /** UID der Einladung, damit eine Änderung denselben Termin trifft. */
+  uid?: string
+  cancelled?: boolean
+  /** Serie: übernommen ist nur dieser eine Termin. */
+  recurring?: boolean
+  /** `einladung` aus einer Kalenderdatei, `ki` aus dem Mailtext gelesen. */
+  source: 'einladung' | 'ki'
 }
 
 export type EmailRow = { id: string } & EmailRecord
