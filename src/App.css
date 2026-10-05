@@ -1563,6 +1563,69 @@ h3.attachment-list-title {
   line-height: 1.4;
 }
 
+/* Vorschaubild eines Anhangs. Oben angeschnitten statt eingepasst: von einer
+   Rechnung will man den Briefkopf erkennen, nicht die ganze Seite in klein. */
+.attachment-preview {
+  position: relative;
+  flex: 0 0 7.5rem;
+  align-self: stretch;
+  min-height: 7.5rem;
+  padding: 0;
+  overflow: hidden;
+  background: var(--pre-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+button.attachment-preview {
+  cursor: pointer;
+}
+
+.attachment-preview img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+}
+
+.attachment-preview-badge {
+  position: absolute;
+  left: 0.3rem;
+  bottom: 0.3rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.attachment-preview-ask {
+  border-style: dashed;
+}
+
+.attachment-preview-loading {
+  animation: attachment-preview-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes attachment-preview-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attachment-preview-loading {
+    animation: none;
+  }
+}
+
 .attachment-nodata {
   padding: 0.55rem 0.65rem;
   background: var(--pre-bg);
@@ -2265,6 +2328,18 @@ code {
   .attachment-meta,
   .attachment-missing {
     flex: 0 0 auto;
+  }
+
+  /* Auf dem Handy über die ganze Breite — da ist das Bild die Hauptsache. */
+  .attachment-preview {
+    flex: 0 0 auto;
+    width: 100%;
+    height: 12rem;
+  }
+
+  .attachment-preview-ask {
+    height: 3rem;
+    min-height: 0;
   }
 
   .attachment-actions {

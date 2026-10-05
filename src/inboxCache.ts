@@ -5,6 +5,10 @@
  * haben — und so lange stand da eine leere Liste. Mit dem gemerkten Stand ist
  * sofort etwas zu sehen; was die Datenbank kurz darauf liefert, ersetzt ihn.
  *
+ * Daneben liegen die Vorschaubilder der Anhänge: einmal errechnet, muss dafür
+ * weder die Datei noch einmal geladen noch das PDF noch einmal gezeichnet
+ * werden.
+ *
  * IndexedDB statt localStorage: ein Posteingang mit tausend Mails ist als Text
  * ein paar Megabyte groß, und localStorage hört bei fünf auf.
  *
@@ -14,14 +18,18 @@
 import type { EmailRow } from './types'
 
 const DB_NAME = 'habmail'
-const STORE = 'inbox'
+const INBOX = 'inbox'
+const PREVIEWS = 'previews'
 const OWNER_KEY_PREFIX = 'habmail.owner.'
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1)
+    const request = indexedDB.open(DB_NAME, 2)
     request.onupgradeneeded = () => {
-      request.result.createObjectStore(STORE)
+      const db = request.result
+      for (const store of [INBOX, PREVIEWS]) {
+        if (!db.objectStoreNames.contains(store)) db.createObjectStore(store)
+      }
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
@@ -36,15 +44,33 @@ function settled(transaction: IDBTransaction): Promise<void> {
   })
 }
 
-export async function loadCachedInbox(ownerId: string): Promise<EmailRow[] | null> {
+async function read(store: string, key: string): Promise<unknown> {
+  const db = await openDb()
   try {
-    const db = await openDb()
-    const request = db.transaction(STORE, 'readonly').objectStore(STORE).get(ownerId)
-    const value = await new Promise<unknown>((resolve, reject) => {
+    const request = db.transaction(store, 'readonly').objectStore(store).get(key)
+    return await new Promise<unknown>((resolve, reject) => {
       request.onsuccess = () => resolve(request.result)
       request.onerror = () => reject(request.error)
     })
+  } finally {
     db.close()
+  }
+}
+
+async function write(store: string, key: string, value: unknown): Promise<void> {
+  const db = await openDb()
+  try {
+    const transaction = db.transaction(store, 'readwrite')
+    transaction.objectStore(store).put(value, key)
+    await settled(transaction)
+  } finally {
+    db.close()
+  }
+}
+
+export async function loadCachedInbox(ownerId: string): Promise<EmailRow[] | null> {
+  try {
+    const value = await read(INBOX, ownerId)
     return Array.isArray(value) ? (value as EmailRow[]) : null
   } catch {
     return null
@@ -60,13 +86,27 @@ export async function saveCachedInbox(ownerId: string, rows: EmailRow[]): Promis
         ? { ...row, attachments: row.attachments.map((a) => ({ ...a, dataBase64: '' })) }
         : row,
     )
-    const db = await openDb()
-    const transaction = db.transaction(STORE, 'readwrite')
-    transaction.objectStore(STORE).put(slim, ownerId)
-    await settled(transaction)
-    db.close()
+    await write(INBOX, ownerId, slim)
   } catch {
     /* ohne gemerkten Stand lädt die App eben wie bisher */
+  }
+}
+
+/** Ein Vorschaubild als data:-Adresse, oder `null`, wenn keines gemerkt ist. */
+export async function loadCachedPreview(key: string): Promise<string | null> {
+  try {
+    const value = await read(PREVIEWS, key)
+    return typeof value === 'string' ? value : null
+  } catch {
+    return null
+  }
+}
+
+export async function saveCachedPreview(key: string, dataUrl: string): Promise<void> {
+  try {
+    await write(PREVIEWS, key, dataUrl)
+  } catch {
+    /* dann wird es beim nächsten Mal eben neu errechnet */
   }
 }
 
@@ -78,10 +118,14 @@ export async function clearCachedInbox(): Promise<void> {
       if (key?.startsWith(OWNER_KEY_PREFIX)) localStorage.removeItem(key)
     }
     const db = await openDb()
-    const transaction = db.transaction(STORE, 'readwrite')
-    transaction.objectStore(STORE).clear()
-    await settled(transaction)
-    db.close()
+    try {
+      const transaction = db.transaction([INBOX, PREVIEWS], 'readwrite')
+      transaction.objectStore(INBOX).clear()
+      transaction.objectStore(PREVIEWS).clear()
+      await settled(transaction)
+    } finally {
+      db.close()
+    }
   } catch {
     /* nichts zu räumen */
   }
