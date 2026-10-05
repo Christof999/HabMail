@@ -92,6 +92,31 @@
             }
           }
         },
+        "calendar": {
+          "feedToken": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "!newData.exists() || (newData.isString() && newData.val().length >= 20 && newData.val().length <= 100)"
+          },
+          "events": {
+            ".indexOn": ["start"],
+            "$eventId": {
+              ".write": "auth != null && auth.uid === $uid",
+              ".validate": "!newData.exists() || (newData.hasChildren(['title', 'start', 'end']) && newData.child('end').val() > newData.child('start').val())",
+              "title": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 200" },
+              "start": { ".validate": "newData.isNumber()" },
+              "end": { ".validate": "newData.isNumber()" },
+              "allDay": { ".validate": "newData.isBoolean()" },
+              "location": { ".validate": "newData.isString() && newData.val().length <= 300" },
+              "notes": { ".validate": "newData.isString() && newData.val().length <= 4000" },
+              "reminderMinutes": { ".validate": "newData.isNumber() && newData.val() >= -1440 && newData.val() <= 40320" },
+              "createdAt": { ".validate": "newData.isNumber()" },
+              "updatedAt": { ".validate": "newData.isNumber()" },
+              "source": { ".validate": "newData.isString() && newData.val().length <= 20" },
+              "emailId": { ".validate": "newData.isString() && newData.val().length <= 80" },
+              "$other": { ".validate": false }
+            }
+          }
+        },
         "attachmentData": {
           "emails": {
             "$emailId": {
@@ -126,6 +151,17 @@
             }
           }
         }
+      }
+    },
+    "calendarReminders": {
+      ".indexOn": ["at"],
+      "$key": {
+        ".write": "auth != null && $key.beginsWith(auth.uid + '_')",
+        ".validate": "!newData.exists() || (newData.hasChildren(['uid', 'eventId', 'at']) && newData.child('uid').val() === auth.uid)",
+        "uid": { ".validate": "newData.isString()" },
+        "eventId": { ".validate": "newData.isString() && newData.val().length <= 80" },
+        "at": { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
       }
     },
     "tenants": {

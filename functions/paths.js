@@ -91,6 +91,29 @@ function userPushWebPath(uid) {
   return `${userPushPath(uid)}/web`;
 }
 
+/**
+ * Der Kalender einer Person. Anders als der Posteingang hängt er immer an der
+ * Person selbst, auch wenn sie sich mit anderen einen Posteingang teilt.
+ */
+function userCalendarPath(uid) {
+  return `users/${uid}/calendar`;
+}
+
+function userCalendarEventsPath(uid) {
+  return `${userCalendarPath(uid)}/events`;
+}
+
+/** Das Zufallswort im Abo-Link. Wer es kennt, kann den Kalender lesen. */
+function userCalendarFeedTokenPath(uid) {
+  return `${userCalendarPath(uid)}/feedToken`;
+}
+
+/**
+ * Fällige Erinnerungen, über alle Personen hinweg nach Zeit sortiert — damit
+ * der Minutenlauf eine einzige kurze Abfrage braucht statt jeden Kalender.
+ */
+const CALENDAR_REMINDERS_PATH = "calendarReminders";
+
 /** Zuordnung Rückkehr-Kennung → Benutzer. Nur serverseitig lesbar. */
 const BANK_REQUISITIONS_PATH = "bankRequisitions";
 
@@ -112,6 +135,10 @@ module.exports = {
   userPushTokensPath,
   userPushSettingsPath,
   userPushWebPath,
+  userCalendarPath,
+  userCalendarEventsPath,
+  userCalendarFeedTokenPath,
+  CALENDAR_REMINDERS_PATH,
   BANK_REQUISITIONS_PATH,
   USER_DIRECTORY_PATH,
   ADMINS_PATH,

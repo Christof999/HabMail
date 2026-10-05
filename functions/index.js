@@ -46,6 +46,12 @@ exports.whoAmI = users.whoAmI;
  */
 exports.sendTestNotification = require("./notify").sendTestNotification;
 
+// Kalender: Erinnerungen im Minutentakt, der Abo-Link und der Zugang für Agenten.
+const calendar = require("./calendar");
+exports.calendarReminders = calendar.calendarReminders;
+exports.calendarFeed = calendar.calendarFeed;
+exports.calendarApi = calendar.calendarApi;
+
 /** Rechnungsdaten korrigieren — serverseitig, damit Mail und Index gleich bleiben. */
 exports.updateInvoice = require("./invoices").updateInvoice;
 

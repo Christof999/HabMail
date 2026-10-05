@@ -3362,3 +3362,358 @@ html[data-theme='dark'] .pill-paid {
   text-underline-offset: 2px;
   cursor: pointer;
 }
+
+/* --- Kalender --- */
+
+.calendar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  max-width: 62rem;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.calendar-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  padding: 0.75rem 1rem;
+}
+
+.calendar-nav,
+.calendar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.calendar-month {
+  margin: 0;
+  min-width: 10.5rem;
+  text-align: center;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.calendar-grid {
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.calendar-weekdays,
+.calendar-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.calendar-weekdays span {
+  padding: 0.25rem 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Ein Tag ist ein Knopf, soll aber nicht wie einer aussehen: die Grundstile
+   für button werden hier zurückgenommen. */
+button.calendar-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+  min-height: 5.6rem;
+  margin: 0;
+  padding: 0.3rem 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--pre-bg);
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+button.calendar-day:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--pre-bg);
+}
+
+button.calendar-day--other {
+  background: transparent;
+  color: var(--muted);
+}
+
+button.calendar-day--selected,
+button.calendar-day--selected:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.calendar-day-number {
+  align-self: flex-start;
+  min-width: 1.5rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.calendar-day--today .calendar-day-number {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.calendar-day-events {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.calendar-chip {
+  display: block;
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 0.7rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-chip--allday {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.calendar-more {
+  font-size: 0.68rem;
+  color: var(--muted);
+  padding-left: 0.3rem;
+}
+
+.calendar-dot {
+  display: none;
+}
+
+.calendar-agenda {
+  padding: 0.85rem 1rem;
+}
+
+.calendar-agenda h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.calendar-agenda-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.calendar-events {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+button.calendar-event {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--input-bg);
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.calendar-event-when {
+  flex: 0 0 6.5rem;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.calendar-event-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.calendar-upcoming-day + .calendar-upcoming-day {
+  margin-top: 0.85rem;
+}
+
+button.calendar-upcoming-date {
+  margin: 0.6rem 0 0;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.calendar-upcoming-date:hover:not(:disabled) {
+  background: none;
+  color: var(--accent);
+}
+
+.modal.card.calendar-dialog {
+  max-width: 30rem;
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+
+.calendar-dialog textarea {
+  font: inherit;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  resize: vertical;
+}
+
+.calendar-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.calendar-when {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 0.75rem;
+}
+
+.calendar-when-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.calendar-when-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.calendar-conflict {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+  line-height: 1.4;
+}
+
+/* Löschen links, weg von „Speichern" — ein Fehlgriff soll nicht passieren. */
+.modal-actions .calendar-delete {
+  margin-right: auto;
+  color: var(--danger);
+}
+
+a.calendar-subscribe-go {
+  display: block;
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+}
+
+.calendar-subscribe-actions {
+  justify-content: flex-start;
+  margin-top: 0.6rem;
+}
+
+@media (max-width: 767px) {
+  .calendar-head {
+    padding: 0.6rem 0.7rem;
+  }
+
+  .calendar-nav {
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+
+  .calendar-actions {
+    flex: 1 1 100%;
+  }
+
+  .calendar-actions button {
+    flex: 1;
+    min-height: 2.5rem;
+  }
+
+  .calendar-grid {
+    padding: 0.35rem;
+  }
+
+  /* Im Tagesfeld ist auf dem Handy kein Platz für Text: Zahl und ein Punkt,
+     die Termine stehen darunter in der Liste. */
+  button.calendar-day {
+    min-height: 2.9rem;
+    align-items: center;
+    padding: 0.25rem 0;
+  }
+
+  .calendar-day-number {
+    align-self: center;
+  }
+
+  .calendar-day-events {
+    display: none;
+  }
+
+  .calendar-dot {
+    display: block;
+    width: 0.35rem;
+    height: 0.35rem;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .calendar-when {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-event-when {
+    flex-basis: 5.6rem;
+  }
+}

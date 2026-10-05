@@ -135,3 +135,19 @@ export const USER_DIRECTORY_PATH = 'userDirectory'
 
 /** Wer HabMail verwalten darf. Geschrieben wird das nur serverseitig. */
 export const ADMINS_PATH = 'admins'
+
+/**
+ * Der Kalender einer Person. Anders als der Posteingang hängt er immer an der
+ * Person selbst — auch wenn sie sich mit dem Büro einen Posteingang teilt.
+ */
+export function userCalendarEventsPath(uid: string): string {
+  return `users/${uid}/calendar/events`
+}
+
+/** Das Zufallswort im Abo-Link. Wer es kennt, kann den Kalender lesen. */
+export function userCalendarFeedTokenPath(uid: string): string {
+  return `users/${uid}/calendar/feedToken`
+}
+
+/** Fällige Erinnerungen über alle Personen hinweg — siehe `functions/paths.js`. */
+export const CALENDAR_REMINDERS_PATH = 'calendarReminders'

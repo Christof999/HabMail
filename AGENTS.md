@@ -51,6 +51,19 @@ window.habmail.listMails({ limit: 10, query: 'rechnung' })
 window.habmail.getMail('<id>')
 await window.habmail.listMailboxes()
 await window.habmail.replyTo('<id>', 'Danke, passt so.')
+
+// Kalender der angemeldeten Person:
+await window.habmail.listEvents({ from: '2026-10-05', to: '2026-10-12' })
+await window.habmail.createEvent({
+  title: 'Baustelle Müller',
+  start: '2026-10-06T14:00',   // ohne Zone: Zeit des Geräts; nur ein Datum = ganztägig
+  end: '2026-10-06T15:30',
+  location: 'Hauptstr. 3',
+  reminderMinutes: 30,          // Push aufs Telefon
+  dryRun: true,                 // nennt nur, womit es sich überschneidet
+})
+window.habmail.openEvent({ title: '…', start: '…' })  // Formular öffnen, Mensch speichert
+await window.habmail.deleteEvent('<id>')
 ```
 
 Ohne `mailboxId` verschickt `sendMail` aus dem ersten Postfach, `replyTo` aus
@@ -82,6 +95,20 @@ Beschriftung, die sich ändern kann.
 
 Antworten und Weiterleiten hängen an den Knöpfen „Antworten" und
 „Weiterleiten" der jeweiligen Mail-Karte (`aria-label`).
+
+Der Kalender:
+
+| Element | Anker |
+|---|---|
+| Ansicht öffnen | `[data-testid="view-calendar"]` |
+| Neuer Termin | `[data-testid="calendar-new"]` |
+| Formular | `[data-testid="calendar-event-dialog"]` |
+| Titel, Ort, Notiz | `[data-testid="calendar-event-title"]`, `…-location`, `…-notes` |
+| Beginn, Ende | `[data-testid="calendar-event-start-date"]`, `…-start-time`, `…-end-date`, `…-end-time` |
+| Ganztägig, Erinnerung | `[data-testid="calendar-event-allday"]`, `[data-testid="calendar-event-reminder"]` |
+| Überschneidung | `[data-testid="calendar-event-conflict"]` (`role="status"`) |
+| Speichern, Löschen | `[data-testid="calendar-event-save"]`, `[data-testid="calendar-event-delete"]` |
+| Ein Termin in der Liste | `[data-testid="calendar-event"]` (`data-event-id`) |
 
 ---
 
@@ -176,6 +203,18 @@ Der Endpunkt reicht den Versand an `/api/send-mail` weiter; `allowedTo` und
 alle Fehler gelten unverändert. Eine Signatur hängt HabMail auf diesem Weg
 nicht an, sie gehört in den Text. Was rausging, holt der nächste Abruf aus
 dem Postfach in den Ordner „Gesendet".
+
+Dazu der Kalender der Person, der der Key gehört:
+
+| Werkzeug | Zweck |
+|---|---|
+| `list_events` | Termine in einem Zeitraum, ohne Angabe die nächsten 14 Tage |
+| `find_free_time` | Freie Zeiten an Werktagen — für einen Terminvorschlag an den Kunden |
+| `create_event` | Termin eintragen. Die Antwort nennt Überschneidungen; `dryRun: true` prüft nur |
+| `update_event`, `delete_event` | Ändern und löschen, über die `id` aus `list_events` |
+
+Zeiten ohne Zone sind Berliner Zeit, ein Datum ohne Uhrzeit ist ein ganzer
+Tag. `reminderMinutes` schickt eine Push-Nachricht aufs Telefon.
 
 Anhänge nimmt `send_mail` nur als Base64 im Aufruf. Für Bilder und Dokumente
 von der Platte gibt es deshalb ein Skript, das die Dateien selbst liest und

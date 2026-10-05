@@ -27,6 +27,8 @@ const INSTRUCTIONS = [
   '→ dem Nutzer Empfänger, Betreff und Text zeigen und freigeben lassen → send_mail mit dryRun:false.',
   'Jede Mail einzeln und individuell; kein Serienversand ohne ausdrückliche Freigabe der Empfängerliste.',
   'Eine Signatur hängt HabMail auf diesem Weg nicht an — sie gehört in den Text.',
+  'Dazu der Kalender der Person: list_events, find_free_time für Terminvorschläge, create_event zum Eintragen.',
+  'Zeiten ohne Zone sind Berliner Zeit.',
 ].join(' ')
 
 const MIN_AGENT_KEY_LEN = 24
@@ -171,6 +173,54 @@ async function sendMail(caller: Caller, args: Record<string, unknown>): Promise<
     : data
 }
 
+/**
+ * Der Kalender liegt in der Datenbank, und an die kommt nur Firebase heran —
+ * diese Function hier hat keinen Zugang dazu. Die Anfrage geht deshalb weiter
+ * an `calendarApi` (functions/calendar.js).
+ *
+ * Das Kennwort dafür ist aus dem Schlüssel des Email-Proxys abgeleitet, den
+ * beide Seiten ohnehin kennen: kein weiteres Geheimnis, das an zwei Stellen
+ * hinterlegt werden müsste. Über die Leitung geht nur die Ableitung.
+ */
+async function calendar(caller: Caller, body: Record<string, unknown>): Promise<unknown> {
+  const project =
+    process.env.FIREBASE_PROJECT_ID?.trim() || process.env.VITE_FIREBASE_PROJECT_ID?.trim() || ''
+  const proxyKey = process.env.EMAILPROXY_KEY?.trim() ?? ''
+  if (!project || !proxyKey) {
+    throw new Error('server_misconfigured: FIREBASE_PROJECT_ID und EMAILPROXY_KEY fehlen in Vercel.')
+  }
+  const secret = crypto.createHash('sha256').update(`habmail-calendar-agent:${proxyKey}`).digest('hex')
+
+  const response = await fetch(`https://europe-west1-${project}.cloudfunctions.net/calendarApi`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
+    // Die Person kommt aus dem Agent-Key, nie aus dem Aufruf.
+    body: JSON.stringify({ ...body, uid: caller.key.uid }),
+  })
+  const data = await readJson(response)
+  if (!response.ok) throw new Error(errorText(data, response.status))
+  return data
+}
+
+const WHEN =
+  '"2026-10-06T14:00" (Berliner Zeit), mit Zone, oder nur "2026-10-06" für einen ganzen Tag'
+
+const EVENT_FIELDS = {
+  title: { type: 'string', description: 'Titel des Termins' },
+  start: { type: 'string', description: `Beginn: ${WHEN}` },
+  end: {
+    type: 'string',
+    description: 'Ende. Ohne Angabe eine Stunde bzw. der eine Tag; ganztägig der letzte Tag',
+  },
+  allDay: { type: 'boolean', description: 'Ganztägig. Ergibt sich sonst aus einem Datum ohne Uhrzeit' },
+  location: { type: 'string' },
+  notes: { type: 'string' },
+  reminderMinutes: {
+    type: 'number',
+    description: 'Push-Erinnerung aufs Telefon, so viele Minuten vor dem Beginn',
+  },
+}
+
 type Tool = {
   name: string
   description: string
@@ -240,6 +290,73 @@ const TOOLS: Tool[] = [
       required: ['to', 'subject', 'body'],
     },
     run: sendMail,
+  },
+  {
+    name: 'list_events',
+    description:
+      'Termine im Kalender der Person, der dieser Zugang gehört. Ohne Angabe ab jetzt 14 Tage.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: `Ab wann: ${WHEN}` },
+        to: { type: 'string', description: 'Bis wann' },
+      },
+    },
+    run: (caller, args) => calendar(caller, { action: 'list', from: args.from, to: args.to }),
+  },
+  {
+    name: 'find_free_time',
+    description:
+      'Freie Zeiten an Werktagen — um einem Kunden einen Termin vorzuschlagen. Je Lücke der ' +
+      'frühestmögliche Beginn und bis wann frei ist. Ohne Angabe die nächsten 7 Tage, 8 bis 17 Uhr.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: `Ab wann: ${WHEN}` },
+        to: { type: 'string', description: 'Bis wann' },
+        durationMinutes: { type: 'number', description: 'Wie lang der Termin sein soll. Standard 60' },
+        dayStart: { type: 'integer', description: 'Frühestens ab dieser Stunde. Standard 8' },
+        dayEnd: { type: 'integer', description: 'Spätestens bis zu dieser Stunde. Standard 17' },
+      },
+    },
+    run: (caller, args) => calendar(caller, { ...args, action: 'free' }),
+  },
+  {
+    name: 'create_event',
+    description:
+      'Trägt einen Termin ein. Die Antwort nennt, womit er sich überschneidet — das verhindert ' +
+      'das Eintragen nicht, gehört aber dem Nutzer gesagt. Mit dryRun:true nur prüfen.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...EVENT_FIELDS,
+        dryRun: { type: 'boolean', description: 'true = nichts eintragen, nur Überschneidungen zeigen' },
+      },
+      required: ['title', 'start'],
+    },
+    run: (caller, { dryRun, ...event }) =>
+      calendar(caller, { action: 'create', event, dryRun: dryRun === true }),
+  },
+  {
+    name: 'update_event',
+    description:
+      'Ändert einen Termin. Nur die genannten Felder; wer den Beginn verschiebt, behält die Dauer.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'Kennung aus list_events' }, ...EVENT_FIELDS },
+      required: ['id'],
+    },
+    run: (caller, { id, ...event }) => calendar(caller, { action: 'update', id, event }),
+  },
+  {
+    name: 'delete_event',
+    description: 'Löscht einen Termin. Vorher beim Nutzer nachfragen.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'Kennung aus list_events' } },
+      required: ['id'],
+    },
+    run: (caller, args) => calendar(caller, { action: 'delete', id: args.id }),
   },
 ]
 

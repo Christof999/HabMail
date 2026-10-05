@@ -518,6 +518,30 @@ Telefon und am Rechner benutzt, hat zwei und schaltet an beiden einzeln ein.
 Abgelaufene Kennungen (App gelöscht, Browser aufgeräumt) räumt der Server beim
 nächsten Versand von selbst weg.
 
+## Kalender
+
+Dritte Ansicht neben Posteingang und Buchhaltung. Der Kalender gehört der
+**Person**, nicht dem Posteingang: Termine liegen unter
+`users/<uid>/calendar/events`, auch wenn sich ein Büro den Posteingang teilt.
+
+- **Eintragen** im Monat oder in der Liste darunter. Schon beim Tippen steht
+  da, womit sich ein Termin überschneidet.
+- **Erinnerungen** kommen als Push aufs Telefon — über dieselbe Anmeldung wie
+  die Benachrichtigungen für Mails. Jede Erinnerung steht in einer Warteschlange
+  (`calendarReminders`, nach Zeit sortiert); `calendarReminders` sieht dort
+  jede Minute nach, statt jeden Kalender zu lesen.
+- **Abonnieren:** *Kalender → Abonnieren* erzeugt einen Link, den Apple
+  Kalender, Google Kalender und Outlook abonnieren können. Damit stehen die
+  Termine im Kalender des Telefons und in dessen Widget. Das ist eine Richtung:
+  dort ansehen, hier ändern. Der Zugang steckt als Zufallswort im Link;
+  „Neuen Link erzeugen" macht den alten ungültig. Apple fragt etwa alle
+  15 Minuten nach, Google oft erst nach Stunden.
+- **Agenten** tragen Termine über `window.habmail` oder über den MCP-Server
+  ein und fragen freie Zeiten ab — siehe [AGENTS.md](AGENTS.md).
+
+Serientermine gibt es noch nicht, ebenso wenig einen gemeinsamen Teamkalender
+oder das Übernehmen von Einladungen aus Mails.
+
 ## Ordner und Verschieben
 
 Links steht die Ordnerleiste: Posteingang und darunter der Baum, jeweils mit

@@ -21,8 +21,20 @@ import { getFirebaseAuth } from './firebase'
 import type { EmailRow } from './types'
 import { listMailboxes, mailboxLabel } from './mailboxesApi'
 import { requestSendMail, type SendMailComposeKind } from './sendMailApi'
+import { get, ref } from 'firebase/database'
+import { getFirebaseDb } from './firebase'
+import { userCalendarEventsPath } from './paths'
+import {
+  deleteEvent,
+  formatWhen,
+  overlapping,
+  parseEventsTree,
+  saveEvent,
+  type CalendarEvent,
+  type CalendarEventInput,
+} from './calendar'
 
-export const AGENT_API_VERSION = '1.0.0'
+export const AGENT_API_VERSION = '1.1.0'
 
 export type AgentComposeInput = {
   to?: string
@@ -69,6 +81,8 @@ export type AgentHandlers = {
   getUser: () => User | null
   getRows: () => EmailRow[]
   openCompose: (input: AgentComposeInput) => void
+  /** Kalender zeigen und das Terminformular damit öffnen. */
+  openCalendar: (draft: Partial<CalendarEventInput>) => void
 }
 
 function requireText(value: unknown, field: string): string {
@@ -102,6 +116,72 @@ function matches(row: EmailRow, needle: string): boolean {
     .split(/\s+/)
     .filter(Boolean)
     .every((t) => hay.includes(t))
+}
+
+/** Ein Termin, wie ihn ein Agent angibt: Zeiten als ISO-Text, Date oder Millisekunden. */
+export type AgentEventInput = {
+  title: string
+  /** "2026-10-06T14:00" (Zeit des Geräts), mit Zone, oder nur "2026-10-06" für ganztägig. */
+  start: string | number | Date
+  /** Ohne Angabe eine Stunde bzw. der eine Tag. Ganztägig: der letzte Tag. */
+  end?: string | number | Date
+  allDay?: boolean
+  location?: string
+  notes?: string
+  reminderMinutes?: number
+}
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+
+function toTime(value: string | number | Date, field: string): number {
+  // Ein Datum allein liest Date als UTC-Mitternacht — gemeint ist der Tag hier.
+  const ms =
+    typeof value === 'string' && DATE_ONLY.test(value.trim())
+      ? new Date(`${value.trim()}T00:00`).getTime()
+      : new Date(value).getTime()
+  if (Number.isNaN(ms)) throw new Error(`habmail: "${field}" ist keine lesbare Zeitangabe.`)
+  return ms
+}
+
+function toEventInput(input: AgentEventInput): CalendarEventInput {
+  const title = requireText(input?.title, 'title')
+  const dateOnly = typeof input.start === 'string' && DATE_ONLY.test(input.start.trim())
+  const allDay = input.allDay ?? dateOnly
+  let start = toTime(input.start, 'start')
+  let end = input.end === undefined ? start + 3_600_000 : toTime(input.end, 'end')
+
+  if (allDay) {
+    // Ganze Tage: von Mitternacht bis zur Mitternacht nach dem letzten Tag.
+    const first = new Date(start)
+    const last = new Date(input.end === undefined ? start : end)
+    start = new Date(first.getFullYear(), first.getMonth(), first.getDate()).getTime()
+    end = new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1).getTime()
+  }
+  if (end <= start) throw new Error('habmail: Das Ende liegt nicht nach dem Anfang.')
+
+  return {
+    title,
+    start,
+    end,
+    allDay,
+    ...(input.location ? { location: String(input.location) } : {}),
+    ...(input.notes ? { notes: String(input.notes) } : {}),
+    ...(typeof input.reminderMinutes === 'number' ? { reminderMinutes: input.reminderMinutes } : {}),
+  }
+}
+
+function describeEvent(event: CalendarEvent) {
+  return {
+    id: event.id,
+    title: event.title,
+    start: new Date(event.start).toISOString(),
+    end: new Date(event.end).toISOString(),
+    allDay: event.allDay,
+    when: `${new Date(event.start).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}, ${formatWhen(event)}`,
+    ...(event.location ? { location: event.location } : {}),
+    ...(event.notes ? { notes: event.notes } : {}),
+    ...(event.reminderMinutes === undefined ? {} : { reminderMinutes: event.reminderMinutes }),
+  }
 }
 
 export function createAgentApi(handlers: AgentHandlers) {
@@ -165,6 +245,11 @@ export function createAgentApi(handlers: AgentHandlers) {
 
   const emptyContext = { originalFrom: '', originalSubject: '', originalBody: '' }
 
+  /** Der ganze Kalender der angemeldeten Person — er ist klein. */
+  async function loadEvents(uid: string): Promise<CalendarEvent[]> {
+    return parseEventsTree((await get(ref(getFirebaseDb(), userCalendarEventsPath(uid)))).val())
+  }
+
   return {
     version: AGENT_API_VERSION,
 
@@ -190,6 +275,12 @@ export function createAgentApi(handlers: AgentHandlers) {
             'Sofort verschicken, ohne UI. dryRun:true prüft nur',
           'replyTo(id, body, { subject?, to?, mailboxId?, dryRun? })':
             'Antwort auf eine Mail, Original wird zitiert',
+          'listEvents({ from?, to? })': 'Termine im Kalender, ohne Angabe die nächsten 14 Tage',
+          'createEvent({ title, start, end?, allDay?, location?, notes?, reminderMinutes?, dryRun? })':
+            'Termin eintragen; die Antwort nennt Überschneidungen. dryRun:true prüft nur',
+          'openEvent({ title?, start?, end?, … })':
+            'Terminformular vorbelegt öffnen; gespeichert wird von Hand',
+          'deleteEvent(id)': 'Termin löschen',
         },
         /*
          * Diese API braucht keinen Agent-Key: sie handelt als der angemeldete
@@ -203,6 +294,50 @@ export function createAgentApi(handlers: AgentHandlers) {
           docs: 'AGENTS.md im Repository',
         },
       }
+    },
+
+    /** Termine, die den Zeitraum berühren. Ohne Angabe: ab jetzt 14 Tage. */
+    listEvents: async (options?: { from?: string | number | Date; to?: string | number | Date }) => {
+      const user = requireUser()
+      const from = options?.from === undefined ? Date.now() : toTime(options.from, 'from')
+      const to = options?.to === undefined ? from + 14 * 86_400_000 : toTime(options.to, 'to')
+      return (await loadEvents(user.uid))
+        .filter((e) => e.end > from && e.start < to)
+        .map(describeEvent)
+    },
+
+    /**
+     * Termin eintragen. Überschneidungen verhindern das Anlegen nicht — sie
+     * stehen in der Antwort, damit der Agent sie dem Menschen sagen kann.
+     */
+    createEvent: async (input: AgentEventInput & { dryRun?: boolean }) => {
+      const user = requireUser()
+      const event = toEventInput(input)
+      const overlaps = event.allDay
+        ? []
+        : overlapping(await loadEvents(user.uid), event.start, event.end).map(describeEvent)
+      if (input.dryRun === true) {
+        return { ok: true as const, dryRun: true, event: describeEvent({ id: '(neu)', ...event }), overlaps }
+      }
+      const id = await saveEvent(user.uid, null, event)
+      return { ok: true as const, dryRun: false, event: describeEvent({ id, ...event }), overlaps }
+    },
+
+    /** Das Terminformular öffnen und den Menschen speichern lassen. */
+    openEvent: (input?: Partial<AgentEventInput>) => {
+      requireUser()
+      const draft =
+        input?.start === undefined
+          ? { ...(input?.title ? { title: String(input.title) } : {}) }
+          : toEventInput({ title: input.title ?? 'Termin', ...input, start: input.start })
+      handlers.openCalendar(draft)
+      return { ok: true as const, opened: 'calendar-event' }
+    },
+
+    deleteEvent: async (id: string) => {
+      const user = requireUser()
+      await deleteEvent(user.uid, requireText(id, 'id'))
+      return { ok: true as const, deleted: id }
     },
 
     /**

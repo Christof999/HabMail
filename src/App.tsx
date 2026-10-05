@@ -69,6 +69,7 @@ import SignatureSettings from './SignatureSettings'
 import NotificationSettings from './NotificationSettings'
 import { showForegroundNotifications } from './push'
 import AccountingView from './AccountingView'
+import CalendarView, { type CalendarDraft } from './CalendarView'
 import UserSettings from './UserSettings'
 import { whoAmI } from './usersApi'
 import { userAttachmentDataPath, userEmailsPath, userFoldersPath } from './paths'
@@ -231,7 +232,11 @@ export default function App() {
   const [showSignatures, setShowSignatures] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   /** Posteingang oder Buchhaltung — zwei Sichten auf dieselben Daten. */
-  const [view, setView] = useState<'inbox' | 'accounting'>('inbox')
+  const [view, setView] = useState<'inbox' | 'accounting' | 'calendar'>('inbox')
+  // Ein Terminvorschlag von außen (Agent, später eine Einladung aus einer
+  // Mail): der Kalender öffnet damit sein Formular.
+  const [calendarDraft, setCalendarDraft] = useState<CalendarDraft | null>(null)
+  const clearCalendarDraft = useCallback(() => setCalendarDraft(null), [])
   const [isAdmin, setIsAdmin] = useState(false)
   const [isCompactLayout, setIsCompactLayout] = useState(() => {
     if (typeof globalThis.window === 'undefined') return false
@@ -427,6 +432,10 @@ export default function App() {
       getUser: () => agentStateRef.current.user,
       getRows: () => agentStateRef.current.rows,
       openCompose: (input) => openNewCompose(input),
+      openCalendar: (draft) => {
+        setCalendarDraft(draft)
+        setView('calendar')
+      },
     })
     return installAgentApi(api)
   }, [openNewCompose])
@@ -1153,6 +1162,14 @@ export default function App() {
             >
               Buchhaltung
             </button>
+            <button
+              type="button"
+              data-testid="view-calendar"
+              className={view === 'calendar' ? 'active' : ''}
+              onClick={() => setView('calendar')}
+            >
+              Kalender
+            </button>
           </div>
           {/* Neben dem Kontozeichen, weil hier alles Persönliche sitzt. Auf
               dem Handy nur das Zeichen — der Text hätte dort keinen Platz,
@@ -1191,7 +1208,11 @@ export default function App() {
         />
       ) : null}
 
-      {view === 'accounting' ? (
+      {view === 'calendar' ? (
+        // Der Kalender gehört der Person, nicht dem Posteingang — deshalb die
+        // eigene Kennung und nicht die des Betriebs.
+        <CalendarView uid={user.uid} draft={calendarDraft} onDraftHandled={clearCalendarDraft} />
+      ) : view === 'accounting' ? (
         <AccountingView rows={rows} uid={ownerId} />
       ) : (
       <div className={`app-body${isCompactLayout ? ' app-body--compact' : ''}`}>
