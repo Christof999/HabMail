@@ -95,7 +95,7 @@ const reanalyzeInvoices = onCall(
     if (!isConfigured()) {
       throw new HttpsError(
         "failed-precondition",
-        "Ohne GEMINI_API_KEY kann nichts ausgewertet werden.",
+        "Ohne OPENAI_API_KEY oder GEMINI_API_KEY kann nichts ausgewertet werden.",
       );
     }
 

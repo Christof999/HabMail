@@ -10,14 +10,16 @@
 #   FIREBASE_SERVICE_ACCOUNT  Inhalt der Service-Account-JSON-Datei, komplett.
 #   FIREBASE_PROJECT_ID       z.B. habmail-1234
 #   EMAILPROXY_KEY            der ep_… Schlüssel aus dem Email-Proxy
-#   GEMINI_API_KEY            für die Kategorisierung
+#   OPENAI_API_KEY            für Kategorisierung und Zusammenfassung
+#   GEMINI_API_KEY            dasselbe über Gemini, solange OPENAI_API_KEY fehlt
 #
 # Reiter „Variables“:
 #   EMAILPROXY_URL            https://dein-proxy.vercel.app
 #   ADMIN_UIDS                deine Firebase-UID, mehrere mit Komma
 #
 # Optional, ebenfalls als Variables:
-#   GEMINI_MODEL, POLL_MESSAGE_LIMIT, MAX_INLINE_ATTACHMENT_BYTES
+#   OPENAI_MODEL, OPENAI_REASONING_EFFORT, GEMINI_MODEL,
+#   POLL_MESSAGE_LIMIT, MAX_INLINE_ATTACHMENT_BYTES
 # Optional als Secrets:
 #   INGEST_TOKEN
 #   POLL_TRIGGER_TOKEN
@@ -168,6 +170,7 @@ jobs:
           PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
           # Geheim
           EMAILPROXY_KEY: ${{ secrets.EMAILPROXY_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
           POLL_TRIGGER_TOKEN: ${{ secrets.POLL_TRIGGER_TOKEN }}
@@ -177,6 +180,8 @@ jobs:
           # Nicht geheim
           EMAILPROXY_URL: ${{ vars.EMAILPROXY_URL }}
           ADMIN_UIDS: ${{ vars.ADMIN_UIDS }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_REASONING_EFFORT: ${{ vars.OPENAI_REASONING_EFFORT }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           POLL_MESSAGE_LIMIT: ${{ vars.POLL_MESSAGE_LIMIT }}
           MAX_INLINE_ATTACHMENT_BYTES: ${{ vars.MAX_INLINE_ATTACHMENT_BYTES }}
@@ -200,6 +205,7 @@ jobs:
             return 0
           }
           for name in EMAILPROXY_URL EMAILPROXY_KEY GEMINI_API_KEY GEMINI_MODEL \
+                      OPENAI_API_KEY OPENAI_MODEL OPENAI_REASONING_EFFORT \
                       ADMIN_UIDS INGEST_TOKEN POLL_TRIGGER_TOKEN \
                       POLL_MESSAGE_LIMIT MAX_INLINE_ATTACHMENT_BYTES \
                       GOCARDLESS_SECRET_ID GOCARDLESS_SECRET_KEY \

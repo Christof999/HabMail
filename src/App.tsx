@@ -1188,7 +1188,7 @@ export default function App() {
             className={searchMode === 'gemini' ? 'active' : ''}
             onClick={setModeGemini}
           >
-            KI (Gemini)
+            KI
           </button>
         </div>
         <div className="search-row">

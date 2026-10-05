@@ -81,6 +81,52 @@ function resolveGeminiKey(): string {
   )
 }
 
+/**
+ * Dieselbe Frage an OpenAI, über die Responses-Schnittstelle.
+ *
+ * Mit festem Antwortschema — die Antwort ist dann immer {"ids":[…]}, ohne
+ * Markdown drumherum. `store: false`, weil die Kandidaten Mailinhalte sind.
+ */
+async function askOpenAI(key: string, prompt: string): Promise<string> {
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model: process.env.OPENAI_MODEL?.trim() || 'gpt-6-luna',
+      store: false,
+      reasoning: { effort: process.env.OPENAI_REASONING_EFFORT?.trim() || 'low' },
+      input: prompt,
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'treffer',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: { ids: { type: 'array', items: { type: 'string' } } },
+            required: ['ids'],
+            additionalProperties: false,
+          },
+        },
+      },
+    }),
+  })
+  if (!response.ok) {
+    throw new Error(`OpenAI HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`)
+  }
+  const data = (await response.json()) as {
+    output?: { content?: { type?: string; text?: string; refusal?: string }[] }[]
+  }
+  // Vor der Antwort können Denkschritte stehen — gesucht ist der erste Textblock.
+  for (const item of data.output ?? []) {
+    for (const content of item.content ?? []) {
+      if (content.type === 'refusal') throw new Error(`OpenAI lehnt ab: ${content.refusal}`)
+      if (content.type === 'output_text') return content.text ?? ''
+    }
+  }
+  return ''
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse,
@@ -104,18 +150,20 @@ export default async function handler(
     }
 
     const projectId = resolveProjectId()
+    // Wie beim Zusammenfassen: OpenAI, sobald der Schlüssel da ist, sonst Gemini.
+    const openaiKey = process.env.OPENAI_API_KEY?.trim() || ''
     const geminiKey = resolveGeminiKey()
     const modelId =
       process.env.GEMINI_MODEL?.trim() ||
       'gemini-3.1-flash-lite-preview'
 
-    if (!projectId || !geminiKey) {
+    if (!projectId || (!openaiKey && !geminiKey)) {
       const missing: string[] = []
       if (!projectId) {
         missing.push('FIREBASE_PROJECT_ID (oder VITE_FIREBASE_PROJECT_ID)')
       }
-      if (!geminiKey) {
-        missing.push('GEMINI_API_KEY')
+      if (!openaiKey && !geminiKey) {
+        missing.push('OPENAI_API_KEY (oder GEMINI_API_KEY)')
       }
       return res.status(500).json({
         error: 'server_misconfigured',
@@ -160,9 +208,6 @@ export default async function handler(
     const allowed = new Set(items.map((i) => i.id).filter(Boolean))
     const slim = items.filter((i) => i.id).slice(0, 55)
 
-    const genAI = new GoogleGenerativeAI(geminiKey)
-    const model = genAI.getGenerativeModel({ model: modelId })
-
     const safeQuery = query.replace(/</g, ' ').replace(/>/g, ' ').slice(0, 2000)
 
     const prompt = `Du bist eine Suchhilfe für E-Mail-Akten (Geschäftskorrespondenz).
@@ -182,23 +227,17 @@ Regeln:
 
     let text: string
     try {
-      const result = await model.generateContent(prompt)
-      try {
-        text = result.response.text()
-      } catch (textErr) {
-        console.error('gemini_response_text', textErr)
-        const msg =
-          textErr instanceof Error ? textErr.message : String(textErr)
-        return res.status(502).json({
-          error: 'gemini_response_blocked',
-          hint: msg.slice(0, 400),
-        })
+      if (openaiKey) {
+        text = await askOpenAI(openaiKey, prompt)
+      } else {
+        const model = new GoogleGenerativeAI(geminiKey).getGenerativeModel({ model: modelId })
+        text = (await model.generateContent(prompt)).response.text()
       }
     } catch (e) {
-      console.error('gemini_error', e)
+      console.error('ai_search_error', e)
       const msg = e instanceof Error ? e.message : String(e)
       return res.status(502).json({
-        error: 'gemini_failed',
+        error: 'ai_failed',
         hint: msg.slice(0, 400),
       })
     }
@@ -215,8 +254,8 @@ Regeln:
         ? parsed.ids.map((x) => String(x)).filter((id) => allowed.has(id))
         : []
     } catch {
-      console.error('gemini_parse', text.slice(0, 800))
-      return res.status(502).json({ error: 'gemini_parse_failed' })
+      console.error('ai_search_parse', text.slice(0, 800))
+      return res.status(502).json({ error: 'ai_parse_failed' })
     }
 
     const seen = new Set<string>()

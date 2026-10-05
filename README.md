@@ -52,7 +52,7 @@ einen Agent-Key. Siehe [AGENTS.md](AGENTS.md).
 1. `pollMailboxes` (Firebase Function) läuft alle fünf Minuten.
 2. Sie fragt den Email-Proxy, welche Postfächer empfangen können, und holt je
    Postfach die neuen Mails über `GET /api/receive`.
-3. Jede Mail geht an Gemini: Kategorie, Zusammenfassung, Priorität — bei
+3. Jede Mail geht an das Sprachmodell (OpenAI, ohne dessen Schlüssel Gemini): Kategorie, Zusammenfassung, Priorität — bei
    Rechnungen zusätzlich Nummer, Betrag, Datum und Fälligkeit. **Angehängte
    PDFs und Bilder gehen mit** (bis zu drei je Mail, siehe unten): bei „anbei
    unsere Rechnung" steht der Betrag dort und in keiner Zeile Mailtext.
@@ -73,7 +73,7 @@ Der ganze Ablauf geht über Weboberflächen — Browser reicht, auch auf dem Han
    Der `ep_…`-Schlüssel wird einmalig angezeigt: kopieren.
 2. **GitHub-Secrets setzen.** Repo → Settings → Secrets and variables → Actions:
    `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_PROJECT_ID`, `EMAILPROXY_KEY`,
-   `GEMINI_API_KEY`. Unter *Variables*: `EMAILPROXY_URL` und `ADMIN_UIDS`
+   `OPENAI_API_KEY` (oder `GEMINI_API_KEY`). Unter *Variables*: `EMAILPROXY_URL` und `ADMIN_UIDS`
    (deine Firebase-UID, zu finden in der Firebase Console unter Authentication).
 3. **Google-APIs aktivieren und dem Dienstkonto Rechte geben.** Beides einmalig
    und beides als Projektinhaber. Die genauen Links mit deiner Projekt-ID gibt
@@ -147,10 +147,10 @@ legt daraus das Firebase-Secret an. Ohne Workflow:
 
 ```bash
 npx firebase functions:secrets:set EMAILPROXY_KEY
-npx firebase functions:secrets:set GEMINI_API_KEY
+npx firebase functions:secrets:set OPENAI_API_KEY
 ```
 
-`EMAILPROXY_URL`, `ADMIN_UIDS` und `GEMINI_MODEL` sind gewöhnliche
+`EMAILPROXY_URL`, `ADMIN_UIDS` und `OPENAI_MODEL` sind gewöhnliche
 Umgebungsvariablen der Function.
 
 ### 2b. Ersten Administrator festlegen
@@ -636,15 +636,22 @@ verhält sich die Buchhaltung wie zuvor.
 
 ## Was die KI zu sehen bekommt
 
-[`functions/categorize.js`](functions/categorize.js) schickt an Gemini: Absender,
+[`functions/categorize.js`](functions/categorize.js) schickt an das Sprachmodell: Absender,
 Betreff, Mailtext (6.000 Zeichen) **und die lesbaren Anhänge als Datei**.
+
+Welches Modell das ist, entscheidet der Schlüssel: Mit `OPENAI_API_KEY` geht es
+an OpenAI (`OPENAI_MODEL`, Vorgabe `gpt-6-luna`), ohne ihn an Gemini
+(`GEMINI_API_KEY`, `GEMINI_MODEL`). Aufgabe und Ergebnis sind dieselben; zurück
+geht es, indem der OpenAI-Schlüssel wieder entfernt wird. Die KI-Suche in der
+Oberfläche (`api/gemini-search.ts`) hält es genauso, nur mit dem Schlüssel aus Vercel.
 
 Ohne die Anhänge geht es nicht. Eine typische Rechnungsmail lautet „anbei unsere
 Rechnung, mit freundlichen Grüßen" — Betrag, Nummer und Datum stehen
 ausschließlich im PDF. Wer nur den Text schickt, bekommt keinen Betrag zurück,
 und die Buchhaltung zeigt 0,00 €.
 
-Mitgeschickt werden PDF, PNG, JPEG, WebP, HEIC und HEIF. Ist der Anhang als
+Mitgeschickt werden PDF, PNG, JPEG, WebP, HEIC und HEIF — die beiden letzten
+nur an Gemini, OpenAI nimmt sie nicht. Ist der Anhang als
 `application/octet-stream` deklariert — das machen viele Mailprogramme —,
 entscheidet die Dateiendung. Grenzen: höchstens **3 Anhänge** je Mail, **4 MB**
 je Stück, **8 MB** zusammen. Word- und Excel-Dateien gehen nicht mit; sie werden
