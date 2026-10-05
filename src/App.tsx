@@ -50,6 +50,13 @@ import {
   type EmailThread,
 } from './threading'
 import { attachmentIsUsable, omittedReason } from './attachments'
+import {
+  clearCachedInbox,
+  loadCachedInbox,
+  rememberedOwner,
+  rememberOwner,
+  saveCachedInbox,
+} from './inboxCache'
 import { AttachmentList } from './AttachmentList'
 import { SentView } from './SentView'
 import { mailboxLabel } from './mailboxesApi'
@@ -65,7 +72,7 @@ import { showForegroundNotifications } from './push'
 import AccountingView from './AccountingView'
 import UserSettings from './UserSettings'
 import { whoAmI } from './usersApi'
-import { userEmailsPath, userFoldersPath } from './paths'
+import { userAttachmentDataPath, userEmailsPath, userFoldersPath } from './paths'
 import { canManageMailboxes, dataOwnerId, postGate } from './owner'
 import {
   CATEGORY_LABELS,
@@ -215,6 +222,7 @@ export default function App() {
   >(null)
   // Jeder Benutzer hat seinen eigenen Zweig; ohne Anmeldung gibt es keinen.
   const emailsPath = ownerId ? userEmailsPath(ownerId) : ''
+  const attachmentsPath = ownerId ? userAttachmentDataPath(ownerId, 'emails') : ''
   const foldersPath = ownerId ? userFoldersPath(ownerId) : ''
 
   const [categoryFilter, setCategoryFilter] = useState<EmailCategory | null>(null)
@@ -254,11 +262,16 @@ export default function App() {
   useEffect(() => {
     if (!user) return
     let active = true
+    // Bis das frische Token da ist, gilt der Besitzer vom letzten Mal — damit
+    // der gemerkte Posteingang sofort gezeigt werden kann.
+    const remembered = rememberedOwner(user.uid)
+    if (remembered !== null) setOwnerId(remembered)
     user
       .getIdTokenResult(true)
       .then((result) => {
         if (!active) return
         const claims = result.claims as Record<string, unknown>
+        rememberOwner(user.uid, dataOwnerId(user.uid, claims))
         setOwnerId(dataOwnerId(user.uid, claims))
         setPostBlocked(postGate(claims))
         setMayManageMailboxes(canManageMailboxes(claims))
@@ -298,20 +311,40 @@ export default function App() {
     if (!ownerId || postBlocked || configError) return
     setRtdbListenError(null)
     const db = getFirebaseDb()
-    return onValue(
+
+    // Zuerst der gemerkte Stand von diesem Gerät, damit nicht eine leere Liste
+    // dasteht, bis die Datenbank geantwortet hat. Kommt sie zuerst, gilt sie.
+    let live = false
+    let saveTimer: ReturnType<typeof setTimeout> | undefined
+    void loadCachedInbox(ownerId).then((cached) => {
+      if (!live && cached !== null && cached.length > 0) setRows(cached)
+    })
+
+    const stop = onValue(
       ref(db, emailsPath),
       (snap) => {
+        live = true
         setRtdbListenError(null)
-        const list = parseEmailsTree(snap.val())
+        const list = parseEmailsTree(snap.val(), attachmentsPath)
         list.sort((a, b) => sortKey(b) - sortKey(a))
         setRows(list)
+        // Nicht bei jeder einzelnen Änderung schreiben — ein Stapel neuer
+        // Mails meldet sich Mail für Mail.
+        clearTimeout(saveTimer)
+        saveTimer = setTimeout(() => void saveCachedInbox(ownerId, list), 1500)
       },
       (err) => {
+        live = true
         setRtdbListenError(err.message)
         setRows([])
       },
     )
-  }, [ownerId, postBlocked, configError, emailsPath])
+    return () => {
+      live = true
+      clearTimeout(saveTimer)
+      stop()
+    }
+  }, [ownerId, postBlocked, configError, emailsPath, attachmentsPath])
 
   useEffect(() => {
     if (!ownerId || postBlocked || configError) return
@@ -715,6 +748,10 @@ export default function App() {
     const updates: Record<string, unknown> = {}
     for (const r of thread.membersAsc) {
       updates[rtdbEmailRecordPath(emailsPath, r.id)] = null
+      // Die Dateien liegen neben der Mail — ohne das blieben sie für immer.
+      if (r.attachments?.some((a) => a.dataPath !== undefined)) {
+        updates[`${attachmentsPath}/${r.id}`] = null
+      }
     }
     try {
       await update(ref(db), updates)
@@ -849,6 +886,7 @@ export default function App() {
 
   async function handleLogout() {
     const auth = getFirebaseAuth()
+    await clearCachedInbox()
     await signOut(auth)
   }
 

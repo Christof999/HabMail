@@ -14,7 +14,7 @@
  */
 import { ref, set } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
-import { userSentEmailsPath } from './paths'
+import { userAttachmentDataPath, userSentEmailsPath } from './paths'
 import type { EmailAttachment } from './types'
 
 export type SentAddress = { address: string; name?: string }
@@ -47,7 +47,7 @@ function toAddresses(value: unknown): SentAddress[] {
     .filter((a) => a.address !== '')
 }
 
-function toAttachments(value: unknown): EmailAttachment[] {
+function toAttachments(value: unknown, dataRoot: string): EmailAttachment[] {
   if (!Array.isArray(value)) return []
   return value
     .filter((v): v is Record<string, unknown> => v !== null && typeof v === 'object')
@@ -55,18 +55,24 @@ function toAttachments(value: unknown): EmailAttachment[] {
       filename: String(v.filename ?? 'anhang'),
       mimeType: String(v.mimeType ?? 'application/octet-stream'),
       dataBase64: typeof v.dataBase64 === 'string' ? v.dataBase64 : '',
+      ...(typeof v.dataKey === 'string' && dataRoot !== ''
+        ? { dataKey: v.dataKey, dataPath: `${dataRoot}/${v.dataKey}` }
+        : {}),
       ...(typeof v.size === 'number' ? { size: v.size } : {}),
       ...(typeof v.omitted === 'string' ? { omitted: v.omitted } : {}),
     }))
 }
 
-export function parseSentTree(data: unknown): SentEmailRow[] {
+export function parseSentTree(data: unknown, attachmentRoot = ''): SentEmailRow[] {
   if (data === null || typeof data !== 'object') return []
   const rows: SentEmailRow[] = []
   for (const [id, raw] of Object.entries(data as Record<string, unknown>)) {
     if (raw === null || typeof raw !== 'object') continue
     const o = raw as Record<string, unknown>
-    const attachments = toAttachments(o.attachments)
+    const attachments = toAttachments(
+      o.attachments,
+      attachmentRoot === '' ? '' : `${attachmentRoot}/${id}`,
+    )
     rows.push({
       id,
       sender: String(o.sender ?? ''),
@@ -150,17 +156,22 @@ export async function recordSentMail(
   if (messageId === '') return
   try {
     const key = await sentRecordKey(messageId)
-    const attachments = mail.attachments.map((a) =>
-      a.bytes > MAX_INLINE_ATTACHMENT_BYTES
-        ? {
-            filename: a.filename,
-            mimeType: a.contentType,
-            size: a.bytes,
-            dataBase64: '',
-            omitted: 'too_large_for_db',
-          }
-        : { filename: a.filename, mimeType: a.contentType, size: a.bytes, dataBase64: a.contentBase64 },
-    )
+    // Wie beim Abholen: der Inhalt neben die Mail, in die Mail nur der Verweis.
+    const data: Record<string, string> = {}
+    const attachments = mail.attachments.map((a, index) => {
+      const base = { filename: a.filename, mimeType: a.contentType, size: a.bytes }
+      if (a.bytes > MAX_INLINE_ATTACHMENT_BYTES) return { ...base, omitted: 'too_large_for_db' }
+      data[String(index)] = a.contentBase64
+      return { ...base, dataKey: String(index) }
+    })
+    // Erst der Inhalt, dann die Mail — eine Mail, deren Anhänge auf nichts
+    // zeigen, wäre schlechter als eine, die erst der Abruf anlegt.
+    if (Object.keys(data).length > 0) {
+      await set(
+        ref(getFirebaseDb(), `${userAttachmentDataPath(ownerId, 'sentEmails')}/${key}`),
+        data,
+      )
+    }
     await set(ref(getFirebaseDb(), `${userSentEmailsPath(ownerId)}/${key}`), {
       to: splitRecipients(mail.to),
       subject: mail.subject,

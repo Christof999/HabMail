@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
-import { userSentEmailsPath } from './paths'
+import { userAttachmentDataPath, userSentEmailsPath } from './paths'
 import { mailboxLabel } from './mailboxesApi'
 import { AttachmentList } from './AttachmentList'
 import { FALLBACK_CATEGORY } from './categories'
@@ -102,7 +102,7 @@ export function SentView({
       ref(getFirebaseDb(), userSentEmailsPath(ownerId)),
       (snap) => {
         setError(null)
-        setRows(parseSentTree(snap.val()))
+        setRows(parseSentTree(snap.val(), userAttachmentDataPath(ownerId, 'sentEmails')))
       },
       (err) => {
         setError(err.message)

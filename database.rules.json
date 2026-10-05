@@ -92,6 +92,21 @@
             }
           }
         },
+        "attachmentData": {
+          "emails": {
+            "$emailId": {
+              ".write": "auth != null && auth.uid === $uid && !newData.exists()"
+            }
+          },
+          "sentEmails": {
+            "$emailId": {
+              ".write": "auth != null && auth.uid === $uid && !data.exists() && newData.exists()",
+              "$dataKey": {
+                ".validate": "newData.isString() && newData.val().length <= 1500000"
+              }
+            }
+          }
+        },
         "sentEmails": {
           "$emailId": {
             ".write": "auth != null && auth.uid === $uid && !data.exists() && newData.exists()",
@@ -173,6 +188,21 @@
             "imageAlign": { ".validate": "newData.val() === 'left' || newData.val() === 'center' || newData.val() === 'right'" },
             "imageWidth": { ".validate": "newData.isNumber() && newData.val() >= 80 && newData.val() <= 600" },
             "$other": { ".validate": false }
+          }
+        },
+        "attachmentData": {
+          "emails": {
+            "$emailId": {
+              ".write": "auth != null && auth.token.t === $tenantId && (auth.token.r === 'owner' || auth.token.r === 'office') && auth.token.m.p >= 1 && !newData.exists()"
+            }
+          },
+          "sentEmails": {
+            "$emailId": {
+              ".write": "auth != null && auth.token.t === $tenantId && (auth.token.r === 'owner' || auth.token.r === 'office') && auth.token.m.p >= 1 && !data.exists() && newData.exists()",
+              "$dataKey": {
+                ".validate": "newData.isString() && newData.val().length <= 1500000"
+              }
+            }
           }
         },
         "sentEmails": {

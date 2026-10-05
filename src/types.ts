@@ -3,7 +3,12 @@ import type { EmailCategory } from './categories'
 export type EmailAttachment = {
   filename: string
   mimeType: string
+  /** Nur bei Altbestand gefüllt — sonst liegt der Inhalt unter `dataPath`. */
   dataBase64: string
+  /** Nummer, unter der der Inhalt ausgelagert ist. */
+  dataKey?: string
+  /** Wo der Inhalt in der Datenbank liegt. Wird beim Einlesen gesetzt. */
+  dataPath?: string
   /** Größe in Bytes. Gesetzt, auch wenn der Inhalt fehlt. */
   size?: number
   /** Warum der Inhalt fehlt — z.B. weil die Datei zu groß für den Transport war. */

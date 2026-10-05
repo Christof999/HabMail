@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { EmailAttachment } from './types'
 import {
   attachmentBytes,
@@ -23,7 +24,28 @@ export function AttachmentList({
   heading: string
   titleTag?: 'h3' | 'h4'
 }) {
+  // Der Inhalt wird erst beim Antippen geholt. Bis er da ist, soll zu sehen
+  // sein, dass etwas passiert — und wenn es scheitert, warum.
+  const [busy, setBusy] = useState<number | null>(null)
+  const [failed, setFailed] = useState<{ index: number; message: string } | null>(null)
+
   if (!attachments.length) return null
+
+  async function run(index: number, action: (a: EmailAttachment) => Promise<void>) {
+    setBusy(index)
+    setFailed(null)
+    try {
+      await action(attachments[index])
+    } catch (error) {
+      setFailed({
+        index,
+        message: error instanceof Error ? error.message : 'Der Anhang ließ sich nicht laden.',
+      })
+    } finally {
+      setBusy(null)
+    }
+  }
+
   return (
     <div className="atts thread-atts">
       <TitleTag className="attachment-list-title">{heading}</TitleTag>
@@ -41,6 +63,11 @@ export function AttachmentList({
                   {attachmentMimeType(a)}
                   {size === '' ? '' : ` · ${size}`}
                 </span>
+                {failed?.index === i ? (
+                  <span className="error small" role="alert">
+                    {failed.message}
+                  </span>
+                ) : null}
               </span>
               {missing === null ? (
                 <div className="attachment-actions">
@@ -50,15 +77,17 @@ export function AttachmentList({
                     <button
                       type="button"
                       className="ghost small-btn"
-                      onClick={() => openAttachment(a)}
+                      disabled={busy !== null}
+                      onClick={() => void run(i, openAttachment)}
                     >
-                      Öffnen
+                      {busy === i ? 'Lädt…' : 'Öffnen'}
                     </button>
                   ) : null}
                   <button
                     type="button"
                     className="ghost small-btn"
-                    onClick={() => downloadAttachment(a)}
+                    disabled={busy !== null}
+                    onClick={() => void run(i, downloadAttachment)}
                   >
                     Speichern
                   </button>

@@ -1,3 +1,5 @@
+import { get, ref } from 'firebase/database'
+import { getFirebaseDb } from './firebase'
 import type { EmailAttachment } from './types'
 
 /**
@@ -56,17 +58,63 @@ export function attachmentName(attachment: EmailAttachment): string {
   return name === '' ? 'Anhang' : name
 }
 
+/** Der Inhalt, falls er noch in der Mail selbst steht — sonst leer. */
+function inlineData(attachment: EmailAttachment): string {
+  const data = (attachment.dataBase64 ?? '').replace(/\s/g, '')
+  return data.length >= 32 && /^[A-Za-z0-9+/]+=*$/.test(data) ? data : ''
+}
+
 /** Lässt sich der Anhang überhaupt herausgeben? */
 export function attachmentIsUsable(attachment: EmailAttachment): boolean {
-  const data = (attachment.dataBase64 ?? '').replace(/\s/g, '')
-  return data.length >= 32 && /^[A-Za-z0-9+/]+=*$/.test(data)
+  return inlineData(attachment) !== '' || attachment.dataPath !== undefined
+}
+
+/**
+ * Was zuletzt geladen wurde. Wer ein PDF erst ansieht und dann speichert, soll
+ * es nicht zweimal holen — aber mehr als ein paar Dateien bleiben nicht im
+ * Speicher liegen.
+ */
+const LOADED_LIMIT = 8
+const loaded = new Map<string, Promise<string>>()
+
+/**
+ * Der Inhalt eines Anhangs als Base64.
+ *
+ * Die Liste der Mails bringt ihn nicht mehr mit: beim Öffnen der App jedes PDF
+ * zu laden, hat den Start auf über hundert Megabyte gebracht. Geholt wird er
+ * erst hier, wenn ihn wirklich jemand braucht.
+ */
+export function loadAttachmentData(attachment: EmailAttachment): Promise<string> {
+  const inline = inlineData(attachment)
+  if (inline !== '') return Promise.resolve(inline)
+
+  const path = attachment.dataPath
+  if (path === undefined) return Promise.reject(new Error('Der Inhalt fehlt in der Datenbank.'))
+
+  const known = loaded.get(path)
+  if (known !== undefined) return known
+
+  const pending = get(ref(getFirebaseDb(), path)).then((snap) => {
+    const value: unknown = snap.val()
+    if (typeof value !== 'string' || value === '') {
+      throw new Error('Der Inhalt fehlt in der Datenbank.')
+    }
+    return value
+  })
+  // Ein Fehlschlag soll den nächsten Versuch nicht blockieren.
+  pending.catch(() => loaded.delete(path))
+  loaded.set(path, pending)
+  if (loaded.size > LOADED_LIMIT) {
+    const oldest = loaded.keys().next().value
+    if (oldest !== undefined) loaded.delete(oldest)
+  }
+  return pending
 }
 
 /** Bytes eines Anhangs, aus `size` wenn vorhanden, sonst aus der Kodierung. */
 export function attachmentBytes(attachment: EmailAttachment): number {
   if (typeof attachment.size === 'number' && attachment.size > 0) return attachment.size
-  const data = (attachment.dataBase64 ?? '').replace(/\s/g, '')
-  return Math.floor((data.length * 3) / 4)
+  return Math.floor((inlineData(attachment).length * 3) / 4)
 }
 
 export function formatBytes(bytes: number): string {
@@ -124,8 +172,12 @@ const RELEASE_AFTER_MS = 60_000
 
 // Der Parameter heißt bewusst nicht `use`: ESLint hält jeden Aufruf von `use()`
 // für den gleichnamigen React-Hook und verbietet ihn dann im try-Block.
-function withObjectUrl(attachment: EmailAttachment, handOver: (url: string) => void): void {
-  const blob = new Blob([toBytes(attachment.dataBase64) as unknown as BlobPart], {
+function withObjectUrl(
+  attachment: EmailAttachment,
+  data: string,
+  handOver: (url: string) => void,
+): void {
+  const blob = new Blob([toBytes(data) as unknown as BlobPart], {
     type: attachmentMimeType(attachment),
   })
   const url = URL.createObjectURL(blob)
@@ -136,25 +188,48 @@ function withObjectUrl(attachment: EmailAttachment, handOver: (url: string) => v
   }
 }
 
-/** Im neuen Tab anzeigen — PDFs und Bilder öffnet der Browser selbst. */
-export function openAttachment(attachment: EmailAttachment): void {
-  withObjectUrl(attachment, (url) => {
-    window.open(url, '_blank', 'noopener,noreferrer')
-  })
+function saveAs(url: string, name: string): void {
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  // Manche Browser lösen den Klick nur aus, wenn das Element im Dokument
+  // hängt — angehängt, geklickt, wieder entfernt.
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+
+/**
+ * Im neuen Tab anzeigen — PDFs und Bilder öffnet der Browser selbst.
+ *
+ * Der Tab wird sofort geöffnet und erst danach gefüllt. Andersherum hielte ihn
+ * der Browser für ein ungebetenes Fenster: zwischen dem Fingertipp und dem
+ * Öffnen läge das Laden, und nach einer Wartezeit gilt ein neues Fenster
+ * nicht mehr als vom Nutzer gewollt.
+ */
+export async function openAttachment(attachment: EmailAttachment): Promise<void> {
+  const tab = window.open('', '_blank')
+  try {
+    const data = await loadAttachmentData(attachment)
+    withObjectUrl(attachment, data, (url) => {
+      if (tab === null) {
+        // Der Browser lässt kein neues Fenster zu — dann wenigstens speichern.
+        saveAs(url, attachmentName(attachment))
+        return
+      }
+      tab.opener = null
+      tab.location.href = url
+    })
+  } catch (error) {
+    tab?.close()
+    throw error
+  }
 }
 
 /** Speichern unter dem Namen aus der Mail. */
-export function downloadAttachment(attachment: EmailAttachment): void {
-  withObjectUrl(attachment, (url) => {
-    const link = document.createElement('a')
-    link.href = url
-    link.download = attachmentName(attachment)
-    // Manche Browser lösen den Klick nur aus, wenn das Element im Dokument
-    // hängt — angehängt, geklickt, wieder entfernt.
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-  })
+export async function downloadAttachment(attachment: EmailAttachment): Promise<void> {
+  const data = await loadAttachmentData(attachment)
+  withObjectUrl(attachment, data, (url) => saveAs(url, attachmentName(attachment)))
 }
 
 /** Kann der Browser das im eigenen Fenster anzeigen? Sonst nur speichern. */

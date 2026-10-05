@@ -788,12 +788,18 @@ werden.
 
 - **Anhänge liegen als Base64 in der Realtime Database.** Zum Öffnen und
   Speichern baut [`src/attachments.ts`](src/attachments.ts) daraus einen Blob;
-  `data:`-Adressen gingen auf dem Handy nicht (siehe Kommentar dort). Das trägt
-  aber nicht weit:
-  der Client lädt beim Start den ganzen Baum. Dateien über 1 MB werden deshalb
-  schon jetzt nur mit Namen und Größe gespeichert
-  (`MAX_INLINE_ATTACHMENT_BYTES`). Für ein echtes Belegarchiv gehören sie nach
-  Firebase Storage.
+  `data:`-Adressen gingen auf dem Handy nicht (siehe Kommentar dort). Der
+  Inhalt liegt aber **neben** den Mails, nicht in ihnen: unter
+  `attachmentData/<zweig>/<mail>/<nr>`, und die Mail trägt nur Name, Typ, Größe
+  und `dataKey`. Früher stand er im Datensatz der Mail, und weil der Client beim
+  Start den ganzen Posteingang lädt, kam jedes PDF jedes Mal mit — über 200 MB
+  bei tausend Mails. Geladen wird eine Datei jetzt erst, wenn sie jemand öffnet;
+  die Liste selbst merkt sich der Browser ([`src/inboxCache.ts`](src/inboxCache.ts))
+  und zeigt sie beim nächsten Start sofort. Bestand aus der Zeit davor zieht
+  `scripts/migrate-attachments.mjs` um: sichern, kopieren, prüfen, erst dann
+  entfernen. Dateien über 1 MB werden weiterhin nur mit Namen und Größe
+  gespeichert (`MAX_INLINE_ATTACHMENT_BYTES`). Für ein echtes Belegarchiv
+  gehören sie nach Firebase Storage.
 - **Anhänge über 1 MB fehlen im Sammel-PDF**, lassen sich nicht öffnen und auch
   nicht nachträglich auswerten. Sie liegen gar nicht erst in der Datenbank
   (siehe oben). Beim Abholen sieht die KI sie noch — der Proxy liefert bis 2 MB

@@ -29,6 +29,7 @@ const { ACCOUNTING_CATEGORIES } = require("./categories");
 const { ownerFromAuth } = require("./owner");
 const { ownInvoiceReasonFor } = require("./ownInvoices");
 const { userEmailsPath } = require("./paths");
+const { withAttachmentData } = require("./attachmentData");
 
 const DEFAULT_TIMEOUT_MS = 25_000;
 
@@ -334,7 +335,12 @@ const syncAccounting = onCall({ timeoutSeconds: 540, memory: "1GiB" }, async (re
     done: entries.length < PAGE_SIZE,
   };
 
-  for (const [emailId, record] of entries) {
+  for (const [emailId, stored] of entries) {
+    // Die Belege liegen nicht mehr in der Mail. Nachgeladen wird nur, wo sie
+    // auch mitgehen — alles andere überspringt forwardInvoice ohnehin.
+    const record = ACCOUNTING_CATEGORIES.includes(stored?.categoryId)
+      ? await withAttachmentData(uid, "emails", emailId, stored)
+      : stored;
     const { outcome, reason } = await forwardInvoice(uid, emailId, record);
     if (outcome === "sent") report.sent += 1;
     else if (outcome === "failed") report.failed += 1;

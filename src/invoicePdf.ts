@@ -1,4 +1,5 @@
 import { formatCents, formatDate, type MonthGroup } from './accounting'
+import { attachmentIsUsable, loadAttachmentData } from './attachments'
 
 /**
  * Alle Rechnungen eines Monats als eine PDF-Datei: erst ein Deckblatt mit der
@@ -165,11 +166,13 @@ export async function buildMonthPdf(
   // --- Belege ---
   for (const entry of group.entries) {
     for (const attachment of entry.row.attachments ?? []) {
-      if (attachment.dataBase64.length === 0) continue
+      if (!attachmentIsUsable(attachment)) continue
 
       const name = `${entry.vendor} — ${attachment.filename}`
       try {
-        const bytes = toBytes(attachment.dataBase64)
+        // Die Belege liegen nicht mehr in der Mail — sie kommen hier, einer
+        // nach dem anderen, erst für das Sammel-PDF.
+        const bytes = toBytes(await loadAttachmentData(attachment))
         const type = attachment.mimeType.toLowerCase()
 
         if (type.includes('pdf') || attachment.filename.toLowerCase().endsWith('.pdf')) {

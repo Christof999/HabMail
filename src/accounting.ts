@@ -7,6 +7,7 @@ import {
   type Company,
   type CompanyMatch,
 } from './companies'
+import { attachmentIsUsable } from './attachments'
 import { ownInvoiceReason } from './ownInvoices'
 import type { EmailRow } from './types'
 
@@ -131,8 +132,8 @@ function toEntry(row: EmailRow, companies: Company[]): InvoiceEntry {
       : { amountCents: row.invoice.amountCents }),
     currency: row.invoice?.currency ?? 'EUR',
     date: entryDate(row),
-    printableAttachments: attachments.filter((a) => a.dataBase64.length > 0).length,
-    missingAttachments: attachments.filter((a) => a.dataBase64.length === 0).length,
+    printableAttachments: attachments.filter((a) => attachmentIsUsable(a)).length,
+    missingAttachments: attachments.filter((a) => !attachmentIsUsable(a)).length,
     ...(row.invoice?.paidAt === undefined ? {} : { paidAt: row.invoice.paidAt }),
   }
 }

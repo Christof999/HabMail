@@ -20,6 +20,7 @@ const { ownerFromAuth } = require("./owner");
 const { attachmentContent, categorizeMessage, isConfigured } = require("./categorize");
 const { updateIndexEntry } = require("./invoices");
 const { userEmailsPath } = require("./paths");
+const { withAttachmentData } = require("./attachmentData");
 
 /** Mails je Aufruf. Klein genug für Speicher und Zeitbudget, groß genug, dass es vorangeht. */
 const PAGE_SIZE = 8;
@@ -44,7 +45,9 @@ function hasReadableAttachment(record) {
   const list = Array.isArray(record?.attachments) ? record.attachments : [];
   return list.some((attachment) => {
     const { data, mimeType } = attachmentContent(attachment);
-    return data !== "" && (mimeType === "application/pdf" || mimeType.startsWith("image/"));
+    // Der Inhalt steht entweder noch in der Mail oder liegt ausgelagert bereit.
+    const available = data !== "" || typeof attachment?.dataKey === "string";
+    return available && (mimeType === "application/pdf" || mimeType.startsWith("image/"));
   });
 }
 
@@ -128,11 +131,15 @@ const reanalyzeInvoices = onCall(
     const candidates = entries.filter(([, record]) => needsReanalysis(record, { all }));
     report.candidates = candidates.length;
 
-    const analyses = await mapWithConcurrency(candidates, CONCURRENCY, ([, record]) =>
-      categorizeMessage(toMessage(record)).catch((error) => ({
-        analyzed: false,
-        reason: error instanceof Error ? error.message : String(error),
-      })),
+    // Erst hier die Dateien nachladen — nur für die Mails, die wirklich noch
+    // einmal zur KI gehen.
+    const analyses = await mapWithConcurrency(candidates, CONCURRENCY, ([key, record]) =>
+      withAttachmentData(uid, "emails", key, record)
+        .then((full) => categorizeMessage(toMessage(full)))
+        .catch((error) => ({
+          analyzed: false,
+          reason: error instanceof Error ? error.message : String(error),
+        })),
     );
 
     for (let i = 0; i < candidates.length; i += 1) {

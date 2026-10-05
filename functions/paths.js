@@ -25,6 +25,14 @@ function userSentEmailsPath(uid) {
   return `${userRootPath(uid)}/sentEmails`;
 }
 
+/**
+ * Der Inhalt der Anhänge, getrennt von den Mails — siehe
+ * `functions/attachmentData.js`. `branch` ist "emails" oder "sentEmails".
+ */
+function userAttachmentDataPath(uid, branch) {
+  return `${userRootPath(uid)}/attachmentData/${branch}`;
+}
+
 function userFoldersPath(uid) {
   return `${userRootPath(uid)}/mailFolders`;
 }
@@ -93,6 +101,7 @@ module.exports = {
   userRootPath,
   userEmailsPath,
   userSentEmailsPath,
+  userAttachmentDataPath,
   userFoldersPath,
   userBankPath,
   userInvoiceIndexPath,

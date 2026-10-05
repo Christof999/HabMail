@@ -31,6 +31,15 @@ export function userSentEmailsPath(uid: string): string {
   return `${userRootPath(uid)}/sentEmails`
 }
 
+/**
+ * Der Inhalt der Anhänge, getrennt von den Mails — siehe
+ * `functions/attachmentData.js`. Die Liste lädt dadurch nur noch Text; eine
+ * Datei kommt erst, wenn sie jemand öffnet.
+ */
+export function userAttachmentDataPath(uid: string, branch: 'emails' | 'sentEmails'): string {
+  return `${userRootPath(uid)}/attachmentData/${branch}`
+}
+
 export function userFoldersPath(uid: string): string {
   return `${userRootPath(uid)}/mailFolders`
 }

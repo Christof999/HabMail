@@ -13,12 +13,13 @@ const { CATEGORY_LABELS, periodFromDate } = require("./categories");
 const { userEmailsPath, userSentEmailsPath } = require("./paths");
 const { updateIndexEntry } = require("./invoices");
 const { forwardInvoice } = require("./rechnungsprogramm");
+const { splitAttachments, writeAttachmentData } = require("./attachmentData");
 
 /**
  * Anhänge über dieser Grenze werden nur mit Namen und Größe gespeichert.
- * Base64 in der Realtime Database ist teuer: der Client lädt beim Öffnen der
- * App den ganzen Baum. Für ein echtes Belegarchiv gehören die Dateien später
- * in Firebase Storage.
+ * Der Inhalt liegt zwar nicht mehr in der Mail, aber weiterhin in der
+ * Realtime Database — und die ist kein Dateispeicher. Für ein echtes
+ * Belegarchiv gehören die Dateien später in Firebase Storage.
  */
 const DEFAULT_MAX_INLINE_ATTACHMENT_BYTES = 1024 * 1024;
 
@@ -136,7 +137,15 @@ async function storeMessage(ownerUid, mailboxId, message, analysis) {
   const key = recordKey(mailboxId, message);
   const ref = admin.database().ref(`${userEmailsPath(ownerUid)}/${key}`);
 
-  const record = buildRecord(mailboxId, message, analysis);
+  // `full` trägt den Inhalt der Anhänge, `record` nur den Verweis darauf.
+  const full = buildRecord(mailboxId, message, analysis);
+  const { slim, data } = splitAttachments(full.attachments);
+  const record = slim.length > 0 ? { ...full, attachments: slim } : full;
+
+  // Erst der Inhalt, dann die Mail. Andersherum stünde nach einem Abbruch
+  // dazwischen eine Mail da, deren Anhänge auf nichts zeigen — und weil sie
+  // dann schon existiert, käme der Inhalt auch beim nächsten Lauf nicht nach.
+  await writeAttachmentData(ownerUid, "emails", key, data);
   const result = await ref.transaction((current) =>
     current === null ? record : undefined,
   );
@@ -149,7 +158,8 @@ async function storeMessage(ownerUid, mailboxId, message, analysis) {
     // Rechnungen und Mahnungen gehen weiter ins Rechnungsprogramm. Der Aufruf
     // wirft nicht: die Mail ist gespeichert, und eine hakende Gegenstelle darf
     // den Abhol-Lauf nicht abbrechen — nachreichen geht über syncAccounting.
-    await forwardInvoice(ownerUid, key, record);
+    // Mit Inhalt: die Belege sollen mit, und hier liegen sie noch vor.
+    await forwardInvoice(ownerUid, key, full);
   }
 
   return result.committed ? "stored" : "duplicate";
@@ -233,7 +243,10 @@ function buildSentRecord(mailboxId, message) {
 async function storeSentMessage(ownerUid, mailboxId, message) {
   const key = recordKey(mailboxId, message);
   const ref = admin.database().ref(`${userSentEmailsPath(ownerUid)}/${key}`);
-  const record = buildSentRecord(mailboxId, message);
+  const full = buildSentRecord(mailboxId, message);
+  const { slim, data } = splitAttachments(full.attachments);
+  const record = slim.length > 0 ? { ...full, attachments: slim } : full;
+  await writeAttachmentData(ownerUid, "sentEmails", key, data);
   const result = await ref.transaction((current) => (current === null ? record : undefined));
   return result.committed ? "stored" : "duplicate";
 }

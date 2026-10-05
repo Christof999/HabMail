@@ -140,10 +140,12 @@ function normalizeOneAttachment(x: Record<string, unknown>): EmailAttachment {
   }
   const size = pickNumber(x, ['size', 'groesse', 'größe', 'bytes'])
   const omitted = pickStr(x, ['omitted', 'weggelassen'])
+  const dataKey = pickStr(x, ['dataKey'])
   return {
     filename,
     mimeType,
     dataBase64,
+    ...(dataKey ? { dataKey } : {}),
     ...(size === undefined ? {} : { size }),
     ...(omitted ? { omitted } : {}),
   }
@@ -193,6 +195,7 @@ function parseAttachmentsFromRaw(raw: unknown): EmailAttachment[] | undefined {
   const usable = list.filter(
     (a) =>
       (a.dataBase64.length > 0 && looksLikeRealBase64Payload(a.dataBase64)) ||
+      a.dataKey !== undefined ||
       (a.omitted !== undefined && a.filename.length > 0),
   )
   return usable.length > 0 ? usable : undefined
@@ -210,7 +213,7 @@ function firstDefinedAttachmentArray(
 }
 
 /** Unterstützt n8n (deutsch) und ältere Webhook-Felder (englisch). */
-export function normalizeEmailEntry(id: string, raw: unknown): EmailRow {
+export function normalizeEmailEntry(id: string, raw: unknown, attachmentRoot = ''): EmailRow {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
 
   const sender = pickStr(o, ['absender', 'sender'])
@@ -245,7 +248,13 @@ export function normalizeEmailEntry(id: string, raw: unknown): EmailRow {
       'dateianhaenge',
       'files',
       'files_list',
-    ]) ?? undefined
+    ])?.map((a) =>
+      // Ausgelagerter Inhalt: hier schon den Ort dazuschreiben, damit die
+      // Stelle, die ihn später lädt, weder Besitzer noch Mail kennen muss.
+      a.dataKey !== undefined && attachmentRoot !== ''
+        ? { ...a, dataPath: `${attachmentRoot}/${id}/${a.dataKey}` }
+        : a,
+    ) ?? undefined
 
   const attachmentsAnalyzed = pickNumber(o, ['attachmentsAnalyzed'])
   const explicitHat = pickBool(o, ['hat_anhang', 'hasAttachment', 'hatAnhang'])
@@ -315,11 +324,11 @@ function rowHasContent(r: EmailRow): boolean {
   )
 }
 
-export function parseEmailsTree(data: unknown): EmailRow[] {
+export function parseEmailsTree(data: unknown, attachmentRoot = ''): EmailRow[] {
   if (!data || typeof data !== 'object') return []
   return Object.entries(data as Record<string, unknown>)
     .filter(([id]) => id.length > 0 && !id.startsWith('.') && !SKIP_ROOT_KEYS.has(id))
     .filter(([, v]) => v !== null && typeof v === 'object')
-    .map(([id, v]) => normalizeEmailEntry(id, v))
+    .map(([id, v]) => normalizeEmailEntry(id, v, attachmentRoot))
     .filter(rowHasContent)
 }
