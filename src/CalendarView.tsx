@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   addDays,
   ALL_DAY_REMINDER_CHOICES,
@@ -102,6 +102,44 @@ function eventFrom(
   }
 }
 
+/**
+ * Wie viel die Tastatur vom unteren Rand verdeckt.
+ *
+ * Auf dem iPhone bleibt das Fenster am unteren Rand des Bildschirms hängen,
+ * die Tastatur liegt darüber, und der Titel rutscht aus dem Sichtbaren. Der
+ * Wert hebt das Blatt um genau diese Höhe.
+ */
+function useKeyboardLift(enabled: boolean): number {
+  const [inset, setInset] = useState(0)
+
+  useEffect(() => {
+    if (!enabled) {
+      setInset(0)
+      return
+    }
+    const viewport = window.visualViewport
+    if (viewport === null || viewport === undefined) return
+
+    const sync = () => {
+      const covered = Math.round(window.innerHeight - viewport.height - viewport.offsetTop)
+      setInset(covered > 60 ? covered : 0)
+      // iOS schiebt die Seite, damit das Feld frei liegt. Das Blatt rechnet
+      // die Tastatur selbst ein — die Seite soll stehen bleiben.
+      if (window.scrollY !== 0) window.scrollTo(0, 0)
+    }
+
+    viewport.addEventListener('resize', sync)
+    viewport.addEventListener('scroll', sync)
+    sync()
+    return () => {
+      viewport.removeEventListener('resize', sync)
+      viewport.removeEventListener('scroll', sync)
+    }
+  }, [enabled])
+
+  return inset
+}
+
 function EventDialog({
   uid,
   editing,
@@ -176,6 +214,33 @@ function EventDialog({
   }
 
   const reminderChoices = form.allDay ? ALL_DAY_REMINDER_CHOICES : REMINDER_CHOICES
+  const titleRef = useRef<HTMLInputElement>(null)
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches,
+  )
+  const keyboardInset = useKeyboardLift(narrow)
+
+  // Auf dem Handy öffnet ein sofortiger Fokus die Tastatur und schiebt das
+  // Blatt, bevor man den Titel sieht. Dort tippt man ihn selbst an.
+  useEffect(() => {
+    if (narrow) return
+    titleRef.current?.focus()
+  }, [narrow])
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 767px)')
+    const onChange = () => setNarrow(query.matches)
+    query.addEventListener('change', onChange)
+    return () => query.removeEventListener('change', onChange)
+  }, [])
+
+  useEffect(() => {
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previous
+    }
+  }, [])
 
   return (
     <div
@@ -187,28 +252,33 @@ function EventDialog({
       onClick={() => !busy && onClose()}
     >
       <form
-        className="modal card calendar-dialog"
+        className="modal card calendar-dialog calendar-event-sheet"
+        style={{ '--keyboard-inset': `${keyboardInset}px` } as React.CSSProperties}
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault()
           void submit()
         }}
       >
-        <h3 id="calendar-event-title">{editing.id === null ? 'Neuer Termin' : 'Termin bearbeiten'}</h3>
+        <div className="calendar-dialog-head">
+          <h3 id="calendar-event-title">{editing.id === null ? 'Neuer Termin' : 'Termin bearbeiten'}</h3>
 
-        <label className="folder-modal-label">
-          Titel
-          <input
-            id="calendar-event-title-input"
-            data-testid="calendar-event-title"
-            type="text"
-            value={form.title}
-            maxLength={200}
-            autoFocus
-            onChange={(e) => patch({ title: e.target.value })}
-          />
-        </label>
+          <label className="folder-modal-label calendar-title-field">
+            Titel
+            <input
+              ref={titleRef}
+              id="calendar-event-title-input"
+              data-testid="calendar-event-title"
+              type="text"
+              value={form.title}
+              maxLength={200}
+              enterKeyHint="next"
+              onChange={(e) => patch({ title: e.target.value })}
+            />
+          </label>
+        </div>
 
+        <div className="calendar-dialog-body">
         <label className="calendar-check">
           <input
             type="checkbox"
@@ -314,6 +384,7 @@ function EventDialog({
             onChange={(e) => patch({ notes: e.target.value })}
           />
         </label>
+        </div>
 
         {error ? (
           <p className="error small" role="alert" data-testid="calendar-event-error">
@@ -321,7 +392,7 @@ function EventDialog({
           </p>
         ) : null}
 
-        <div className="modal-actions">
+        <div className="modal-actions calendar-dialog-actions">
           {editing.id !== null ? (
             <button
               type="button"

@@ -3644,6 +3644,45 @@ button.calendar-upcoming-date:hover:not(:disabled) {
   overflow-y: auto;
 }
 
+/* Titel bleibt oben, der Rest rollt, Speichern bleibt unten. */
+.modal.card.calendar-event-sheet {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 0.85rem;
+}
+
+.calendar-dialog-head h3 {
+  margin-bottom: 0;
+}
+
+.calendar-title-field {
+  margin-top: 0.65rem;
+}
+
+/* Schlägt `form.card input { font: inherit }`, sonst bleibt der Titel bei 0.85rem. */
+.calendar-event-sheet .calendar-title-field input {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  min-height: 2.75rem;
+}
+
+.calendar-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.calendar-dialog-actions {
+  flex: 0 0 auto;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+
 .calendar-dialog textarea {
   font: inherit;
   padding: 0.5rem 0.6rem;
@@ -3763,5 +3802,54 @@ a.calendar-subscribe-go {
 
   .calendar-event-when {
     flex-basis: 5.6rem;
+  }
+
+  /*
+   * Das Terminformular nimmt den sichtbaren Bereich. Die Tastatur zieht es
+   * nach oben, statt den Titel darunter zu begraben. 16px, damit das iPhone
+   * die Seite beim Tippen nicht heranzoomt — danach kommt man vom Titel weg
+   * und nicht wieder hin.
+   */
+  .modal-overlay:has(.calendar-event-sheet) {
+    padding: 0;
+  }
+
+  .modal.card.calendar-event-sheet {
+    width: 100%;
+    max-width: none;
+    height: calc(100dvh - env(safe-area-inset-top, 0px) - var(--keyboard-inset, 0px));
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - var(--keyboard-inset, 0px));
+    margin-bottom: var(--keyboard-inset, 0px);
+    border-radius: 16px 16px 0 0;
+    padding-bottom: max(0.85rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .calendar-event-sheet .calendar-title-field input,
+  .calendar-event-sheet .folder-modal-label input,
+  .calendar-event-sheet .folder-modal-label select,
+  .calendar-event-sheet textarea {
+    font-size: 1rem;
+    min-height: 2.75rem;
+  }
+
+  .calendar-event-sheet .calendar-title-field input {
+    font-size: 1.125rem;
+    min-height: 3rem;
+  }
+
+  .calendar-event-sheet .calendar-when-row {
+    flex-direction: column;
+  }
+
+  .calendar-event-sheet .calendar-check {
+    min-height: 2.75rem;
+    margin-top: 0.35rem;
+    font-size: 1rem;
+    color: var(--text);
+  }
+
+  .calendar-event-sheet .calendar-check input {
+    width: 1.25rem;
+    height: 1.25rem;
   }
 }
