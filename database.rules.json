@@ -110,8 +110,10 @@
               "notes": { ".validate": "newData.isString() && newData.val().length <= 4000" },
               "reminderMinutes": { ".validate": "newData.isNumber() && newData.val() >= -1440 && newData.val() <= 40320" },
               "reminders": {
-                ".validate": "newData.hasChildren() && newData.numChildren() <= 8 && newData.numChildren() >= 1",
-                "$index": { ".validate": "newData.isNumber() && newData.val() >= -1440 && newData.val() <= 40320" }
+                ".validate": "newData.hasChildren()",
+                "$index": {
+                  ".validate": "$index.matches(/^[0-7]$/) && newData.isNumber() && newData.val() >= -1440 && newData.val() <= 40320"
+                }
               },
               "createdAt": { ".validate": "newData.isNumber()" },
               "updatedAt": { ".validate": "newData.isNumber()" },
