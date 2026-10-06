@@ -83,14 +83,17 @@ function eventLines(id, event, now) {
   if (event.location) lines.push(`LOCATION:${escapeText(event.location)}`);
   if (event.notes) lines.push(`DESCRIPTION:${escapeText(event.notes)}`);
 
-  // Die Erinnerung geht mit: wer den Kalender abonniert, wird auch dort
-  // erinnert, wo HabMail selbst keinen Push schicken kann.
-  if (typeof event.reminderMinutes === "number" && event.reminderMinutes >= 0) {
+  // Die Erinnerungen gehen mit: wer den Kalender abonniert, wird auch dort
+  // erinnert, wo HabMail selbst keinen Push schicken kann. Jede Zeit ein Wecker.
+  const alarms = (
+    Array.isArray(event.reminders) && event.reminders.length > 0 ? event.reminders : [event.reminderMinutes]
+  ).filter((minutes) => typeof minutes === "number" && minutes >= 0);
+  for (const minutes of alarms) {
     lines.push(
       "BEGIN:VALARM",
       "ACTION:DISPLAY",
       `DESCRIPTION:${escapeText(event.title)}`,
-      `TRIGGER:-PT${Math.round(event.reminderMinutes)}M`,
+      `TRIGGER:-PT${Math.round(minutes)}M`,
       "END:VALARM",
     );
   }

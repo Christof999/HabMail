@@ -3683,6 +3683,69 @@ button.calendar-upcoming-date:hover:not(:disabled) {
   background: var(--card);
 }
 
+.calendar-reminders {
+  margin: 0.85rem 0 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.calendar-reminders legend {
+  padding: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.calendar-reminder-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+}
+
+button.calendar-reminder-pick {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+button.calendar-reminder-pick.is-on {
+  background: var(--accent);
+  color: var(--accent-fg, #fff);
+  border-color: transparent;
+}
+
+.calendar-reminder-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+  font-size: 0.9rem;
+}
+
+.calendar-reminder-custom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+
+.calendar-reminder-custom input {
+  width: 4.75rem;
+}
+
+.calendar-reminder-custom select {
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
 .calendar-dialog textarea {
   font: inherit;
   padding: 0.5rem 0.6rem;
@@ -3851,5 +3914,22 @@ a.calendar-subscribe-go {
   .calendar-event-sheet .calendar-check input {
     width: 1.25rem;
     height: 1.25rem;
+  }
+
+  button.calendar-reminder-pick {
+    min-height: 2.75rem;
+    font-size: 1rem;
+  }
+
+  .calendar-reminder-custom {
+    flex-direction: column;
+  }
+
+  .calendar-event-sheet .calendar-reminder-custom input,
+  .calendar-event-sheet .calendar-reminder-custom select,
+  .calendar-reminder-custom button {
+    width: 100%;
+    font-size: 1rem;
+    min-height: 2.75rem;
   }
 }

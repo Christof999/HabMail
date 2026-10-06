@@ -10,6 +10,7 @@ import {
   formatDayLong,
   formatWhen,
   matchAppointment,
+  remindersOf,
   sameDay,
   type CalendarEvent,
   type CalendarEventInput,
@@ -72,7 +73,9 @@ export function draftForAppointment(
         : existing?.icalUid
           ? { icalUid: existing.icalUid }
           : {}),
-      reminderMinutes: existing?.reminderMinutes ?? (appointment.allDay ? -480 : 30),
+      reminders: existing !== null && remindersOf(existing).length > 0
+        ? remindersOf(existing)
+        : [appointment.allDay ? -480 : 30],
     },
   }
 }

@@ -215,9 +215,15 @@ const EVENT_FIELDS = {
   allDay: { type: 'boolean', description: 'Ganztägig. Ergibt sich sonst aus einem Datum ohne Uhrzeit' },
   location: { type: 'string' },
   notes: { type: 'string' },
+  reminders: {
+    type: 'array',
+    items: { type: 'number' },
+    description:
+      'Push-Erinnerungen aufs Telefon, je Zahl so viele Minuten vor dem Beginn. Mehrere möglich, z.B. 1440, 60 und 10.',
+  },
   reminderMinutes: {
     type: 'number',
-    description: 'Push-Erinnerung aufs Telefon, so viele Minuten vor dem Beginn',
+    description: 'Eine einzelne Erinnerung, Minuten vor dem Beginn. Mehrere stehen in reminders.',
   },
 }
 

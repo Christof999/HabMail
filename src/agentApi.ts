@@ -29,6 +29,7 @@ import {
   formatWhen,
   overlapping,
   parseEventsTree,
+  remindersOf,
   saveEvent,
   type CalendarEvent,
   type CalendarEventInput,
@@ -128,7 +129,10 @@ export type AgentEventInput = {
   allDay?: boolean
   location?: string
   notes?: string
+  /** Eine Erinnerung, Minuten vor dem Beginn. Mehrere stehen in `reminders`. */
   reminderMinutes?: number
+  /** Mehrere Erinnerungen, Minuten vor dem Beginn. */
+  reminders?: number[]
 }
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
@@ -166,11 +170,16 @@ function toEventInput(input: AgentEventInput): CalendarEventInput {
     allDay,
     ...(input.location ? { location: String(input.location) } : {}),
     ...(input.notes ? { notes: String(input.notes) } : {}),
-    ...(typeof input.reminderMinutes === 'number' ? { reminderMinutes: input.reminderMinutes } : {}),
+    ...(Array.isArray(input.reminders)
+      ? { reminders: input.reminders.filter((value) => typeof value === 'number') }
+      : typeof input.reminderMinutes === 'number'
+        ? { reminders: [input.reminderMinutes] }
+        : {}),
   }
 }
 
 function describeEvent(event: CalendarEvent) {
+  const reminders = remindersOf(event)
   return {
     id: event.id,
     title: event.title,
@@ -180,7 +189,8 @@ function describeEvent(event: CalendarEvent) {
     when: `${new Date(event.start).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}, ${formatWhen(event)}`,
     ...(event.location ? { location: event.location } : {}),
     ...(event.notes ? { notes: event.notes } : {}),
-    ...(event.reminderMinutes === undefined ? {} : { reminderMinutes: event.reminderMinutes }),
+    ...(reminders.length === 0 ? {} : { reminders }),
+    ...(reminders.length === 1 ? { reminderMinutes: reminders[0] } : {}),
   }
 }
 
@@ -276,7 +286,7 @@ export function createAgentApi(handlers: AgentHandlers) {
           'replyTo(id, body, { subject?, to?, mailboxId?, dryRun? })':
             'Antwort auf eine Mail, Original wird zitiert',
           'listEvents({ from?, to? })': 'Termine im Kalender, ohne Angabe die nächsten 14 Tage',
-          'createEvent({ title, start, end?, allDay?, location?, notes?, reminderMinutes?, dryRun? })':
+          'createEvent({ title, start, end?, allDay?, location?, notes?, reminders?, reminderMinutes?, dryRun? })':
             'Termin eintragen; die Antwort nennt Überschneidungen. dryRun:true prüft nur',
           'openEvent({ title?, start?, end?, … })':
             'Terminformular vorbelegt öffnen; gespeichert wird von Hand',

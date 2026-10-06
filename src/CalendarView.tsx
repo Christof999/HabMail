@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   addDays,
   ALL_DAY_REMINDER_CHOICES,
+  MAX_REMINDERS,
+  MAX_REMINDER_MINUTES,
   deleteEvent,
   eventsOnDay,
   feedToken,
@@ -11,8 +13,11 @@ import {
   formatWhen,
   fromInputs,
   monthWeeks,
+  normalizeReminders,
   overlapping,
   REMINDER_CHOICES,
+  reminderLabel,
+  remindersOf,
   sameDay,
   saveEvent,
   startOfDay,
@@ -44,7 +49,7 @@ type FormState = {
   endTime: string
   location: string
   notes: string
-  reminder: string
+  reminders: number[]
 }
 
 function formFrom(draft: CalendarDraft, fallbackDay: Date): FormState {
@@ -70,7 +75,7 @@ function formFrom(draft: CalendarDraft, fallbackDay: Date): FormState {
     endTime: toTimeInput(end),
     location: draft.location ?? '',
     notes: draft.notes ?? '',
-    reminder: draft.reminderMinutes === undefined ? '' : String(draft.reminderMinutes),
+    reminders: remindersOf(draft),
   }
 }
 
@@ -96,7 +101,7 @@ function eventFrom(
     allDay: form.allDay,
     ...(form.location.trim() ? { location: form.location } : {}),
     ...(form.notes.trim() ? { notes: form.notes } : {}),
-    ...(form.reminder === '' ? {} : { reminderMinutes: Number(form.reminder) }),
+    ...(form.reminders.length > 0 ? { reminders: form.reminders } : {}),
     ...(kept?.emailId ? { emailId: kept.emailId } : {}),
     ...(kept?.icalUid ? { icalUid: kept.icalUid } : {}),
   }
@@ -180,7 +185,7 @@ function EventDialog({
         next.endTime = toTimeInput(end)
       }
       // Die Auswahl für Erinnerungen ist je nach Art eine andere.
-      if (change.allDay !== undefined && change.allDay !== current.allDay) next.reminder = ''
+      if (change.allDay !== undefined && change.allDay !== current.allDay) next.reminders = []
       return next
     })
   }
@@ -193,7 +198,7 @@ function EventDialog({
     setBusy(true)
     setError(null)
     try {
-      await saveEvent(uid, editing.id, parsed)
+      await saveEvent(uid, editing.id, parsed, { reminders: remindersOf(editing.draft) })
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Der Termin ließ sich nicht speichern.')
@@ -205,7 +210,7 @@ function EventDialog({
     if (editing.id === null) return
     setBusy(true)
     try {
-      await deleteEvent(uid, editing.id)
+      await deleteEvent(uid, editing.id, remindersOf(editing.draft))
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Der Termin ließ sich nicht löschen.')
@@ -214,6 +219,50 @@ function EventDialog({
   }
 
   const reminderChoices = form.allDay ? ALL_DAY_REMINDER_CHOICES : REMINDER_CHOICES
+  const [customAmount, setCustomAmount] = useState('15')
+  const [customUnit, setCustomUnit] = useState<'minutes' | 'hours' | 'days'>('minutes')
+  const [reminderNote, setReminderNote] = useState<string | null>(null)
+  const presetMinutes = new Set(reminderChoices.map((choice) => choice.minutes))
+  const customReminders = form.reminders.filter((minutes) => !presetMinutes.has(minutes))
+
+  function setReminders(reminders: number[]) {
+    setReminderNote(null)
+    patch({ reminders: normalizeReminders(reminders) })
+  }
+
+  function toggleReminder(minutes: number) {
+    if (form.reminders.includes(minutes)) {
+      setReminders(form.reminders.filter((value) => value !== minutes))
+      return
+    }
+    if (form.reminders.length >= MAX_REMINDERS) {
+      setReminderNote('Höchstens acht Erinnerungen.')
+      return
+    }
+    setReminders([...form.reminders, minutes])
+  }
+
+  function addCustomReminder() {
+    const amount = Number(customAmount)
+    if (!Number.isInteger(amount) || amount < 0) {
+      setReminderNote('Bitte eine ganze Zahl ab null.')
+      return
+    }
+    if (customUnit !== 'minutes' && amount === 0) {
+      setReminderNote('Bitte eine Zeit größer als null.')
+      return
+    }
+    const minutes = customUnit === 'days' ? amount * 1440 : customUnit === 'hours' ? amount * 60 : amount
+    if (minutes > MAX_REMINDER_MINUTES) {
+      setReminderNote('Höchstens vier Wochen vorher.')
+      return
+    }
+    if (form.reminders.includes(minutes)) {
+      setReminderNote(null)
+      return
+    }
+    toggleReminder(minutes)
+  }
   const titleRef = useRef<HTMLInputElement>(null)
   const [narrow, setNarrow] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches,
@@ -353,26 +402,76 @@ function EventDialog({
           />
         </label>
 
-        <label className="folder-modal-label">
-          Erinnerung aufs Telefon
-          <select
-            data-testid="calendar-event-reminder"
-            value={form.reminder}
-            onChange={(e) => patch({ reminder: e.target.value })}
+        <fieldset className="calendar-reminders" data-testid="calendar-event-reminder">
+          <legend>Erinnerungen aufs Telefon</legend>
+          <div className="calendar-reminder-picks">
+            {reminderChoices.map((choice) => {
+              const on = form.reminders.includes(choice.minutes)
+              return (
+                <button
+                  key={choice.minutes}
+                  type="button"
+                  className={on ? 'calendar-reminder-pick is-on' : 'calendar-reminder-pick'}
+                  aria-pressed={on}
+                  onClick={() => toggleReminder(choice.minutes)}
+                >
+                  {choice.label}
+                </button>
+              )
+            })}
+          </div>
+          {customReminders.map((minutes) => (
+            <div key={minutes} className="calendar-reminder-row">
+              <span>{reminderLabel(minutes)}</span>
+              <button
+                type="button"
+                className="ghost small-btn"
+                aria-label={`${reminderLabel(minutes)} entfernen`}
+                onClick={() => toggleReminder(minutes)}
+              >
+                Entfernen
+              </button>
+            </div>
+          ))}
+          <div
+            className="calendar-reminder-custom"
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return
+              e.preventDefault()
+              addCustomReminder()
+            }}
           >
-            <option value="">Keine</option>
-            {reminderChoices.map((choice) => (
-              <option key={choice.minutes} value={choice.minutes}>
-                {choice.label}
-              </option>
-            ))}
-            {/* Ein Wert, den ein Agent gesetzt hat und der in der Liste fehlt,
-                darf beim Bearbeiten nicht stillschweigend verloren gehen. */}
-            {form.reminder !== '' && !reminderChoices.some((c) => String(c.minutes) === form.reminder) ? (
-              <option value={form.reminder}>{form.reminder} Minuten vorher</option>
-            ) : null}
-          </select>
-        </label>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={MAX_REMINDER_MINUTES}
+              step={1}
+              value={customAmount}
+              aria-label="Eigene Erinnerung"
+              data-testid="calendar-reminder-amount"
+              onChange={(e) => setCustomAmount(e.target.value)}
+            />
+            <select
+              value={customUnit}
+              aria-label="Einheit"
+              data-testid="calendar-reminder-unit"
+              onChange={(e) => setCustomUnit(e.target.value as 'minutes' | 'hours' | 'days')}
+            >
+              <option value="minutes">Minuten vorher</option>
+              <option value="hours">Stunden vorher</option>
+              <option value="days">Tage vorher</option>
+            </select>
+            <button type="button" className="ghost small-btn" data-testid="calendar-reminder-add" onClick={addCustomReminder}>
+              Hinzufügen
+            </button>
+          </div>
+          {reminderNote ? (
+            <p className="muted small" role="status">
+              {reminderNote}
+            </p>
+          ) : null}
+        </fieldset>
 
         <label className="folder-modal-label">
           Notiz

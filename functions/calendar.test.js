@@ -3,7 +3,7 @@ const { test } = require("node:test");
 
 const { berlinDate, berlinMidnight, berlinTime } = require("./berlinTime");
 const { buildCalendar, fold } = require("./ical");
-const { describeEvent, freeSlots, normalizeEvent, parseWhen, reminderText } = require("./calendar");
+const { describeEvent, freeSlots, normalizeEvent, parseWhen, reminderOffsets, reminderText } = require("./calendar");
 
 const iso = (ms) => new Date(ms).toISOString();
 
@@ -101,6 +101,32 @@ test("freie Zeiten: werktags im Bürofenster, um Termine herum", () => {
   assert.deepEqual(weekend, []);
 });
 
+test("mehrere Erinnerungen, ohne Doppelte und ohne Unsinn", () => {
+  const event = normalizeEvent({
+    title: "Abnahme",
+    start: "2026-10-06T14:00",
+    reminders: [10, 60, 10, 1440, 999999],
+  });
+  assert.deepEqual(event.reminders, [1440, 60, 10]);
+  assert.equal(event.reminderMinutes, undefined);
+  assert.deepEqual(describeEvent("e", event).reminders, [1440, 60, 10]);
+});
+
+test("eine Erinnerung bleibt der einzelne Wert, Ändern behält die Liste", () => {
+  const base = normalizeEvent({ title: "Abnahme", start: "2026-10-06T14:00", reminderMinutes: 30 });
+  assert.deepEqual(base.reminders, [30]);
+  assert.equal(base.reminderMinutes, 30);
+
+  const kept = normalizeEvent({ start: "2026-10-07T09:00" }, base);
+  assert.deepEqual(kept.reminders, [30]);
+
+  const replaced = normalizeEvent({ reminders: [1440, 15] }, base);
+  assert.deepEqual(replaced.reminders, [1440, 15]);
+  assert.equal(reminderOffsets({ reminderMinutes: 45 }).join(","), "45");
+  const start = 1_000_000;
+  assert.equal(reminderOffsets({ reminders: [1440, 10], start }).includes(10), true);
+});
+
 test("die Erinnerung sagt, wie lange es noch ist", () => {
   const start = berlinTime("2026-10-06", 14);
   const event = { title: "Baustelle Müller", start, end: start + 3_600_000, location: "Hauptstr. 3" };
@@ -109,6 +135,7 @@ test("die Erinnerung sagt, wie lange es noch ist", () => {
     body: "Di., 06.10.2026, 14:00 · Hauptstr. 3",
   });
   assert.match(reminderText(event, start - 3 * 3_600_000).title, /^In 3 Std\./);
+  assert.match(reminderText(event, start - 24 * 3_600_000).title, /^In 1 Tag/);
   assert.match(reminderText({ ...event, allDay: true }, start).title, /^Heute:/);
 });
 
@@ -131,6 +158,7 @@ test("der Feed ist gültiges iCalendar: Zeiten in UTC, Ganztägiges als Datum, E
         location: "Hauptstr. 3",
         notes: "Schlüssel\nmitbringen",
         reminderMinutes: 15,
+        reminders: [1440, 15],
         updatedAt: Date.parse("2026-10-01T08:00:00Z"),
       },
     },
@@ -145,6 +173,7 @@ test("der Feed ist gültiges iCalendar: Zeiten in UTC, Ganztägiges als Datum, E
   assert.match(feed, /SUMMARY:Abnahme\\; Müller\\, Hauptstr\./);
   assert.match(feed, /DESCRIPTION:Schlüssel\\nmitbringen/);
   assert.match(feed, /TRIGGER:-PT15M/);
+  assert.match(feed, /TRIGGER:-PT1440M/);
   // Zwei ganze Tage: das Ende ist der Tag danach.
   assert.match(feed, /DTSTART;VALUE=DATE:20261024\r\nDTEND;VALUE=DATE:20261026/);
 });

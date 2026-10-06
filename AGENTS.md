@@ -59,7 +59,7 @@ await window.habmail.createEvent({
   start: '2026-10-06T14:00',   // ohne Zone: Zeit des Geräts; nur ein Datum = ganztägig
   end: '2026-10-06T15:30',
   location: 'Hauptstr. 3',
-  reminderMinutes: 30,          // Push aufs Telefon
+  reminders: [1440, 60, 10],   // Push: Vortag, eine Stunde, zehn Minuten
   dryRun: true,                 // nennt nur, womit es sich überschneidet
 })
 window.habmail.openEvent({ title: '…', start: '…' })  // Formular öffnen, Mensch speichert
@@ -214,7 +214,8 @@ Dazu der Kalender der Person, der der Key gehört:
 | `update_event`, `delete_event` | Ändern und löschen, über die `id` aus `list_events` |
 
 Zeiten ohne Zone sind Berliner Zeit, ein Datum ohne Uhrzeit ist ein ganzer
-Tag. `reminderMinutes` schickt eine Push-Nachricht aufs Telefon.
+Tag. `reminders` schickt Push-Nachrichten aufs Telefon, eine je Zeitpunkt
+(Minuten vor dem Beginn); `reminderMinutes` ist die einzelne Erinnerung.
 
 Anhänge nimmt `send_mail` nur als Base64 im Aufruf. Für Bilder und Dokumente
 von der Platte gibt es deshalb ein Skript, das die Dateien selbst liest und

@@ -104,12 +104,11 @@ function normalizeEvent(input, base = null) {
   const notes = input.notes === undefined ? (base?.notes ?? "") : text(input.notes, MAX_NOTES);
   if (notes !== "") event.notes = notes;
 
-  const reminder = input.reminderMinutes === undefined ? base?.reminderMinutes : input.reminderMinutes;
-  if (typeof reminder === "number" && Number.isFinite(reminder)) {
-    event.reminderMinutes = Math.min(
-      MAX_REMINDER_MINUTES,
-      Math.max(MIN_REMINDER_MINUTES, Math.round(reminder)),
-    );
+  const reminders = takeReminders(input, base);
+  if (reminders.length > 0) {
+    event.reminders = reminders;
+    // Eine einzelne bleibt auch unter dem alten Feld lesbar.
+    if (reminders.length === 1) event.reminderMinutes = reminders[0];
   }
 
   if (base?.emailId) event.emailId = base.emailId;
@@ -123,6 +122,7 @@ function normalizeEvent(input, base = null) {
 
 /** Wie ein Termin einem Agenten gezeigt wird — mit lesbarer Zeit dazu. */
 function describeEvent(id, event) {
+  const offsets = reminderOffsets(event);
   return {
     id,
     title: event.title,
@@ -134,7 +134,8 @@ function describeEvent(id, event) {
       : `${berlinLabel(event.start)} – ${berlinLabel(event.end).slice(-5)}`,
     ...(event.location ? { location: event.location } : {}),
     ...(event.notes ? { notes: event.notes } : {}),
-    ...(typeof event.reminderMinutes === "number" ? { reminderMinutes: event.reminderMinutes } : {}),
+    ...(offsets.length > 0 ? { reminders: offsets } : {}),
+    ...(offsets.length === 1 ? { reminderMinutes: offsets[0] } : {}),
   };
 }
 
@@ -156,26 +157,74 @@ async function eventsBetween(uid, from, to) {
 
 /* ----------------------------------------------------------- Erinnerungen */
 
-function reminderKey(uid, eventId) {
-  return `${uid}_${eventId}`;
+const MAX_REMINDERS = 8;
+
+/** Ganze Minuten, jede Zeit nur einmal, die früheste zuerst, höchstens acht. */
+function normalizeReminderList(values) {
+  const unique = new Set();
+  for (const value of values) {
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    const minutes = Math.round(value);
+    if (minutes < MIN_REMINDER_MINUTES || minutes > MAX_REMINDER_MINUTES) continue;
+    unique.add(minutes);
+  }
+  return [...unique].sort((a, b) => b - a).slice(0, MAX_REMINDERS);
+}
+
+/** Die Liste, oder — bei älteren Terminen — der einzelne Wert. */
+function reminderOffsets(event) {
+  if (event === null || event === undefined) return [];
+  if (Array.isArray(event.reminders) && event.reminders.length > 0) return normalizeReminderList(event.reminders);
+  if (typeof event.reminderMinutes === "number" && Number.isFinite(event.reminderMinutes)) {
+    return normalizeReminderList([event.reminderMinutes]);
+  }
+  return [];
 }
 
 /**
- * Die Erinnerung zu einem Termin in die Warteschlange legen oder herausnehmen.
- * Legt der Browser einen Termin an, tut er dasselbe selbst (`src/calendar.ts`).
+ * Was gespeichert wird. Eine genannte Liste ersetzt, eine einzelne Zahl auch.
+ * Fehlt beides, bleibt der bisherige Termin, wie er ist.
  */
-async function syncReminder(uid, eventId, event) {
-  const ref = admin.database().ref(`${CALENDAR_REMINDERS_PATH}/${reminderKey(uid, eventId)}`);
-  if (event === null || typeof event.reminderMinutes !== "number") {
-    await ref.remove();
-    return;
+function takeReminders(input, base) {
+  if (Array.isArray(input.reminders)) return normalizeReminderList(input.reminders);
+  if (input.reminderMinutes !== undefined) {
+    return typeof input.reminderMinutes === "number" && Number.isFinite(input.reminderMinutes)
+      ? normalizeReminderList([input.reminderMinutes])
+      : [];
   }
-  const at = event.start - event.reminderMinutes * MINUTE;
-  if (at <= Date.now()) {
-    await ref.remove();
-    return;
+  return reminderOffsets(base);
+}
+
+function reminderMatches(event, at) {
+  return reminderOffsets(event).some((minutes) => Math.abs(event.start - minutes * MINUTE - at) < MINUTE);
+}
+
+function reminderQueueKey(uid, eventId, minutes) {
+  return `${uid}_${eventId}_${minutes}`;
+}
+
+/**
+ * Die Erinnerungen eines Termins in die Warteschlange legen.
+ *
+ * Jede Zeit bekommt einen eigenen Eintrag, sonst könnte die nächste die
+ * vorige überschreiben. `previous` sind die Minuten, die der Termin bisher
+ * hatte — die verschwinden, wenn sie nicht mehr gewählt sind. Der Schlüssel
+ * ohne Zeit gehört zur einzelnen Erinnerung von früher.
+ */
+async function syncReminder(uid, eventId, event, previous = []) {
+  const updates = { [`${uid}_${eventId}`]: null };
+  const next = event === null ? [] : reminderOffsets(event);
+  for (const minutes of new Set([...previous, ...next])) {
+    updates[reminderQueueKey(uid, eventId, minutes)] = null;
   }
-  await ref.set({ uid, eventId, at });
+  if (event !== null) {
+    const now = Date.now();
+    for (const minutes of next) {
+      const at = event.start - minutes * MINUTE;
+      if (at > now) updates[reminderQueueKey(uid, eventId, minutes)] = { uid, eventId, at };
+    }
+  }
+  await admin.database().ref(CALENDAR_REMINDERS_PATH).update(updates);
 }
 
 function reminderText(event, now) {
@@ -187,9 +236,11 @@ function reminderText(event, now) {
         ? "Jetzt"
         : minutes < 90
           ? `In ${minutes} Min.`
-          : minutes < 36 * 60
+          : minutes < 18 * 60
             ? `In ${Math.round(minutes / 60)} Std.`
-            : `In ${Math.round(minutes / 1440)} Tagen`;
+            : Math.round(minutes / 1440) <= 1
+              ? "In 1 Tag"
+              : `In ${Math.round(minutes / 1440)} Tagen`;
   return {
     title: `${lead}: ${event.title}`.slice(0, 120),
     body: [berlinLabel(event.start, event.allDay === true), event.location].filter(Boolean).join(" · "),
@@ -225,17 +276,17 @@ async function sendDueReminders(now = Date.now()) {
 
     // Der Termin kann inzwischen gelöscht oder verschoben sein. Gilt die
     // Erinnerung nicht mehr für das, was jetzt dasteht, bleibt sie aus.
-    const stillMeant =
-      event !== null &&
-      typeof event.reminderMinutes === "number" &&
-      Math.abs(event.start - event.reminderMinutes * MINUTE - entry.at) < MINUTE;
+    const stillMeant = event !== null && reminderMatches(event, entry.at);
     if (!stillMeant || now - entry.at > STALE_AFTER_MS) {
       report.dropped += 1;
       continue;
     }
 
+    const lead = Math.round((event.start - entry.at) / MINUTE);
     try {
-      await sendToUser(uid, { ...reminderText(event, now), tag: `habmail-termin-${eventId}` });
+      // Eigene Kennung je Zeitpunkt, sonst ersetzt die nächste Erinnerung die
+      // vorige auf dem Sperrbildschirm.
+      await sendToUser(uid, { ...reminderText(event, now), tag: `habmail-termin-${eventId}-${lead}` });
       report.sent += 1;
     } catch (error) {
       console.warn(`Erinnerung nicht verschickt (${uid}/${eventId}):`, error);
@@ -389,7 +440,7 @@ async function handleAgent(uid, body) {
       }
       const ref = eventsRef.push();
       await ref.set(event);
-      await syncReminder(uid, ref.key, event);
+      await syncReminder(uid, ref.key, event, []);
       return { event: describeEvent(ref.key, event), overlaps };
     }
     case "update": {
@@ -403,14 +454,15 @@ async function handleAgent(uid, body) {
         source: current.source ?? "agent",
       };
       await eventsRef.child(id).set(event);
-      await syncReminder(uid, id, event);
+      await syncReminder(uid, id, event, reminderOffsets(current));
       return { event: describeEvent(id, event) };
     }
     case "delete": {
       const id = typeof body.id === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(body.id) ? body.id : "";
       if (id === "") throw new CalendarInputError("Diesen Termin gibt es nicht.");
+      const current = (await eventsRef.child(id).get()).val();
       await eventsRef.child(id).remove();
-      await syncReminder(uid, id, null);
+      await syncReminder(uid, id, null, reminderOffsets(current));
       return { deleted: id };
     }
     default:
@@ -458,6 +510,7 @@ module.exports = {
   freeSlots,
   normalizeEvent,
   parseWhen,
+  reminderOffsets,
   reminderText,
   sendDueReminders,
   agentSecret,

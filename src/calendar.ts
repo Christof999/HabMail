@@ -24,8 +24,13 @@ export type CalendarEvent = {
   allDay: boolean
   location?: string
   notes?: string
-  /** Minuten vor dem Anfang. Negativ heißt danach — „um 8 Uhr am selben Tag". */
+  /**
+   * Minuten vor dem Anfang. Negativ heißt danach — „um 8 Uhr am selben Tag".
+   * Eine einzelne Erinnerung aus älteren Terminen. Mehrere stehen in `reminders`.
+   */
   reminderMinutes?: number
+  /** Mehrere Erinnerungen, Minuten vor dem Anfang. Die früheste zuerst. */
+  reminders?: number[]
   /** Die Mail, aus der der Termin stammt. */
   emailId?: string
   /** UID einer Einladung. Eine spätere Mail zur selben Einladung trifft diesen Termin. */
@@ -52,6 +57,7 @@ export function parseEventsTree(data: unknown): CalendarEvent[] {
       ...(typeof o.location === 'string' && o.location !== '' ? { location: o.location } : {}),
       ...(typeof o.notes === 'string' && o.notes !== '' ? { notes: o.notes } : {}),
       ...(typeof o.reminderMinutes === 'number' ? { reminderMinutes: o.reminderMinutes } : {}),
+      ...readReminders(o),
       ...(typeof o.emailId === 'string' ? { emailId: o.emailId } : {}),
       ...(typeof o.icalUid === 'string' && o.icalUid !== '' ? { icalUid: o.icalUid } : {}),
     })
@@ -79,17 +85,31 @@ export function watchEvents(
  * den Termin schreibt, hält sie aktuell; beides zusammen, damit nie eine
  * Erinnerung zu einem Termin übrig bleibt, den es so nicht mehr gibt.
  */
-function writes(uid: string, id: string, event: CalendarEventInput | null): Record<string, unknown> {
-  const reminderPath = `${CALENDAR_REMINDERS_PATH}/${uid}_${id}`
+function writes(
+  uid: string,
+  id: string,
+  event: CalendarEventInput | null,
+  previous: number[] = [],
+): Record<string, unknown> {
   const eventPath = `${userCalendarEventsPath(uid)}/${id}`
-  if (event === null) return { [eventPath]: null, [reminderPath]: null }
-
-  const at =
-    event.reminderMinutes === undefined ? null : event.start - event.reminderMinutes * MINUTE
-  return {
+  const updates: Record<string, unknown> = {
     [eventPath]: event,
-    [reminderPath]: at !== null && at > Date.now() ? { uid, eventId: id, at } : null,
+    // Der alte Schlüssel ohne Zeit — eine Erinnerung je Termin. Sonst bliebe
+    // er neben den neuen liegen und käme ein zweites Mal.
+    [`${CALENDAR_REMINDERS_PATH}/${uid}_${id}`]: null,
   }
+  const next = event === null ? [] : remindersOf(event)
+  for (const minutes of new Set([...previous, ...next])) {
+    updates[reminderQueueKey(uid, id, minutes)] = null
+  }
+  if (event !== null) {
+    const now = Date.now()
+    for (const minutes of next) {
+      const at = event.start - minutes * MINUTE
+      if (at > now) updates[reminderQueueKey(uid, id, minutes)] = { uid, eventId: id, at }
+    }
+  }
+  return updates
 }
 
 /** Legt an oder ändert. Gibt die Kennung des Termins zurück. */
@@ -97,7 +117,7 @@ export async function saveEvent(
   uid: string,
   id: string | null,
   input: CalendarEventInput,
-  existing?: { createdAt?: number },
+  existing?: { createdAt?: number; reminders?: number[] },
 ): Promise<string> {
   const db = getFirebaseDb()
   const key = id ?? push(ref(db, userCalendarEventsPath(uid))).key
@@ -117,16 +137,21 @@ export async function saveEvent(
   }
   if (input.location?.trim()) record.location = input.location.trim().slice(0, 300)
   if (input.notes?.trim()) record.notes = input.notes.trim().slice(0, 4000)
-  if (input.reminderMinutes !== undefined) record.reminderMinutes = input.reminderMinutes
+  const reminders = remindersOf(input)
+  if (reminders.length > 0) {
+    record.reminders = reminders
+    // Eine einzelne bleibt auch unter dem alten Feld lesbar.
+    if (reminders.length === 1) record.reminderMinutes = reminders[0]
+  }
   if (input.emailId) record.emailId = input.emailId
   if (input.icalUid) record.icalUid = input.icalUid.slice(0, 300)
 
-  await update(ref(db), writes(uid, key, record as unknown as CalendarEventInput))
+  await update(ref(db), writes(uid, key, record as unknown as CalendarEventInput, existing?.reminders ?? []))
   return key
 }
 
-export async function deleteEvent(uid: string, id: string): Promise<void> {
-  await update(ref(getFirebaseDb()), writes(uid, id, null))
+export async function deleteEvent(uid: string, id: string, previousReminders: number[] = []): Promise<void> {
+  await update(ref(getFirebaseDb()), writes(uid, id, null, previousReminders))
 }
 
 /* ---------------------------------------------------------------- Abo-Link */
@@ -291,6 +316,60 @@ export function fromInputs(date: string, time: string): number {
   const [year, month, day] = date.split('-').map(Number)
   const [hour, minute] = (time || '00:00').split(':').map(Number)
   return new Date(year, month - 1, day, hour || 0, minute || 0).getTime()
+}
+
+/** So viele Erinnerungen trägt ein Termin. Darüber wird die Auswahl unübersichtlich. */
+export const MAX_REMINDERS = 8
+/** Vier Wochen vorher bis einen Tag danach. */
+export const MIN_REMINDER_MINUTES = -1440
+export const MAX_REMINDER_MINUTES = 28 * 1440
+
+/** Ganze Minuten, jede Zeit nur einmal, die früheste zuerst. */
+export function normalizeReminders(values: number[]): number[] {
+  const unique = new Set<number>()
+  for (const value of values) {
+    if (!Number.isFinite(value)) continue
+    const minutes = Math.round(value)
+    if (minutes < MIN_REMINDER_MINUTES || minutes > MAX_REMINDER_MINUTES) continue
+    unique.add(minutes)
+  }
+  return [...unique].sort((a, b) => b - a).slice(0, MAX_REMINDERS)
+}
+
+/** Die Erinnerungen eines Termins — die Liste, oder der einzelne alte Wert. */
+export function remindersOf(event: { reminders?: number[]; reminderMinutes?: number } | null): number[] {
+  if (event !== null && Array.isArray(event.reminders) && event.reminders.length > 0) {
+    return normalizeReminders(event.reminders)
+  }
+  if (event !== null && typeof event.reminderMinutes === 'number') return normalizeReminders([event.reminderMinutes])
+  return []
+}
+
+function readReminders(o: Record<string, unknown>): { reminders: number[] } | Record<string, never> {
+  if (!Array.isArray(o.reminders)) return {}
+  const reminders = normalizeReminders(o.reminders.filter((value): value is number => typeof value === 'number'))
+  return reminders.length > 0 ? { reminders } : {}
+}
+
+function reminderQueueKey(uid: string, eventId: string, minutes: number): string {
+  return `${CALENDAR_REMINDERS_PATH}/${uid}_${eventId}_${minutes}`
+}
+
+/** „1 Tag vorher", „10 Minuten vorher", „6 Stunden danach". */
+export function reminderLabel(minutes: number): string {
+  if (minutes === 0) return 'Zum Beginn'
+  const after = minutes < 0
+  const abs = Math.abs(minutes)
+  const when = after ? 'danach' : 'vorher'
+  if (abs % 1440 === 0) {
+    const days = abs / 1440
+    return `${days} ${days === 1 ? 'Tag' : 'Tage'} ${when}`
+  }
+  if (abs % 60 === 0) {
+    const hours = abs / 60
+    return `${hours} ${hours === 1 ? 'Stunde' : 'Stunden'} ${when}`
+  }
+  return `${abs} ${abs === 1 ? 'Minute' : 'Minuten'} ${when}`
 }
 
 export const REMINDER_CHOICES: { minutes: number; label: string }[] = [
