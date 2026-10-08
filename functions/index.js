@@ -52,6 +52,9 @@ exports.calendarReminders = calendar.calendarReminders;
 exports.calendarFeed = calendar.calendarFeed;
 exports.calendarApi = calendar.calendarApi;
 
+// Posteingang und Gesendet für Agenten: lesen, markieren, in Ordner legen.
+exports.mailApi = require("./mailApi").mailApi;
+
 /** Rechnungsdaten korrigieren — serverseitig, damit Mail und Index gleich bleiben. */
 exports.updateInvoice = require("./invoices").updateInvoice;
 
