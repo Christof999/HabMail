@@ -23,6 +23,7 @@
 const admin = require("firebase-admin");
 
 const { ACCOUNTING_CATEGORIES } = require("./categories");
+const { shouldForward } = require("./rechnungsprogramm");
 const { categorizeMessage } = require("./categorize");
 const { mapWithConcurrency } = require("./concurrency");
 const {
@@ -228,7 +229,7 @@ async function importMailbox(uid, box, since, deadline, options) {
        * Rechnungsdaten stehen deshalb trotzdem im Datensatz.
        */
       const keepAttachment =
-        options.allAttachments === true || ATTACHMENTS_FOR.has(analysis.categoryId);
+        options.allAttachments === true || ATTACHMENTS_FOR.has(analysis.categoryId) || shouldForward(uid, { ...fresh[i], categoryId: analysis.categoryId, mailboxId: box.id });
       const message = keepAttachment ? fresh[i] : withoutAttachmentContent(fresh[i]);
       if (!keepAttachment && (fresh[i].attachments ?? []).length > 0) {
         summary.attachmentsDropped += 1;

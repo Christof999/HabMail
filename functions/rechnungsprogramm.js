@@ -64,7 +64,7 @@ function isConfigured() {
 /**
  * Gehört diese Mail ins Rechnungsprogramm?
  *
- * Nur der eingestellte Benutzer, nur Buchhaltungskategorien — und wenn eine
+ * Nur der eingestellte Benutzer, Buchhaltung oder Dokumentanhänge — und wenn eine
  * Postfachliste hinterlegt ist, auch nur die dort genannten Postfächer.
  */
 function shouldForward(uid, record) {
@@ -72,7 +72,10 @@ function shouldForward(uid, record) {
   if (settings === null) return false;
   if (uid !== settings.uid) return false;
   if (record === null || typeof record !== "object") return false;
-  if (!ACCOUNTING_CATEGORIES.includes(record.categoryId)) return false;
+  const hasDocument = Array.isArray(record.attachments) && record.attachments.some((attachment) =>
+    /\.(pdf|docx?|xlsx?|odt|ods|csv|txt|jpe?g|png|webp)$/i.test(String(attachment?.filename ?? "")),
+  );
+  if (!ACCOUNTING_CATEGORIES.includes(record.categoryId) && (record.categoryId === "newsletter" || !hasDocument)) return false;
   if (settings.mailboxes.length > 0 && !settings.mailboxes.includes(record.mailboxId)) {
     return false;
   }
@@ -114,7 +117,7 @@ function buildPayload(emailId, record, { withAttachments, ownReason = null }) {
   const payload = {
     mailId: emailId,
     categoryId: record.categoryId,
-    subject: String(record.subject ?? "").slice(0, 200),
+    subject: String(record.subject ?? "").slice(0, 500),
     summary: String(record.summary ?? "").slice(0, 1000),
     receivedAt: String(record.receivedAt ?? ""),
     sender: String(record.sender ?? ""),
@@ -210,10 +213,10 @@ async function forwardInvoice(uid, emailId, record, { withAttachments = true } =
    * auf und entfernt eine früher übernommene wieder. Die Belege bleiben hier;
    * für eine Rechnung, die drüben nicht entsteht, wären sie nur Ballast.
    */
-  const ownReason = await ownInvoiceReasonFor(uid, record);
+  const ownReason = ACCOUNTING_CATEGORIES.includes(record.categoryId) ? await ownInvoiceReasonFor(uid, record) : null;
 
   const payload = buildPayload(emailId, record, {
-    withAttachments: withAttachments && ownReason === null,
+    withAttachments,
     ownReason,
   });
 
@@ -338,7 +341,7 @@ const syncAccounting = onCall({ timeoutSeconds: 540, memory: "1GiB" }, async (re
   for (const [emailId, stored] of entries) {
     // Die Belege liegen nicht mehr in der Mail. Nachgeladen wird nur, wo sie
     // auch mitgehen — alles andere überspringt forwardInvoice ohnehin.
-    const record = ACCOUNTING_CATEGORIES.includes(stored?.categoryId)
+    const record = shouldForward(uid, stored)
       ? await withAttachmentData(uid, "emails", emailId, stored)
       : stored;
     const { outcome, reason } = await forwardInvoice(uid, emailId, record);

@@ -3,6 +3,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
+    "api/microsoft.ts": { "maxDuration": 60 },
     "api/send-mail.ts": {
       "maxDuration": 60
     },

@@ -16,6 +16,7 @@ import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
 import { userImportStatusPath, userPollStatusPath, userSentImportStatusPath } from './paths'
 import { formatBytes } from './attachments'
+import MicrosoftConnectButton from './MicrosoftConnectButton'
 import {
   countOlderMails,
   importOlderMails,
@@ -1039,6 +1040,7 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
           </ul>
         )}
 
+        <MicrosoftConnectButton user={user} onConnected={() => void load(true)} />
         {showForm ? (
           <div className="mailbox-form">
             <label className="folder-modal-label">

@@ -30,7 +30,7 @@ function resolveFirebaseProjectId(): string {
   )
 }
 
-async function requireFirebaseAuth(
+export async function requireFirebaseAuth(
   req: VercelRequest,
 ): Promise<
   | { ok: true; uid: string; payload: jose.JWTPayload }
@@ -83,7 +83,7 @@ async function requireFirebaseAuth(
   }
 }
 
-function proxyConfig(): { url: string; apiKey: string } | null {
+export function proxyConfig(): { url: string; apiKey: string } | null {
   const url = process.env.EMAILPROXY_URL?.trim().replace(/\/$/, '') ?? ''
   const apiKey = process.env.EMAILPROXY_KEY?.trim() ?? ''
   if (!url || !apiKey) return null
@@ -124,7 +124,7 @@ const TIER_NAMES: Record<1 | 2 | 3, string> = {
  * denselben Posteingang sieht. Die Stufe aus dem Token deckelt die Anzahl.
  * Ohne Claim bleibt die Firebase-UID — die bestehenden Konten bleiben einzeln.
  */
-function resolveSubject(
+export function resolveSubject(
   uid: string,
   payload: jose.JWTPayload,
 ):

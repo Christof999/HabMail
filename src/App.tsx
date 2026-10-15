@@ -229,7 +229,7 @@ export default function App() {
 
   const [categoryFilter, setCategoryFilter] = useState<EmailCategory | null>(null)
   const [mailboxFilter, setMailboxFilter] = useState<string | null>(null)
-  const [showMailboxSettings, setShowMailboxSettings] = useState(false)
+  const [showMailboxSettings, setShowMailboxSettings] = useState(() => new URLSearchParams(window.location.search).get('settings') === 'mailboxes')
   const [showUserSettings, setShowUserSettings] = useState(false)
   const [showSignatures, setShowSignatures] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
