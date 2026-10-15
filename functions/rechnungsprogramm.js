@@ -92,8 +92,13 @@ function attachmentsFor(record) {
   const out = [];
   let budget = MAX_ATTACHMENT_BASE64_BYTES;
 
-  for (const attachment of list) {
+  for (const [index, attachment] of list.entries()) {
     const content = typeof attachment?.dataBase64 === "string" ? attachment.dataBase64 : "";
+    // Werkbank teilt die Datenbank: Originale direkt lesen statt sie in Vercels Anfrage-Limit zu pressen.
+    if (config()?.uid.startsWith("t:") && (content || typeof attachment?.dataKey === "string")) {
+      out.push({ filename: String(attachment.filename ?? "beleg.pdf"), mimeType: String(attachment.mimeType ?? "application/pdf"), postDataKey: String(attachment.dataKey ?? index) });
+      continue;
+    }
     if (content === "" || content.length > budget) continue;
     budget -= content.length;
     out.push({
