@@ -13,6 +13,7 @@ import {
   type MonthGroup,
 } from './accounting'
 import CompanySettings from './CompanySettings'
+import HandoffRetries from './HandoffRetries'
 import { parseCompanies, UNASSIGNED_ID, type Company } from './companies'
 import { userCompaniesPath } from './paths'
 import { buildMonthPdf, downloadPdf, openPdf } from './invoicePdf'
@@ -438,6 +439,7 @@ export default function AccountingView({ rows, uid }: Props) {
               : `Übergebe … ${handingOver.checked} geprüft, ${handingOver.sent} übergeben`}
           </button>
         </div>
+        <HandoffRetries uid={uid} rows={rows} />
         <p className="muted small">
           Doppelt schicken schadet nicht: drüben entscheidet die Mail-Kennung,
           es entsteht keine zweite Rechnung. Was dort bereits bearbeitet wurde

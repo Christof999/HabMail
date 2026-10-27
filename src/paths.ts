@@ -52,6 +52,11 @@ export function userCompaniesPath(uid: string): string {
   return `${userRootPath(uid)}/companies`
 }
 
+/** Was nicht an Büro übergeben werden konnte. Schreibt nur der Server. */
+export function userAccountingRetriesPath(uid: string): string {
+  return `${userRootPath(uid)}/accountingRetries`
+}
+
 /**
  * Signaturen, eine je Postfach. Liegen hier und nicht im Email-Proxy: der
  * verschickt nur — was in der Nachricht steht, ist Sache dieser App.

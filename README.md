@@ -384,6 +384,7 @@ Secret bzw. Variables, siehe Kopf von `.github/workflows/firebase-deploy.yml`):
 | Wert | Wo | Bedeutung |
 |---|---|---|
 | `RECHNUNGSPROGRAMM_URL` | Variable | Adresse des Rechnungsprogramms, z. B. `https://…vercel.app` |
+| `RECHNUNGSPROGRAMM_SECRET` | Secret | gemeinsames Geheimnis für alle Werkbank-Betriebe (`t:…`); drüben `HABMAIL_WEBHOOK_SECRET`. Daraus entsteht je Betrieb ein eigener Schlüssel |
 | `RECHNUNGSPROGRAMM_TOKEN` | Secret | gemeinsames Passwort; drüben `HABMAIL_WEBHOOK_TOKEN` |
 | `RECHNUNGSPROGRAMM_UID` | Variable | Firebase-UID **des** Benutzers, dessen Buchhaltung übergeben wird |
 | `RECHNUNGSPROGRAMM_MAILBOXES` | Variable, optional | Postfach-Kennungen mit Komma; leer = alle Postfächer dieses Benutzers |

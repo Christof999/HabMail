@@ -66,6 +66,7 @@ exports.reanalyzeInvoices = require("./reanalyze").reanalyzeInvoices;
  * Abholen von allein hinüber; dieser Aufruf holt den Bestand nach.
  */
 exports.syncAccounting = require("./rechnungsprogramm").syncAccounting;
+exports.retryAccountingHandoffs = require("./rechnungsprogramm").retryAccountingHandoffs;
 
 /**
  * Bankumsätze. Zwei Wege zum selben Ziel:

@@ -37,6 +37,22 @@ function userFoldersPath(uid) {
   return `${userRootPath(uid)}/mailFolders`;
 }
 
+/** Firmen des Betriebs — erkennen eigene Ausgangsrechnungen. */
+function userCompaniesPath(uid) {
+  return `${userRootPath(uid)}/companies`;
+}
+
+/**
+ * Was nicht an Büro übergeben werden konnte, samt Grund und nächstem Versuch.
+ * Serverseitig geschrieben; die Oberfläche zeigt es an.
+ */
+function userAccountingRetriesPath(uid) {
+  return `${userRootPath(uid)}/accountingRetries`;
+}
+
+/** Wer offene Wiederholungen hat — damit der Lauf nicht alle Konten liest. Nur serverseitig. */
+const ACCOUNTING_RETRY_OWNERS_PATH = "accountingRetryOwners";
+
 function userBankPath(uid) {
   return `${userRootPath(uid)}/bank`;
 }
@@ -126,6 +142,9 @@ module.exports = {
   userSentEmailsPath,
   userAttachmentDataPath,
   userFoldersPath,
+  userCompaniesPath,
+  userAccountingRetriesPath,
+  ACCOUNTING_RETRY_OWNERS_PATH,
   userBankPath,
   userInvoiceIndexPath,
   userPollStatusPath,
