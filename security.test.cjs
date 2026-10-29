@@ -40,7 +40,7 @@ test('Post braucht eine gueltige Betriebsrolle und ein gebuchtes Modul', () => {
 });
 test('Versand uebergibt ausschliesslich den geprueften Betrieb an den Proxy', async () => {
   const { mailbox, fetch, calls } = fixture({ t: 'firma', r: 'office', m: { p: 2 } });
-  const handler = load('send-mail', name => name === './mailboxes' ? mailbox : require(name), fetch).default;
+  const handler = load('send-mail', name => name === './mailboxes.js' ? mailbox : require(name), fetch).default;
   const response = { setHeader() {}, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
   await handler({ ...req(), body: { to: 'customer@example.test', subject: 'Test', text: 'Test', mailboxId: 'inbox', onBehalfOf: 't:fremd' } }, response);
   assert.equal(response.code, 200);

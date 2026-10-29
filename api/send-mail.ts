@@ -23,7 +23,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import * as crypto from 'node:crypto'
-import { requireFirebaseAuth, resolveSubject } from './mailboxes'
+import { requireFirebaseAuth, resolveSubject } from './mailboxes.js'
 
 /**
  * Ein Agent-Key aus HABMAIL_AGENT_KEYS.

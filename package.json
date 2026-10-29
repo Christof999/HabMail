@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "deploy": "firebase deploy",
     "test": "node --test security.test.cjs src/*.test.cjs scripts/test-microsoft.cjs functions/*.test.js",
-    "check": "npm run lint && node scripts/check-functions.cjs && npm test && npm run build && npm audit --audit-level=low && npm --prefix functions audit --audit-level=low",
+    "check": "npm run lint && tsc -p tsconfig.api.json && node scripts/check-functions.cjs && npm test && npm run build && npm audit --audit-level=low && npm --prefix functions audit --audit-level=low",
     "test:rules": "firebase emulators:exec --only database --project demo-werkbank-audit \"node scripts/test-database-rules.cjs\""
   },
   "dependencies": {

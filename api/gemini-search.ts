@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import { requireFirebaseAuth, resolveSubject } from './mailboxes'
+import { requireFirebaseAuth, resolveSubject } from './mailboxes.js'
 
 type SlimItem = {
   id: string
