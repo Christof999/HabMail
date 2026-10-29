@@ -93,11 +93,9 @@ on:
   workflow_dispatch:
   push:
     branches: ['**']
-    paths:
-      - 'functions/**'
-      - 'database.rules.json'
-      - 'firebase.json'
-      - '.github/workflows/firebase-deploy.yml'
+
+permissions:
+  contents: read
 
 # Zwei gleichzeitige Deploys würden sich gegenseitig überholen.
 concurrency:
@@ -105,14 +103,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with: { node-version: '22', cache: npm }
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with: { distribution: temurin, java-version: '21' }
+      - run: npm ci --ignore-scripts
+      - run: npm --prefix functions ci --ignore-scripts
+      - run: npm run check
+      - run: npm run test:rules
+  deploy:
+    needs: check
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with: { persist-credentials: false }
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
+
+      - run: npm ci --ignore-scripts
 
       - name: Zugangsdaten ablegen
         env:
@@ -158,12 +174,7 @@ jobs:
       # „Couldn't find firebase-functions package in your source code“.
       - name: Abhängigkeiten der Functions installieren
         working-directory: functions
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --no-audit --no-fund
-          else
-            npm install --no-audit --no-fund
-          fi
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Konfiguration schreiben
         env:
@@ -251,7 +262,7 @@ jobs:
         env:
           PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: |
-          npx --yes firebase-tools deploy \
+          npx --no-install firebase-tools deploy \
             --only database \
             --project "$PROJECT_ID" \
             --non-interactive \
@@ -261,7 +272,7 @@ jobs:
         env:
           PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: |
-          npx --yes firebase-tools deploy \
+          npx --no-install firebase-tools deploy \
             --only functions \
             --project "$PROJECT_ID" \
             --non-interactive \

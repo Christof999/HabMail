@@ -51,6 +51,19 @@ function load({ env = {}, fetch, db = memoryDatabase() } = {}) {
 
 const fixedAccount = { RECHNUNGSPROGRAMM_TOKEN: "test-token", RECHNUNGSPROGRAMM_UID: "betrieb", RECHNUNGSPROGRAMM_MAILBOXES: "buero" };
 
+test("ein erneuerter Betriebsschluessel ersetzt den abgeleiteten, andere Betriebe bleiben erreichbar", async () => {
+  const key = "n".repeat(32), calls = [];
+  const { forwardInvoice, tenantToken } = load({
+    env: { RECHNUNGSPROGRAMM_SECRET: "shared-test-secret", RECHNUNGSPROGRAMM_TOKENS: JSON.stringify({ "firma-a": key }) },
+    fetch: async (_url, options) => { calls.push(options.headers); return new Response("{}", { status: 200 }); },
+  });
+  const record = { categoryId: "rechnung", subject: "Test", attachments: [] };
+  await forwardInvoice("t:firma-a", "mail-1", record);
+  await forwardInvoice("t:firma-b", "mail-2", record);
+  assert.equal(calls[0].Authorization, `Bearer ${key}`);
+  assert.equal(calls[1].Authorization, `Bearer ${tenantToken("shared-test-secret", "firma-b")}`);
+});
+
 test("Dokumentanhänge gehen neben Rechnungen mit, nur vom freigegebenen Benutzer und Postfach", () => {
   const { shouldForward, buildPayload } = load({ env: fixedAccount });
   const record = { mailboxId: "buero", categoryId: "lieferung", subject: "Lieferschein Eigenheim", attachments: [{ filename: "Lieferschein.pdf", mimeType: "application/pdf", dataBase64: "JVBERi0=" }] };

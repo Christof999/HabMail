@@ -93,7 +93,7 @@ function toMessage(record) {
 const reanalyzeInvoices = onCall(
   { timeoutSeconds: 540, memory: "1GiB" },
   async (request) => {
-    const uid = ownerFromAuth(request);
+    const uid = await ownerFromAuth(request);
 
     if (!isConfigured()) {
       throw new HttpsError(

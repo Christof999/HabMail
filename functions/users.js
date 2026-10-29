@@ -16,7 +16,7 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const { USER_DIRECTORY_PATH, ADMINS_PATH, userRootPath } = require("./paths");
 const { migrateLegacyData } = require("./migrate");
 const { pollAllMailboxes } = require("./poll");
-const { ownerFromAuth } = require("./owner");
+const { ownerFromAuth, authenticatedUser } = require("./owner");
 const importer = require("./import");
 
 /** Administratoren aus der Umgebung — der Startpunkt, bevor es Einträge gibt. */
@@ -34,10 +34,8 @@ async function isAdmin(uid) {
 }
 
 async function requireAdmin(request) {
-  const uid = request.auth?.uid;
-  if (!uid) {
-    throw new HttpsError("unauthenticated", "Nicht angemeldet.");
-  }
+  const { uid, token } = await authenticatedUser(request);
+  if (token.ro === true) throw new HttpsError("permission-denied", "Der Zugang ist schreibgeschützt.");
   if (!(await isAdmin(uid))) {
     throw new HttpsError(
       "permission-denied",
@@ -246,7 +244,7 @@ const migrateLegacy = onCall(async (request) => {
  * nichts an“ wichtiger als eine schöne Antwort.
  */
 const pollNow = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
-  const uid = ownerFromAuth(request);
+  const uid = await ownerFromAuth(request);
 
   try {
     return await pollAllMailboxes({ onlySubject: uid });
@@ -275,7 +273,7 @@ function requireSince(raw) {
  * Tausende — und jede davon landet danach in der Datenbank.
  */
 const countOlderMails = onCall({ timeoutSeconds: 120, memory: "256MiB" }, async (request) => {
-  const uid = ownerFromAuth(request);
+  const uid = await ownerFromAuth(request);
 
   const since = requireSince(request.data?.since);
   const mailboxId =
@@ -299,7 +297,7 @@ const countOlderMails = onCall({ timeoutSeconds: 120, memory: "256MiB" }, async 
  * minutenlang schweigt und am Zeitlimit stirbt.
  */
 const importOlderMails = onCall({ timeoutSeconds: 540, memory: "512MiB" }, async (request) => {
-  const uid = ownerFromAuth(request);
+  const uid = await ownerFromAuth(request);
 
   const since = requireSince(request.data?.since);
   const mailboxId =
@@ -319,14 +317,13 @@ const importOlderMails = onCall({ timeoutSeconds: 540, memory: "512MiB" }, async
 
 /** Den Nachlauf anhalten — auch den, der im Hintergrund weiterläuft. */
 const stopOlderImport = onCall(async (request) => {
-  const uid = ownerFromAuth(request);
+  const uid = await ownerFromAuth(request);
   return importer.stopImport(uid, request.data?.folder);
 });
 
 /** Damit die Oberfläche weiß, ob sie die Verwaltung überhaupt anbieten soll. */
 const whoAmI = onCall(async (request) => {
-  const uid = request.auth?.uid;
-  if (!uid) throw new HttpsError("unauthenticated", "Nicht angemeldet.");
+  const { uid } = await authenticatedUser(request);
   return { uid, isAdmin: await isAdmin(uid) };
 });
 

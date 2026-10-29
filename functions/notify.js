@@ -13,7 +13,7 @@ const { sendToUser } = require("./push");
 const { ownerFromAuth } = require("./owner");
 
 exports.sendTestNotification = onCall(async (request) => {
-  const uid = ownerFromAuth(request);
+  const uid = await ownerFromAuth(request);
 
   const result = await sendToUser(uid, {
     title: "HabMail",

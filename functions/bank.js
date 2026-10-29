@@ -39,10 +39,6 @@ const INITIAL_HISTORY_DAYS = 90;
  */
 const OVERLAP_DAYS = 7;
 
-function requireUid(request) {
-  return ownerFromAuth(request);
-}
-
 function assertConfigured() {
   if (!gocardless.isConfigured()) {
     throw new HttpsError(
@@ -85,7 +81,7 @@ function isoDaysAgo(days) {
 let institutionCache = { country: "", list: [], expiresAt: 0 };
 
 const listBanks = onCall(async (request) => {
-  requireUid(request);
+  await ownerFromAuth(request);
   assertConfigured();
 
   const country = String(request.data?.country ?? "de").toLowerCase().slice(0, 2);
@@ -102,7 +98,7 @@ const listBanks = onCall(async (request) => {
 });
 
 const startBankConnection = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await ownerFromAuth(request);
   assertConfigured();
 
   const institutionId = String(request.data?.institutionId ?? "").trim();
@@ -142,7 +138,7 @@ const startBankConnection = onCall(async (request) => {
 });
 
 const finishBankConnection = onCall({ timeoutSeconds: 300 }, async (request) => {
-  const uid = requireUid(request);
+  const uid = await ownerFromAuth(request);
   assertConfigured();
 
   const reference = String(request.data?.reference ?? "").trim();
@@ -211,7 +207,7 @@ const finishBankConnection = onCall({ timeoutSeconds: 300 }, async (request) => 
  * einzelnes Konto aus einem Auszug, das keine Verbindung hat.
  */
 const disconnectBank = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await ownerFromAuth(request);
   const connectionId = String(request.data?.connectionId ?? "").trim();
   const accountId = String(request.data?.accountId ?? "").trim();
   if (connectionId === "" && accountId === "") {
@@ -387,7 +383,7 @@ async function applyMatch(uid, transactionId, emailId, { automatic, reasons = []
 }
 
 const syncBank = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
-  const uid = requireUid(request);
+  const uid = await ownerFromAuth(request);
   assertConfigured();
   try {
     return await syncUser(uid);
@@ -406,7 +402,7 @@ const syncBank = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (reques
  * GoCardless wird für diesen Weg nicht gebraucht.
  */
 const importStatement = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
-  const uid = requireUid(request);
+  const uid = await ownerFromAuth(request);
 
   const base64 = String(request.data?.fileBase64 ?? "");
   if (base64 === "") throw new HttpsError("invalid-argument", "Es fehlt die Datei.");
@@ -468,7 +464,7 @@ const importStatement = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async 
 
 /** Einen Vorschlag bestätigen. */
 const confirmMatch = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await ownerFromAuth(request);
   const transactionId = String(request.data?.transactionId ?? "").trim();
   const emailId = String(request.data?.emailId ?? "").trim();
   if (transactionId === "" || emailId === "") {
@@ -480,7 +476,7 @@ const confirmMatch = onCall(async (request) => {
 
 /** Eine Zuordnung wieder lösen — auch eine automatische. */
 const unmatch = onCall(async (request) => {
-  const uid = requireUid(request);
+  const uid = await ownerFromAuth(request);
   const transactionId = String(request.data?.transactionId ?? "").trim();
   if (transactionId === "") throw new HttpsError("invalid-argument", "Es fehlt der Umsatz.");
 

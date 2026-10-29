@@ -4,14 +4,17 @@
   "version": "0.0.0",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings=0",
     "preview": "vite preview",
-    "deploy": "firebase deploy"
+    "deploy": "firebase deploy",
+    "test": "node --test security.test.cjs src/*.test.cjs scripts/test-microsoft.cjs functions/*.test.js",
+    "check": "npm run lint && node scripts/check-functions.cjs && npm test && npm run build && npm audit --audit-level=low && npm --prefix functions audit --audit-level=low",
+    "test:rules": "firebase emulators:exec --only database --project demo-werkbank-audit \"node scripts/test-database-rules.cjs\""
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -27,7 +30,7 @@
     "@types/node": "^24.12.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vercel/node": "^5.6.18",
+    "@vercel/node": "^5.10.2",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
@@ -37,5 +40,15 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.57.0",
     "vite": "^8.0.1"
+  },
+  "overrides": {
+    "undici@<6.29.1": "^6.29.1",
+    "@fastify/busboy@<3.2.2": "^3.2.2",
+    "ajv@8.6.3": "^8.18.0",
+    "@grpc/grpc-js@<1.13.6": "^1.13.6",
+    "uuid@<11.1.1": "^11.1.1",
+    "@opentelemetry/core@<2.8.0": "^2.8.0",
+    "qs@<6.16.1": "^6.16.1",
+    "path-to-regexp@>=4.0.0 <6.3.0": "^6.3.0"
   }
 }

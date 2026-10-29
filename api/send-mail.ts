@@ -23,70 +23,7 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import * as crypto from 'node:crypto'
-import * as jose from 'jose'
-
-const JWKS = jose.createRemoteJWKSet(
-  new URL(
-    'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com',
-  ),
-)
-
-function resolveFirebaseProjectId(): string {
-  return (
-    process.env.FIREBASE_PROJECT_ID?.trim() ||
-    process.env.VITE_FIREBASE_PROJECT_ID?.trim() ||
-    ''
-  )
-}
-
-type AuthResult =
-  | { ok: true; uid: string }
-  | { ok: false; status: number; body: Record<string, string> }
-
-async function requireFirebaseAuth(req: VercelRequest): Promise<AuthResult> {
-  const projectId = resolveFirebaseProjectId()
-  if (!projectId) {
-    return {
-      ok: false,
-      status: 500,
-      body: {
-        error: 'server_misconfigured',
-        hint: 'FIREBASE_PROJECT_ID oder VITE_FIREBASE_PROJECT_ID fehlt.',
-      },
-    }
-  }
-  const auth = req.headers.authorization
-  if (!auth?.startsWith('Bearer ')) {
-    return {
-      ok: false,
-      status: 401,
-      body: { error: 'missing_token', hint: 'Authorization: Bearer <Firebase-ID-Token> fehlt.' },
-    }
-  }
-  try {
-    const { payload } = await jose.jwtVerify(auth.slice(7).trim(), JWKS, {
-      issuer: `https://securetoken.google.com/${projectId}`,
-      audience: projectId,
-    })
-    const uid = typeof payload.sub === 'string' ? payload.sub : ''
-    if (uid === '') {
-      return {
-        ok: false,
-        status: 401,
-        body: { error: 'invalid_token', hint: 'Im Token fehlt die Benutzerkennung.' },
-      }
-    }
-    return { ok: true, uid }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    console.error('firebase_id_token_verify', projectId, msg)
-    return {
-      ok: false,
-      status: 401,
-      body: { error: 'invalid_token', hint: `JWT ungültig. Server-Projekt-ID: "${projectId}".` },
-    }
-  }
-}
+import { requireFirebaseAuth, resolveSubject } from './mailboxes'
 
 /**
  * Ein Agent-Key aus HABMAIL_AGENT_KEYS.
@@ -199,7 +136,9 @@ async function authorizeRequest(req: VercelRequest): Promise<Caller> {
   }
   const auth = await requireFirebaseAuth(req)
   if (auth.ok === false) return auth
-  return { ok: true, uid: auth.uid, agent: null }
+  const scope = resolveSubject(auth.uid, auth.payload)
+  if (scope.ok === false) return scope
+  return { ok: true, uid: scope.subject, agent: null }
 }
 
 function proxyConfig(): { url: string; apiKey: string } | null {

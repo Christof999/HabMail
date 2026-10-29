@@ -68,8 +68,12 @@ function config() {
   const token = (process.env.RECHNUNGSPROGRAMM_TOKEN || "").trim();
   const uid = (process.env.RECHNUNGSPROGRAMM_UID || "").trim();
   const secret = (process.env.RECHNUNGSPROGRAMM_SECRET || "").trim();
-  if (url === "" || ((token === "" || uid === "") && secret === "")) return null;
-  return { url, token, uid, secret, mailboxes: splitList(process.env.RECHNUNGSPROGRAMM_MAILBOXES) };
+  let tokens;
+  try { tokens = JSON.parse(process.env.RECHNUNGSPROGRAMM_TOKENS || "{}"); } catch { return null; }
+  if (!tokens || typeof tokens !== "object" || Array.isArray(tokens)) return null;
+  if (Object.entries(tokens).some(([tenant, value]) => !TENANT_ID.test(tenant) || typeof value !== "string" || value.length < 32)) return null;
+  if (url === "" || ((token === "" || uid === "") && secret === "" && Object.keys(tokens).length === 0)) return null;
+  return { url, token, uid, secret, tokens, mailboxes: splitList(process.env.RECHNUNGSPROGRAMM_MAILBOXES) };
 }
 
 /** Der Schlüssel eines Betriebs. Gegenstück zu `incomingMailTenant` in Werkbank. */
@@ -90,8 +94,9 @@ function targetFor(uid) {
     return { url: settings.url, token: settings.token, tenant: null, mailboxes: settings.mailboxes };
   }
   const tenant = uid.startsWith("t:") ? uid.slice(2) : "";
-  if (settings.secret === "" || !TENANT_ID.test(tenant)) return null;
-  return { url: settings.url, token: tenantToken(settings.secret, tenant), tenant, mailboxes: [] };
+  if (!TENANT_ID.test(tenant)) return null;
+  const token = settings.tokens[tenant] || (settings.secret ? tenantToken(settings.secret, tenant) : "");
+  return token ? { url: settings.url, token, tenant, mailboxes: [] } : null;
 }
 
 /**
@@ -427,7 +432,7 @@ const retryAccountingHandoffs = onSchedule(
  * Dokument-ID, ein zweiter Aufruf legt nichts doppelt an.
  */
 const syncAccounting = onCall({ timeoutSeconds: 540, memory: "1GiB" }, async (request) => {
-  const uid = ownerFromAuth(request);
+  const uid = await ownerFromAuth(request);
 
   if (targetFor(uid) === null) {
     throw new HttpsError(

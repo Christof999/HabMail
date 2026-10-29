@@ -1,7 +1,6 @@
+import { ThemeCtx, useTheme, type ThemeMode } from './theme'
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -10,8 +9,6 @@ import {
 } from 'react'
 
 const STORAGE_KEY = 'habmail-theme'
-
-export type ThemeMode = 'system' | 'light' | 'dark'
 
 function readStored(): ThemeMode {
   try {
@@ -35,11 +32,6 @@ function applyMetaThemeColor(dark: boolean) {
     ;(el as HTMLMetaElement).content = dark ? '#161618' : '#f9f9fa'
   }
 }
-
-const ThemeCtx = createContext<{
-  theme: ThemeMode
-  setTheme: (t: ThemeMode) => void
-} | null>(null)
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>(readStored)
@@ -69,15 +61,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({ theme, setTheme }), [theme, setTheme])
 
   return <ThemeCtx.Provider value={value}>{children}</ThemeCtx.Provider>
-}
-
-export function useTheme(): {
-  theme: ThemeMode
-  setTheme: (t: ThemeMode) => void
-} {
-  const c = useContext(ThemeCtx)
-  if (!c) throw new Error('useTheme außerhalb von ThemeProvider')
-  return c
 }
 
 export function ThemeAppearanceControl() {

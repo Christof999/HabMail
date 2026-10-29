@@ -1,22 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import * as jose from 'jose'
-
-const JWKS = jose.createRemoteJWKSet(
-  new URL(
-    'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com',
-  ),
-)
-
-async function verifyFirebaseIdToken(
-  token: string,
-  projectId: string,
-): Promise<void> {
-  await jose.jwtVerify(token, JWKS, {
-    issuer: `https://securetoken.google.com/${projectId}`,
-    audience: projectId,
-  })
-}
+import { requireFirebaseAuth, resolveSubject } from './mailboxes'
 
 type SlimItem = {
   id: string
@@ -62,14 +46,6 @@ function extractJsonObject(text: string): string {
   const end = t.lastIndexOf('}')
   if (start >= 0 && end > start) return t.slice(start, end + 1)
   return t
-}
-
-function resolveProjectId(): string {
-  return (
-    process.env.FIREBASE_PROJECT_ID?.trim() ||
-    process.env.VITE_FIREBASE_PROJECT_ID?.trim() ||
-    ''
-  )
 }
 
 function resolveGeminiKey(): string {
@@ -149,7 +125,6 @@ export default async function handler(
       return res.status(405).json({ error: 'method_not_allowed' })
     }
 
-    const projectId = resolveProjectId()
     // Wie beim Zusammenfassen: OpenAI, sobald der Schlüssel da ist, sonst Gemini.
     const openaiKey = process.env.OPENAI_API_KEY?.trim() || ''
     const geminiKey = resolveGeminiKey()
@@ -157,11 +132,8 @@ export default async function handler(
       process.env.GEMINI_MODEL?.trim() ||
       'gemini-3.1-flash-lite-preview'
 
-    if (!projectId || (!openaiKey && !geminiKey)) {
+    if (!openaiKey && !geminiKey) {
       const missing: string[] = []
-      if (!projectId) {
-        missing.push('FIREBASE_PROJECT_ID (oder VITE_FIREBASE_PROJECT_ID)')
-      }
       if (!openaiKey && !geminiKey) {
         missing.push('OPENAI_API_KEY (oder GEMINI_API_KEY)')
       }
@@ -171,24 +143,10 @@ export default async function handler(
       })
     }
 
-    const auth = req.headers.authorization
-    if (!auth?.startsWith('Bearer ')) {
-      return res.status(401).json({
-        error: 'missing_token',
-        hint: 'Authorization: Bearer <Firebase-ID-Token> fehlt.',
-      })
-    }
-    const idToken = auth.slice(7).trim()
-    try {
-      await verifyFirebaseIdToken(idToken, projectId)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      console.error('firebase_id_token_verify', projectId, msg)
-      return res.status(401).json({
-        error: 'invalid_token',
-        hint: `JWT-Prüfung fehlgeschlagen. Projekt-ID auf dem Server: "${projectId}". Muss exakt die Firebase-Projekt-ID sein (wie in der Console), dieselbe wie bei der Anmeldung in der App.`,
-      })
-    }
+    const auth = await requireFirebaseAuth(req)
+    if (auth.ok === false) return res.status(auth.status).json(auth.body)
+    const scope = resolveSubject(auth.uid, auth.payload)
+    if (scope.ok === false) return res.status(scope.status).json(scope.body)
 
     let query: string
     let items: SlimItem[]

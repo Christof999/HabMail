@@ -41,6 +41,18 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    build: {
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              { name: 'firebase', test: /[\\/]node_modules[\\/]@firebase[\\/]/ },
+              { name: 'react', test: /[\\/]node_modules[\\/](?:react|react-dom|scheduler)[\\/]/ },
+            ],
+          },
+        },
+      },
+    },
     define: defineEnv,
     server: {
       proxy: {

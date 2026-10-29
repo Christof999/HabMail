@@ -71,7 +71,7 @@ async function listOpenInvoices(uid) {
  * in einer Steuersumme landen.
  */
 const updateInvoice = onCall(async (request) => {
-  const uid = ownerFromAuth(request);
+  const uid = await ownerFromAuth(request);
 
   const emailId = String(request.data?.emailId ?? "").trim();
   if (emailId === "" || emailId.includes("/")) {

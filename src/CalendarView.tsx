@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import {
   addDays,
   ALL_DAY_REMINDER_CHOICES,
@@ -115,34 +115,27 @@ function eventFrom(
  * Wert hebt das Blatt um genau diese Höhe.
  */
 function useKeyboardLift(enabled: boolean): number {
-  const [inset, setInset] = useState(0)
-
-  useEffect(() => {
-    if (!enabled) {
-      setInset(0)
-      return
-    }
+  const subscribe = useCallback((notify: () => void) => {
     const viewport = window.visualViewport
-    if (viewport === null || viewport === undefined) return
-
+    if (!enabled || !viewport) return () => {}
     const sync = () => {
-      const covered = Math.round(window.innerHeight - viewport.height - viewport.offsetTop)
-      setInset(covered > 60 ? covered : 0)
-      // iOS schiebt die Seite, damit das Feld frei liegt. Das Blatt rechnet
-      // die Tastatur selbst ein — die Seite soll stehen bleiben.
       if (window.scrollY !== 0) window.scrollTo(0, 0)
+      notify()
     }
-
     viewport.addEventListener('resize', sync)
     viewport.addEventListener('scroll', sync)
-    sync()
+    if (window.scrollY !== 0) window.scrollTo(0, 0)
     return () => {
       viewport.removeEventListener('resize', sync)
       viewport.removeEventListener('scroll', sync)
     }
   }, [enabled])
-
-  return inset
+  return useSyncExternalStore(subscribe, () => {
+    const viewport = window.visualViewport
+    if (!enabled || !viewport) return 0
+    const covered = Math.round(window.innerHeight - viewport.height - viewport.offsetTop)
+    return covered > 60 ? covered : 0
+  }, () => 0)
 }
 
 function EventDialog({

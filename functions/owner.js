@@ -8,17 +8,26 @@
  */
 
 const { HttpsError } = require("firebase-functions/v2/https");
+const { getAuth } = require("firebase-admin/auth");
 
 const TENANT_ID = /^[a-z][a-z0-9-]{2,31}$/;
 
-function ownerFromAuth(request) {
-  const auth = request?.auth;
-  const uid = auth && typeof auth.uid === "string" ? auth.uid : "";
-  if (uid === "") throw new HttpsError("unauthenticated", "Nicht angemeldet.");
+async function authenticatedUser(request) {
+  const authorization = request?.rawRequest?.headers?.authorization;
+  if (typeof authorization !== "string" || !authorization.startsWith("Bearer ")) throw new HttpsError("unauthenticated", "Nicht angemeldet.");
+  let token;
+  try { token = await getAuth().verifyIdToken(authorization.slice(7).trim(), true); }
+  catch { throw new HttpsError("unauthenticated", "Die Anmeldung ist abgelaufen oder wurde gesperrt."); }
+  if (!token.uid || token.uid !== request.auth?.uid) throw new HttpsError("unauthenticated", "Ungültige Anmeldung.");
+  return { uid: token.uid, token };
+}
 
-  const token = auth.token && typeof auth.token === "object" ? auth.token : {};
+async function ownerFromAuth(request) {
+  const { uid, token } = await authenticatedUser(request);
+  if (token.ro === true) throw new HttpsError("permission-denied", "Der Zugang ist schreibgeschützt.");
   const tenant = typeof token.t === "string" ? token.t.trim() : "";
-  if (!TENANT_ID.test(tenant)) return uid;
+  if (token.t != null && !TENANT_ID.test(tenant)) throw new HttpsError("permission-denied", "Ungültiger Betrieb.");
+  if (!tenant) return uid;
 
   if (token.r !== "owner" && token.r !== "office") {
     throw new HttpsError("permission-denied", "Post ist dem Büro vorbehalten.");
@@ -33,4 +42,4 @@ function ownerFromAuth(request) {
   return `t:${tenant}`;
 }
 
-module.exports = { ownerFromAuth };
+module.exports = { ownerFromAuth, authenticatedUser };

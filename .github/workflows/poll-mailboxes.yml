@@ -39,6 +39,9 @@
 
 name: Mails abholen
 
+permissions:
+  contents: read
+
 on:
   schedule:
     # Fünf Minuten ist das kürzeste, was GitHub zulässt.

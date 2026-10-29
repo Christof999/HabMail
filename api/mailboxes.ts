@@ -47,6 +47,8 @@ export async function requireFirebaseAuth(
       },
     }
   }
+  const apiKey = process.env.FIREBASE_API_KEY?.trim() || process.env.VITE_FIREBASE_API_KEY?.trim()
+  if (!apiKey) return { ok: false, status: 503, body: { error: 'server_misconfigured' } }
   const auth = req.headers.authorization
   if (!auth?.startsWith('Bearer ')) {
     return {
@@ -71,6 +73,19 @@ export async function requireFirebaseAuth(
         body: { error: 'invalid_token', hint: 'Im Token fehlt die Benutzerkennung.' },
       }
     }
+    const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken: auth.slice(7).trim() }), signal: AbortSignal.timeout(8000),
+    })
+    if (!response.ok) return { ok: false, status: response.status === 400 ? 401 : 503, body: { error: 'account_verification_failed' } }
+    const data: unknown = await response.json()
+    const users = data && typeof data === 'object' && 'users' in data && Array.isArray(data.users) ? data.users : []
+    const account: unknown = users.find((user: unknown) => user && typeof user === 'object' && 'localId' in user && user.localId === uid)
+    const validSince = account && typeof account === 'object' && 'validSince' in account && typeof account.validSince === 'string' ? Number(account.validSince) : NaN
+    if (!account || typeof account !== 'object' || ('disabled' in account && account.disabled === true) || !Number.isFinite(validSince) || typeof payload.auth_time !== 'number' || payload.auth_time < validSince) {
+      return { ok: false, status: 401, body: { error: 'invalid_token' } }
+    }
+    if (payload.ro === true && req.method !== 'GET') return { ok: false, status: 403, body: { error: 'read_only' } }
     return { ok: true, uid, payload }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -131,6 +146,7 @@ export function resolveSubject(
   | { ok: true; subject: string; limit: number | null; tierName: string | null }
   | { ok: false; status: number; body: Record<string, string> } {
   const tenant = typeof payload.t === 'string' ? payload.t.trim() : ''
+  if (payload.t != null && !TENANT_ID.test(tenant)) return { ok: false, status: 403, body: { error: 'invalid_tenant' } }
   if (!TENANT_ID.test(tenant)) {
     return { ok: true, subject: uid, limit: null, tierName: null }
   }
