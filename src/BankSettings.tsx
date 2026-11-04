@@ -1,3 +1,7 @@
+import { getLocale, tFormat, t } from './i18n'
+
+import { translateText } from './languageSession'
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
@@ -194,7 +198,7 @@ export default function BankSettings({ uid, onClose }: Props) {
         account.connectionId ? { connectionId: account.connectionId } : { accountId: account.id },
       )
       setConfirmRemove(null)
-      setNotice('Entfernt. Die bereits geholten Umsätze bleiben erhalten.')
+      setNotice(t("Entfernt. Die bereits geholten Umsätze bleiben erhalten."))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Entfernen fehlgeschlagen')
     } finally {
@@ -228,33 +232,26 @@ export default function BankSettings({ uid, onClose }: Props) {
       onClick={onClose}
     >
       <div className="modal card modal-wide" onClick={(e) => e.stopPropagation()}>
-        <h3 id="bank-settings-title">Bankumsätze</h3>
-        <p className="muted small">
-          Umsätze werden nur gelesen und mit den Rechnungen abgeglichen —
-          überweisen kann HabMail nichts.
-        </p>
+        <h3 id="bank-settings-title">{t("Bankumsätze")}</h3>
+        <p className="muted small">{t("Umsätze werden nur gelesen und mit den Rechnungen abgeglichen — überweisen kann HabMail nichts.")}</p>
 
-        {error ? <p className="mailbox-error">{error}</p> : null}
-        {notice ? <p className="muted small">{notice}</p> : null}
+        {error ? <p className="mailbox-error">{translateText(error)}</p> : null}
+        {notice ? <p className="muted small">{translateText(notice)}</p> : null}
         {report !== null && report.skipped.length > 0 ? (
-          <p className="muted small">Nicht abgefragt: {report.skipped.join('; ')}</p>
+          <p className="muted small">{t("Nicht abgefragt: ")}{translateText(report.skipped.join('; '))}</p>
         ) : null}
         {imported !== null && imported.skippedRows > 0 ? (
           <p className="muted small">
-            {imported.skippedRows} Zeile{imported.skippedRows === 1 ? '' : 'n'} ohne Datum oder
-            Betrag übersprungen (meist Saldo- oder Kopfzeilen).
-          </p>
+            {translateText(imported.skippedRows)}{t(" Zeile")}{translateText(imported.skippedRows === 1 ? '' : 'n')}{t(" ohne Datum oder Betrag übersprungen (meist Saldo- oder Kopfzeilen).")}</p>
         ) : null}
 
         {picking ? (
           <div className="mailbox-form">
-            <label className="folder-modal-label">
-              Bank suchen
-              <input
+            <label className="folder-modal-label">{t("Bank suchen")}<input
                 type="search"
                 value={query}
                 autoFocus
-                placeholder="z. B. Sparkasse, Volksbank, DKB …"
+                placeholder={t("z. B. Sparkasse, Volksbank, DKB …")}
                 onChange={(e) => setQuery(e.target.value)}
               />
             </label>
@@ -268,25 +265,23 @@ export default function BankSettings({ uid, onClose }: Props) {
                     onClick={() => void connect(bank)}
                   >
                     {bank.logo ? <img src={bank.logo} alt="" width={22} height={22} /> : null}
-                    <span>{bank.name}</span>
-                    <span className="muted small">{bank.historyDays} Tage Historie</span>
+                    <span>{translateText(bank.name)}</span>
+                    <span className="muted small">{translateText(bank.historyDays)}{t(" Tage Historie")}</span>
                   </button>
                 </li>
               ))}
               {filteredBanks.length === 0 ? (
-                <li className="muted small">Keine Bank gefunden.</li>
+                <li className="muted small">{t("Keine Bank gefunden.")}</li>
               ) : null}
             </ul>
             <div className="modal-actions">
-              <button type="button" className="ghost" onClick={() => setPicking(false)}>
-                Abbrechen
-              </button>
+              <button type="button" className="ghost" onClick={() => setPicking(false)}>{t("Abbrechen")}</button>
             </div>
           </div>
         ) : (
           <>
             {accounts.length === 0 ? (
-              <p className="muted small">Noch kein Konto hinterlegt.</p>
+              <p className="muted small">{t("Noch kein Konto hinterlegt.")}</p>
             ) : (
               <ul className="mailbox-list">
                 {accounts.map((account) => {
@@ -295,40 +290,36 @@ export default function BankSettings({ uid, onClose }: Props) {
                   return (
                     <li key={account.id} className="mailbox-item">
                       <div className="mailbox-item-head">
-                        <strong>{account.name || 'Konto'}</strong>
-                        <span className="pill">{account.currency}</span>
+                        <strong>{translateText(account.name || 'Konto')}</strong>
+                        <span className="pill">{translateText(account.currency)}</span>
                         {account.source === 'import' ? (
-                          <span className="pill pill-muted" title="Umsätze kommen aus Auszügen">
-                            Auszug
-                          </span>
+                          <span className="pill pill-muted" title={t("Umsätze kommen aus Auszügen")}>{t("Auszug")}</span>
                         ) : null}
                         {remaining !== null ? (
                           <span
                             className={`pill${remaining <= 14 ? '' : ' pill-muted'}`}
-                            title="Bis zur nötigen Neuanmeldung bei der Bank"
+                            title={t("Bis zur nötigen Neuanmeldung bei der Bank")}
                           >
-                            {remaining > 0 ? `noch ${remaining} Tage` : 'abgelaufen'}
+                            {translateText(remaining > 0 ? tFormat("noch {0} Tage", remaining) : t("abgelaufen"))}
                           </span>
                         ) : null}
                       </div>
                       <div className="muted small">
-                        {account.iban ? formatIban(account.iban) : account.id}
-                        {account.ownerName ? ` · ${account.ownerName}` : ''}
+                        {translateText(account.iban ? formatIban(account.iban) : account.id)}
+                        {translateText(account.ownerName ? ` · ${account.ownerName}` : '')}
                       </div>
                       {account.lastImportAt ? (
-                        <div className="muted small">
-                          Zuletzt eingelesen:{' '}
-                          {new Date(account.lastImportAt).toLocaleString('de-DE')}
-                          {account.lastImportFile ? ` · ${account.lastImportFile}` : ''}
-                          {account.lastSyncedDate
-                            ? ` · Umsätze bis ${formatDay(account.lastSyncedDate)}`
-                            : ''}
+                        <div className="muted small">{t("Zuletzt eingelesen:")}{' '}
+                          {translateText(new Date(account.lastImportAt).toLocaleString(getLocale()))}
+                          {translateText(account.lastImportFile ? ` · ${account.lastImportFile}` : '')}
+                          {translateText(account.lastSyncedDate
+                            ? tFormat(" · Umsätze bis {0}", formatDay(account.lastSyncedDate))
+                            : '')}
                         </div>
                       ) : null}
                       {account.lastSyncAt ? (
-                        <div className="muted small">
-                          Zuletzt abgeglichen:{' '}
-                          {new Date(account.lastSyncAt).toLocaleString('de-DE')}
+                        <div className="muted small">{t("Zuletzt abgeglichen:")}{' '}
+                          {translateText(new Date(account.lastSyncAt).toLocaleString(getLocale()))}
                         </div>
                       ) : null}
                       <div className="mailbox-item-actions">
@@ -338,17 +329,13 @@ export default function BankSettings({ uid, onClose }: Props) {
                               type="button"
                               className="ghost"
                               onClick={() => setConfirmRemove(null)}
-                            >
-                              Abbrechen
-                            </button>
+                            >{t("Abbrechen")}</button>
                             <button
                               type="button"
                               className="btn-danger"
                               disabled={busy}
                               onClick={() => void remove(account)}
-                            >
-                              Wirklich entfernen
-                            </button>
+                            >{t("Wirklich entfernen")}</button>
                           </>
                         ) : (
                           <button
@@ -357,7 +344,7 @@ export default function BankSettings({ uid, onClose }: Props) {
                             disabled={busy}
                             onClick={() => setConfirmRemove(account.id)}
                           >
-                            {account.source === 'import' ? 'Konto entfernen' : 'Verbindung trennen'}
+                            {translateText(account.source === 'import' ? t("Konto entfernen") : t("Verbindung trennen"))}
                           </button>
                         )}
                       </div>
@@ -367,13 +354,8 @@ export default function BankSettings({ uid, onClose }: Props) {
               </ul>
             )}
 
-            <h4 className="bank-section">Kontoauszug einlesen</h4>
-            <p className="muted small">
-              Im Online-Banking die Umsätze herunterladen — als CSV, CAMT oder
-              MT940 — und die Datei hier auswählen. Derselbe Auszug lässt sich
-              gefahrlos noch einmal einlesen: schon vorhandene Buchungen werden
-              erkannt und nicht doppelt verbucht.
-            </p>
+            <h4 className="bank-section">{t("Kontoauszug einlesen")}</h4>
+            <p className="muted small">{t("Im Online-Banking die Umsätze herunterladen — als CSV, CAMT oder MT940 — und die Datei hier auswählen. Derselbe Auszug lässt sich gefahrlos noch einmal einlesen: schon vorhandene Buchungen werden erkannt und nicht doppelt verbucht.")}</p>
             <input
               ref={fileInput}
               type="file"
@@ -386,12 +368,10 @@ export default function BankSettings({ uid, onClose }: Props) {
             />
 
             <div className="modal-actions">
-              <button type="button" className="ghost" onClick={onClose}>
-                Schließen
-              </button>
+              <button type="button" className="ghost" onClick={onClose}>{t("Schließen")}</button>
               {hasConnected ? (
                 <button type="button" className="ghost" disabled={busy} onClick={() => void sync()}>
-                  {busy ? 'Gleiche ab …' : 'Jetzt abgleichen'}
+                  {translateText(busy ? t("Gleiche ab …") : t("Jetzt abgleichen"))}
                 </button>
               ) : null}
               <button
@@ -400,24 +380,14 @@ export default function BankSettings({ uid, onClose }: Props) {
                 disabled={busy}
                 onClick={() => void openBankPicker()}
               >
-                {busy ? 'Lade …' : 'Bank automatisch verbinden'}
+                {translateText(busy ? t("Lade …") : t("Bank automatisch verbinden"))}
               </button>
             </div>
 
             {hasConnected ? (
-              <p className="muted small">
-                Verbundene Konten werden täglich um 6:30 Uhr automatisch
-                abgeglichen. Von Hand geht es dreimal am Tag — mehr lässt das
-                Tageslimit der Schnittstelle nicht zu. Die Zustimmung der Bank
-                gilt 90 Tage, danach ist eine erneute Anmeldung nötig (PSD2).
-              </p>
+              <p className="muted small">{t("Verbundene Konten werden täglich um 6:30 Uhr automatisch abgeglichen. Von Hand geht es dreimal am Tag — mehr lässt das Tageslimit der Schnittstelle nicht zu. Die Zustimmung der Bank gilt 90 Tage, danach ist eine erneute Anmeldung nötig (PSD2).")}</p>
             ) : (
-              <p className="muted small">
-                Das automatische Verbinden läuft über GoCardless und setzt dort
-                hinterlegte Zugangsdaten voraus. GoCardless nimmt seit Juli 2025
-                keine neuen Konten mehr an — ohne Zugang bleibt der Weg über den
-                Auszug, der dieselben Daten liefert.
-              </p>
+              <p className="muted small">{t("Das automatische Verbinden läuft über GoCardless und setzt dort hinterlegte Zugangsdaten voraus. GoCardless nimmt seit Juli 2025 keine neuen Konten mehr an — ohne Zugang bleibt der Weg über den Auszug, der dieselben Daten liefert.")}</p>
             )}
           </>
         )}
@@ -429,7 +399,7 @@ export default function BankSettings({ uid, onClose }: Props) {
 /** "2026-01-05" → "05.01.2026"; unbrauchbare Werte bleiben, wie sie sind. */
 function formatDay(iso: string): string {
   const date = new Date(`${iso}T00:00:00Z`)
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString('de-DE')
+  return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString(getLocale())
 }
 
 /** Zeigt an, ob und wie eine Rechnung bezahlt wurde. */
@@ -443,15 +413,15 @@ export function PaymentBadge({
   currency?: string
 }) {
   if (paidAt === undefined || paidAt === '') {
-    return <span className="pill pill-muted">offen</span>
+    return <span className="pill pill-muted">{t("offen")}</span>
   }
   const date = new Date(`${paidAt}T00:00:00Z`)
   const label = Number.isNaN(date.getTime())
     ? 'bezahlt'
-    : `bezahlt am ${date.toLocaleDateString('de-DE')}`
+    : `bezahlt am ${date.toLocaleDateString(getLocale())}`
   return (
     <span className="pill pill-paid" title={amountCents ? formatCents(amountCents, currency) : ''}>
-      {label}
+      {translateText(label)}
     </span>
   )
 }

@@ -1,3 +1,5 @@
+import { translateText } from './languageSession'
+import { t } from './i18n'
 import { draftForAppointment } from './mailAppointmentDraft'
 /**
  * Der Termin an einer Mail.
@@ -133,18 +135,18 @@ function AppointmentOffer({
       data-testid="mail-appointment"
       data-appointment-source={appointment.source}
     >
-      <p className="mail-appointment-kicker">{kicker}</p>
-      <p className="mail-appointment-title">{appointment.title}</p>
+      <p className="mail-appointment-kicker">{translateText(kicker)}</p>
+      <p className="mail-appointment-title">{translateText(appointment.title)}</p>
       <p className="muted small mail-appointment-when">
-        {whenLabel(appointment)}
-        {appointment.location ? ` · ${appointment.location}` : ''}
+        {translateText(whenLabel(appointment))}
+        {translateText(appointment.location ? ` · ${appointment.location}` : '')}
       </p>
       {appointment.organizer ? (
-        <p className="muted small">Von {appointment.organizer}</p>
+        <p className="muted small">{t("Von ")}{translateText(appointment.organizer)}</p>
       ) : null}
       {status ? (
         <p className="mail-appointment-status small" role="status">
-          {status}
+          {translateText(status)}
         </p>
       ) : null}
       <div className="mail-appointment-actions">
@@ -154,7 +156,7 @@ function AppointmentOffer({
           data-testid="mail-appointment-open"
           onClick={open}
         >
-          {buttonLabel}
+          {translateText(buttonLabel)}
         </button>
       </div>
     </aside>

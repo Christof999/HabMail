@@ -1,3 +1,6 @@
+import { tFormat, t } from './i18n'
+import { translateText } from './languageSession'
+
 import { useCallback, useEffect, useState } from 'react'
 import type { User } from 'firebase/auth'
 import {
@@ -82,7 +85,7 @@ export default function UserSettings({ currentUser, onClose }: Props) {
 
   const setPassword = (user: ManagedUser) => {
     const password = window.prompt(
-      `Neues Passwort für ${user.email} (mindestens 8 Zeichen):`,
+      tFormat("Neues Passwort für {0} (mindestens 8 Zeichen):", user.email),
       '',
     )
     if (password === null || password === '') return
@@ -147,18 +150,14 @@ export default function UserSettings({ currentUser, onClose }: Props) {
       onClick={onClose}
     >
       <div className="modal card modal-wide" onClick={(e) => e.stopPropagation()}>
-        <h3 id="user-settings-title">Benutzer</h3>
-        <p className="muted small">
-          Jeder Benutzer hat seinen eigenen Posteingang und seine eigenen
-          Postfächer. Niemand sieht die Mails eines anderen. Eine
-          Selbstregistrierung gibt es nicht — Konten legst du hier an.
-        </p>
+        <h3 id="user-settings-title">{t("Benutzer")}</h3>
+        <p className="muted small">{t("Jeder Benutzer hat seinen eigenen Posteingang und seine eigenen Postfächer. Niemand sieht die Mails eines anderen. Eine Selbstregistrierung gibt es nicht — Konten legst du hier an.")}</p>
 
-        {error ? <p className="mailbox-error">{error}</p> : null}
-        {notice ? <p className="muted small">{notice}</p> : null}
+        {error ? <p className="mailbox-error">{translateText(error)}</p> : null}
+        {notice ? <p className="muted small">{translateText(notice)}</p> : null}
 
         {loading ? (
-          <p className="muted small">Wird geladen …</p>
+          <p className="muted small">{t("Wird geladen …")}</p>
         ) : (
           <ul className="mailbox-list">
             {users.map((user) => {
@@ -166,15 +165,15 @@ export default function UserSettings({ currentUser, onClose }: Props) {
               return (
                 <li key={user.uid} className="mailbox-item">
                   <div className="mailbox-item-head">
-                    <strong>{user.email}</strong>
+                    <strong>{translateText(user.email)}</strong>
                     {user.displayName ? (
-                      <span className="muted small">{user.displayName}</span>
+                      <span className="muted small">{translateText(user.displayName)}</span>
                     ) : null}
-                    {user.isAdmin ? <span className="pill">Administrator</span> : null}
+                    {user.isAdmin ? <span className="pill">{t("Administrator")}</span> : null}
                     {user.disabled ? (
-                      <span className="pill pill-muted">gesperrt</span>
+                      <span className="pill pill-muted">{t("gesperrt")}</span>
                     ) : null}
-                    {isSelf ? <span className="pill pill-muted">du</span> : null}
+                    {isSelf ? <span className="pill pill-muted">{t("du")}</span> : null}
                   </div>
 
                   <div className="mailbox-item-actions">
@@ -183,9 +182,7 @@ export default function UserSettings({ currentUser, onClose }: Props) {
                       className="ghost"
                       disabled={busy}
                       onClick={() => setPassword(user)}
-                    >
-                      Passwort setzen
-                    </button>
+                    >{t("Passwort setzen")}</button>
                     {!isSelf ? (
                       <>
                         <button
@@ -199,7 +196,7 @@ export default function UserSettings({ currentUser, onClose }: Props) {
                           }
                           onClick={() => void toggleAdmin(user)}
                         >
-                          {user.isAdmin ? 'Adminrechte entziehen' : 'Zum Administrator machen'}
+                          {translateText(user.isAdmin ? t("Adminrechte entziehen") : t("Zum Administrator machen"))}
                         </button>
                         <button
                           type="button"
@@ -207,7 +204,7 @@ export default function UserSettings({ currentUser, onClose }: Props) {
                           disabled={busy}
                           onClick={() => void toggleDisabled(user)}
                         >
-                          {user.disabled ? 'Entsperren' : 'Sperren'}
+                          {translateText(user.disabled ? t("Entsperren") : t("Sperren"))}
                         </button>
                         {confirmDelete === user.uid ? (
                           <>
@@ -215,17 +212,13 @@ export default function UserSettings({ currentUser, onClose }: Props) {
                               type="button"
                               className="ghost"
                               onClick={() => setConfirmDelete(null)}
-                            >
-                              Abbrechen
-                            </button>
+                            >{t("Abbrechen")}</button>
                             <button
                               type="button"
                               className="btn-danger"
                               disabled={busy}
                               onClick={() => void remove(user)}
-                            >
-                              Konto und alle Mails löschen
-                            </button>
+                            >{t("Konto und alle Mails löschen")}</button>
                           </>
                         ) : (
                           <button
@@ -233,9 +226,7 @@ export default function UserSettings({ currentUser, onClose }: Props) {
                             className="ghost"
                             disabled={busy}
                             onClick={() => setConfirmDelete(user.uid)}
-                          >
-                            Entfernen
-                          </button>
+                          >{t("Entfernen")}</button>
                         )}
                       </>
                     ) : null}
@@ -248,53 +239,38 @@ export default function UserSettings({ currentUser, onClose }: Props) {
 
         <div className="mailbox-form">
           <p className="muted small">
-            <strong>Bestand übernehmen.</strong> Mails aus der Zeit vor der
-            Benutzertrennung liegen noch flach in der Datenbank und werden nicht
-            mehr angezeigt. Hier landen sie in deinem Posteingang.
-          </p>
+            <strong>{t("Bestand übernehmen.")}</strong>{t(" Mails aus der Zeit vor der Benutzertrennung liegen noch flach in der Datenbank und werden nicht mehr angezeigt. Hier landen sie in deinem Posteingang.")}</p>
           {migration ? (
-            <p className="muted small">
-              Gefunden: <strong>{migration.emails}</strong> Mails,{' '}
-              <strong>{migration.folders}</strong> Ordner
-              {migration.samples.length > 0 ? ` — z.B. „${migration.samples[0]}“` : ''}.
+            <p className="muted small">{t("Gefunden: ")}<strong>{translateText(migration.emails)}</strong>{t(" Mails,")}{' '}
+              <strong>{translateText(migration.folders)}</strong>{t(" Ordner")}{translateText(migration.samples.length > 0 ? ` — z.B. „${migration.samples[0]}“` : '')}.
             </p>
           ) : null}
           <div className="mailbox-item-actions">
-            <button type="button" className="ghost" disabled={busy} onClick={() => void checkLegacy()}>
-              Nachsehen
-            </button>
+            <button type="button" className="ghost" disabled={busy} onClick={() => void checkLegacy()}>{t("Nachsehen")}</button>
             {migration !== null && migration.emails + migration.folders > 0 ? (
-              <button type="button" disabled={busy} onClick={() => void applyLegacy()}>
-                In meinen Posteingang übernehmen
-              </button>
+              <button type="button" disabled={busy} onClick={() => void applyLegacy()}>{t("In meinen Posteingang übernehmen")}</button>
             ) : null}
           </div>
         </div>
 
         {showForm ? (
           <div className="mailbox-form">
-            <label className="folder-modal-label">
-              E-Mail-Adresse
-              <input
+            <label className="folder-modal-label">{t("E-Mail-Adresse")}<input
                 type="email"
                 value={form.email}
                 autoComplete="off"
-                placeholder="kollege@meine-firma.de"
+                placeholder={t("kollege@meine-firma.de")}
                 onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
               />
             </label>
-            <label className="folder-modal-label">
-              Passwort (mindestens 8 Zeichen)
-              <input
+            <label className="folder-modal-label">{t("Passwort (mindestens 8 Zeichen)")}<input
                 type="text"
                 value={form.password}
                 autoComplete="new-password"
                 onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
               />
             </label>
-            <label className="folder-modal-label">
-              Name (optional)
-              <input
+            <label className="folder-modal-label">{t("Name (optional)")}<input
                 type="text"
                 value={form.displayName}
                 onChange={(e) => setForm((p) => ({ ...p, displayName: e.target.value }))}
@@ -305,12 +281,8 @@ export default function UserSettings({ currentUser, onClose }: Props) {
                 type="checkbox"
                 checked={form.isAdmin}
                 onChange={(e) => setForm((p) => ({ ...p, isAdmin: e.target.checked }))}
-              />
-              darf ebenfalls Benutzer verwalten
-            </label>
-            <p className="muted small">
-              Das Passwort siehst du nur jetzt. Gib es weiter und lass es ändern.
-            </p>
+              />{t("darf ebenfalls Benutzer verwalten")}</label>
+            <p className="muted small">{t("Das Passwort siehst du nur jetzt. Gib es weiter und lass es ändern.")}</p>
 
             <div className="modal-actions">
               <button
@@ -320,22 +292,16 @@ export default function UserSettings({ currentUser, onClose }: Props) {
                   setShowForm(false)
                   setForm(EMPTY_FORM)
                 }}
-              >
-                Abbrechen
-              </button>
+              >{t("Abbrechen")}</button>
               <button type="button" disabled={busy || !formValid} onClick={() => void submit()}>
-                {busy ? 'Wird angelegt …' : 'Benutzer anlegen'}
+                {translateText(busy ? t("Wird angelegt …") : t("Benutzer anlegen"))}
               </button>
             </div>
           </div>
         ) : (
           <div className="modal-actions">
-            <button type="button" className="ghost" onClick={onClose}>
-              Schließen
-            </button>
-            <button type="button" onClick={() => setShowForm(true)}>
-              Benutzer anlegen
-            </button>
+            <button type="button" className="ghost" onClick={onClose}>{t("Schließen")}</button>
+            <button type="button" onClick={() => setShowForm(true)}>{t("Benutzer anlegen")}</button>
           </div>
         )}
       </div>

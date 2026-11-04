@@ -1,3 +1,7 @@
+import { getLocale, tFormat, t } from './i18n'
+
+import { translateText } from './languageSession'
+
 import { useEffect, useState } from 'react'
 import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
@@ -29,14 +33,14 @@ export default function HandoffRetries({ uid, rows }: { uid: string; rows: Email
   return (
     <div className="mailbox-error" role="status">
       <p>
-        <strong>{retries.length === 1 ? '1 Beleg' : `${retries.length} Belege`} noch nicht übergeben:</strong>{' '}
-        {subjects.slice(0, 5).join(', ')}{subjects.length > 5 ? ' …' : ''}
+        <strong>{translateText(retries.length === 1 ? t("1 Beleg") : tFormat("{0} Belege", retries.length))}{t(" noch nicht übergeben:")}</strong>{' '}
+        {translateText(subjects.slice(0, 5).join(', '))}{translateText(subjects.length > 5 ? ' …' : '')}
       </p>
-      <p className="small">Grund: {reasons.join(' ')}</p>
+      <p className="small">{t("Grund: ")}{translateText(reasons.join(' '))}</p>
       <p className="small">
-        {next
-          ? `Nächster Versuch automatisch ${new Date(next).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' })} Uhr.`
-          : 'Die automatischen Versuche sind ausgeschöpft — nach der Behebung „Buchhaltung übergeben“ klicken.'}
+        {translateText(next
+          ? tFormat("Nächster Versuch automatisch {0} Uhr.", new Date(next).toLocaleString(getLocale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' }))
+          : t("Die automatischen Versuche sind ausgeschöpft — nach der Behebung „Buchhaltung übergeben“ klicken."))}
       </p>
     </div>
   )

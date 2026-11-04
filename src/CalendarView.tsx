@@ -1,3 +1,7 @@
+import { getLocale, tFormat, t } from './i18n'
+
+import { translateText } from './languageSession'
+
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import {
   addDays,
@@ -29,7 +33,7 @@ import {
 } from './calendar'
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
-const MONTH = new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' })
+const MONTH = new Intl.DateTimeFormat(getLocale(), { month: 'long', year: 'numeric' })
 /** So viele Termine passen in ein Tagesfeld, bevor „+2" dasteht. */
 const CHIPS_PER_DAY = 3
 /** Die Liste unter dem Monat reicht so weit voraus. */
@@ -303,11 +307,9 @@ function EventDialog({
         }}
       >
         <div className="calendar-dialog-head">
-          <h3 id="calendar-event-title">{editing.id === null ? 'Neuer Termin' : 'Termin bearbeiten'}</h3>
+          <h3 id="calendar-event-title">{translateText(editing.id === null ? t("Neuer Termin") : t("Termin bearbeiten"))}</h3>
 
-          <label className="folder-modal-label calendar-title-field">
-            Titel
-            <input
+          <label className="folder-modal-label calendar-title-field">{t("Titel")}<input
               ref={titleRef}
               id="calendar-event-title-input"
               data-testid="calendar-event-title"
@@ -327,14 +329,10 @@ function EventDialog({
             data-testid="calendar-event-allday"
             checked={form.allDay}
             onChange={(e) => patch({ allDay: e.target.checked })}
-          />
-          Ganztägig
-        </label>
+          />{t("Ganztägig")}</label>
 
         <div className="calendar-when">
-          <label className="folder-modal-label">
-            Beginn
-            <span className="calendar-when-row">
+          <label className="folder-modal-label">{t("Beginn")}<span className="calendar-when-row">
               <input
                 type="date"
                 data-testid="calendar-event-start-date"
@@ -351,9 +349,7 @@ function EventDialog({
               )}
             </span>
           </label>
-          <label className="folder-modal-label">
-            Ende
-            <span className="calendar-when-row">
+          <label className="folder-modal-label">{t("Ende")}<span className="calendar-when-row">
               <input
                 type="date"
                 data-testid="calendar-event-end-date"
@@ -375,18 +371,16 @@ function EventDialog({
 
         {conflicts.length > 0 ? (
           <p className="calendar-conflict small" role="status" data-testid="calendar-event-conflict">
-            <strong>Überschneidet sich mit:</strong>{' '}
-            {conflicts
+            <strong>{t("Überschneidet sich mit:")}</strong>{' '}
+            {translateText(conflicts
               .slice(0, 3)
               .map((c) => `${c.title} (${formatWhen(c)})`)
-              .join(', ')}
-            {conflicts.length > 3 ? ` und ${conflicts.length - 3} weiteren` : ''}
+              .join(', '))}
+            {translateText(conflicts.length > 3 ? tFormat(" und {0} weiteren", conflicts.length - 3) : '')}
           </p>
         ) : null}
 
-        <label className="folder-modal-label">
-          Ort
-          <input
+        <label className="folder-modal-label">{t("Ort")}<input
             type="text"
             data-testid="calendar-event-location"
             value={form.location}
@@ -396,7 +390,7 @@ function EventDialog({
         </label>
 
         <fieldset className="calendar-reminders" data-testid="calendar-event-reminder">
-          <legend>Erinnerungen aufs Telefon</legend>
+          <legend>{t("Erinnerungen aufs Telefon")}</legend>
           <div className="calendar-reminder-picks">
             {reminderChoices.map((choice) => {
               const on = form.reminders.includes(choice.minutes)
@@ -408,22 +402,20 @@ function EventDialog({
                   aria-pressed={on}
                   onClick={() => toggleReminder(choice.minutes)}
                 >
-                  {choice.label}
+                  {translateText(choice.label)}
                 </button>
               )
             })}
           </div>
           {customReminders.map((minutes) => (
             <div key={minutes} className="calendar-reminder-row">
-              <span>{reminderLabel(minutes)}</span>
+              <span>{translateText(reminderLabel(minutes))}</span>
               <button
                 type="button"
                 className="ghost small-btn"
-                aria-label={`${reminderLabel(minutes)} entfernen`}
+                aria-label={tFormat("{0} entfernen", reminderLabel(minutes))}
                 onClick={() => toggleReminder(minutes)}
-              >
-                Entfernen
-              </button>
+              >{t("Entfernen")}</button>
             </div>
           ))}
           <div
@@ -441,34 +433,30 @@ function EventDialog({
               max={MAX_REMINDER_MINUTES}
               step={1}
               value={customAmount}
-              aria-label="Eigene Erinnerung"
+              aria-label={t("Eigene Erinnerung")}
               data-testid="calendar-reminder-amount"
               onChange={(e) => setCustomAmount(e.target.value)}
             />
             <select
               value={customUnit}
-              aria-label="Einheit"
+              aria-label={t("Einheit")}
               data-testid="calendar-reminder-unit"
               onChange={(e) => setCustomUnit(e.target.value as 'minutes' | 'hours' | 'days')}
             >
-              <option value="minutes">Minuten vorher</option>
-              <option value="hours">Stunden vorher</option>
-              <option value="days">Tage vorher</option>
+              <option value="minutes">{t("Minuten vorher")}</option>
+              <option value="hours">{t("Stunden vorher")}</option>
+              <option value="days">{t("Tage vorher")}</option>
             </select>
-            <button type="button" className="ghost small-btn" data-testid="calendar-reminder-add" onClick={addCustomReminder}>
-              Hinzufügen
-            </button>
+            <button type="button" className="ghost small-btn" data-testid="calendar-reminder-add" onClick={addCustomReminder}>{t("Hinzufügen")}</button>
           </div>
           {reminderNote ? (
             <p className="muted small" role="status">
-              {reminderNote}
+              {translateText(reminderNote)}
             </p>
           ) : null}
         </fieldset>
 
-        <label className="folder-modal-label">
-          Notiz
-          <textarea
+        <label className="folder-modal-label">{t("Notiz")}<textarea
             data-testid="calendar-event-notes"
             value={form.notes}
             rows={3}
@@ -480,7 +468,7 @@ function EventDialog({
 
         {error ? (
           <p className="error small" role="alert" data-testid="calendar-event-error">
-            {error}
+            {translateText(error)}
           </p>
         ) : null}
 
@@ -492,15 +480,11 @@ function EventDialog({
               data-testid="calendar-event-delete"
               disabled={busy}
               onClick={() => void remove()}
-            >
-              Löschen
-            </button>
+            >{t("Löschen")}</button>
           ) : null}
-          <button type="button" className="ghost" disabled={busy} onClick={onClose}>
-            Abbrechen
-          </button>
+          <button type="button" className="ghost" disabled={busy} onClick={onClose}>{t("Abbrechen")}</button>
           <button type="submit" data-testid="calendar-event-save" disabled={busy}>
-            {busy ? 'Speichert…' : 'Speichern'}
+            {translateText(busy ? t("Speichert…") : t("Speichern"))}
           </button>
         </div>
       </form>
@@ -552,26 +536,19 @@ function SubscribeDialog({ uid, onClose }: { uid: string; onClose: () => void })
       onClick={onClose}
     >
       <div className="modal card calendar-dialog" onClick={(e) => e.stopPropagation()}>
-        <h3 id="calendar-subscribe-title">Kalender abonnieren</h3>
-        <p className="muted small">
-          Mit diesem Link erscheinen deine Termine im Kalender des Telefons oder Rechners — auch im
-          Widget. Dort sind sie nur zu sehen; geändert wird hier in HabMail.
-        </p>
+        <h3 id="calendar-subscribe-title">{t("Kalender abonnieren")}</h3>
+        <p className="muted small">{t("Mit diesem Link erscheinen deine Termine im Kalender des Telefons oder Rechners — auch im Widget. Dort sind sie nur zu sehen; geändert wird hier in HabMail.")}</p>
 
         {error ? (
           <p className="error small" role="alert">
-            {error}
+            {translateText(error)}
           </p>
         ) : token === null ? (
-          <p className="muted small">Link wird erzeugt…</p>
+          <p className="muted small">{t("Link wird erzeugt…")}</p>
         ) : (
           <>
-            <a className="calendar-subscribe-go" href={feedUrl(uid, token, 'webcal')}>
-              Auf diesem Gerät abonnieren
-            </a>
-            <label className="folder-modal-label">
-              Oder den Link kopieren (Google Kalender: „Weitere Kalender → Per URL")
-              <input
+            <a className="calendar-subscribe-go" href={feedUrl(uid, token, 'webcal')}>{t("Auf diesem Gerät abonnieren")}</a>
+            <label className="folder-modal-label">{t("Oder den Link kopieren (Google Kalender: „Weitere Kalender → Per URL\")")}<input
                 type="text"
                 readOnly
                 data-testid="calendar-feed-url"
@@ -590,23 +567,16 @@ function SubscribeDialog({ uid, onClose }: { uid: string; onClose: () => void })
                   )
                 }
               >
-                {copied ? 'Kopiert' : 'Link kopieren'}
+                {translateText(copied ? t("Kopiert") : t("Link kopieren"))}
               </button>
-              <button type="button" className="ghost" disabled={busy} onClick={() => void renew()}>
-                Neuen Link erzeugen
-              </button>
+              <button type="button" className="ghost" disabled={busy} onClick={() => void renew()}>{t("Neuen Link erzeugen")}</button>
             </div>
-            <p className="muted small">
-              Wer den Link kennt, kann deine Termine lesen. „Neuen Link erzeugen" macht den alten
-              sofort ungültig. Apple sieht etwa alle 15 Minuten nach, Google oft erst nach Stunden.
-            </p>
+            <p className="muted small">{t("Wer den Link kennt, kann deine Termine lesen. „Neuen Link erzeugen\" macht den alten sofort ungültig. Apple sieht etwa alle 15 Minuten nach, Google oft erst nach Stunden.")}</p>
           </>
         )}
 
         <div className="modal-actions">
-          <button type="button" onClick={onClose}>
-            Fertig
-          </button>
+          <button type="button" onClick={onClose}>{t("Fertig")}</button>
         </div>
       </div>
     </div>
@@ -719,10 +689,10 @@ export default function CalendarView({
           data-event-id={event.id}
           onClick={() => edit(event)}
         >
-          <span className="calendar-event-when">{formatWhen(event, day)}</span>
+          <span className="calendar-event-when">{translateText(formatWhen(event, day))}</span>
           <span className="calendar-event-body">
-            <strong>{event.title}</strong>
-            {event.location ? <span className="muted small">{event.location}</span> : null}
+            <strong>{translateText(event.title)}</strong>
+            {event.location ? <span className="muted small">{translateText(event.location)}</span> : null}
           </span>
         </button>
       </li>
@@ -736,44 +706,37 @@ export default function CalendarView({
           <button
             type="button"
             className="ghost small-btn"
-            aria-label="Voriger Monat"
+            aria-label={t("Voriger Monat")}
             onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
           >
             ‹
           </button>
           <h2 className="calendar-month" aria-live="polite">
-            {MONTH.format(month)}
+            {translateText(MONTH.format(month))}
           </h2>
           <button
             type="button"
             className="ghost small-btn"
-            aria-label="Nächster Monat"
+            aria-label={t("Nächster Monat")}
             onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
           >
             ›
           </button>
         </div>
         <div className="calendar-actions">
-          <button type="button" className="ghost small-btn" onClick={() => show(today)}>
-            Heute
-          </button>
-          <button type="button" className="ghost small-btn" onClick={() => setSubscribing(true)}>
-            Abonnieren
-          </button>
+          <button type="button" className="ghost small-btn" onClick={() => show(today)}>{t("Heute")}</button>
+          <button type="button" className="ghost small-btn" onClick={() => setSubscribing(true)}>{t("Abonnieren")}</button>
           <button
             type="button"
             className="small-btn"
             data-testid="calendar-new"
             onClick={() => setEditing({ id: null, draft: {} })}
-          >
-            + Termin
-          </button>
+          >{t("+ Termin")}</button>
         </div>
       </div>
 
       {error ? (
-        <p className="error" role="alert">
-          Kalender: {error}
+        <p className="error" role="alert">{t("Kalender: ")}{translateText(error)}
         </p>
       ) : null}
 
@@ -781,7 +744,7 @@ export default function CalendarView({
         <div className="calendar-weekdays" role="row">
           {WEEKDAYS.map((name) => (
             <span key={name} role="columnheader">
-              {name}
+              {translateText(name)}
             </span>
           ))}
         </div>
@@ -801,24 +764,24 @@ export default function CalendarView({
                   role="gridcell"
                   key={day.getTime()}
                   className={classes.filter(Boolean).join(' ')}
-                  aria-label={`${formatDayLong(day)}, ${list.length} Termin${list.length === 1 ? '' : 'e'}`}
+                  aria-label={tFormat("{0}, {1} Termin{2}", formatDayLong(day), list.length, list.length === 1 ? '' : 'e')}
                   aria-selected={sameDay(day, selected)}
                   onClick={() => setSelected(day)}
                   onDoubleClick={() => setEditing({ id: null, draft: {} })}
                 >
-                  <span className="calendar-day-number">{day.getDate()}</span>
+                  <span className="calendar-day-number">{translateText(day.getDate())}</span>
                   <span className="calendar-day-events">
                     {list.slice(0, CHIPS_PER_DAY).map((event) => (
                       <span
                         key={event.id}
                         className={`calendar-chip${event.allDay ? ' calendar-chip--allday' : ''}`}
                       >
-                        {event.allDay ? '' : `${formatTime(Math.max(event.start, day.getTime()))} `}
-                        {event.title}
+                        {translateText(event.allDay ? '' : `${formatTime(Math.max(event.start, day.getTime()))} `)}
+                        {translateText(event.title)}
                       </span>
                     ))}
                     {list.length > CHIPS_PER_DAY ? (
-                      <span className="calendar-more">+{list.length - CHIPS_PER_DAY}</span>
+                      <span className="calendar-more">+{translateText(list.length - CHIPS_PER_DAY)}</span>
                     ) : null}
                   </span>
                   {/* Auf dem Handy ist im Feld kein Platz für Text — dort ein Punkt. */}
@@ -830,36 +793,34 @@ export default function CalendarView({
         ))}
       </div>
 
-      <section className="calendar-agenda card" aria-label="Termine am gewählten Tag">
+      <section className="calendar-agenda card" aria-label={t("Termine am gewählten Tag")}>
         <div className="calendar-agenda-head">
           <h3>
-            {sameDay(selected, today) ? 'Heute, ' : ''}
-            {formatDayLong(selected)}
+            {translateText(sameDay(selected, today) ? t("Heute, ") : '')}
+            {translateText(formatDayLong(selected))}
           </h3>
           <button
             type="button"
             className="ghost small-btn"
             onClick={() => setEditing({ id: null, draft: {} })}
-          >
-            + Termin
-          </button>
+          >{t("+ Termin")}</button>
         </div>
         {selectedEvents.length > 0 ? (
-          <ul className="calendar-events">{selectedEvents.map((event) => eventRow(event, selected))}</ul>
+          <ul className="calendar-events">{translateText(selectedEvents.map((event) => eventRow(event, selected)))}</ul>
         ) : (
-          <p className="muted small">{loaded ? 'Nichts eingetragen.' : 'Termine werden geladen…'}</p>
+          <p className="muted small">{translateText(loaded ? t("Nichts eingetragen.") : t("Termine werden geladen…"))}</p>
         )}
       </section>
 
       {upcoming.length > 0 ? (
-        <section className="calendar-agenda card" aria-label="Danach">
-          <h3>Danach</h3>
+        <section className="calendar-agenda card" aria-label={t("Danach")}>
+          <h3>{t("Danach")}</h3>
           {upcoming.map(({ day, events: list }) => (
             <div key={day.getTime()} className="calendar-upcoming-day">
               <button type="button" className="calendar-upcoming-date" onClick={() => show(day)}>
-                {formatDayLong(day)}
+                {translateText(formatDayLong(day))}
               </button>
-              <ul className="calendar-events">{list.map((event) => eventRow(event, day))}</ul>
+              <ul className="calendar-events">{translateText(list.map((event) => eventRow(event, day)))}</ul>
             </div>
           ))}
         </section>

@@ -1,3 +1,6 @@
+import { tFormat, t } from './i18n'
+import { translateText } from './languageSession'
+
 import type { DragEvent } from 'react'
 import type { FolderTreeNode } from './mailFolders'
 import { SvgFolder, SvgInbox, SvgSent } from './icons'
@@ -59,13 +62,13 @@ function FolderTreeNav({
               onClick={() => onSelect(n.id)}
             >
               <SvgFolder />
-              <span className="folder-name">{n.name}</span>
+              <span className="folder-name">{translateText(n.name)}</span>
               {unread > 0 ? (
                 <span
                   className="folder-count"
-                  title={`${unread} ungelesene Nachricht${unread === 1 ? '' : 'en'} in diesem Ordner`}
+                  title={tFormat("{0} ungelesene Nachricht{1} in diesem Ordner", unread, unread === 1 ? '' : 'en')}
                 >
-                  {unread > 99 ? '99+' : unread}
+                  {translateText(unread > 99 ? '99+' : unread)}
                 </span>
               ) : null}
             </button>
@@ -73,8 +76,8 @@ function FolderTreeNav({
               <button
                 type="button"
                 className="folder-icon-btn"
-                title="Umbenennen"
-                aria-label={`Ordner ${n.name} umbenennen`}
+                title={t("Umbenennen")}
+                aria-label={tFormat("Ordner {0} umbenennen", n.name)}
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -84,13 +87,13 @@ function FolderTreeNav({
                 <span className="folder-action-glyph" aria-hidden>
                   ✎
                 </span>
-                <span className="folder-action-label">Umbenennen</span>
+                <span className="folder-action-label">{t("Umbenennen")}</span>
               </button>
               <button
                 type="button"
                 className="folder-icon-btn folder-icon-btn--danger"
-                title="Löschen"
-                aria-label={`Ordner ${n.name} löschen`}
+                title={t("Löschen")}
+                aria-label={tFormat("Ordner {0} löschen", n.name)}
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -100,7 +103,7 @@ function FolderTreeNav({
                 <span className="folder-action-glyph" aria-hidden>
                   ×
                 </span>
-                <span className="folder-action-label">Löschen</span>
+                <span className="folder-action-label">{t("Löschen")}</span>
               </button>
             </span>
           </div>
@@ -188,13 +191,13 @@ export function FolderNav({
         {...inboxDragHandlers}
       >
         <SvgInbox />
-        <span className="folder-name">Posteingang</span>
+        <span className="folder-name">{t("Posteingang")}</span>
         {inboxUnread > 0 ? (
           <span
             className="folder-count"
-            title={`${inboxUnread} ungelesene Nachricht${inboxUnread === 1 ? '' : 'en'} im Posteingang`}
+            title={tFormat("{0} ungelesene Nachricht{1} im Posteingang", inboxUnread, inboxUnread === 1 ? '' : 'en')}
           >
-            {inboxUnread > 99 ? '99+' : inboxUnread}
+            {translateText(inboxUnread > 99 ? '99+' : inboxUnread)}
           </span>
         ) : null}
       </button>
@@ -213,7 +216,7 @@ export function FolderNav({
         onClick={onSelectSent}
       >
         <SvgSent />
-        <span className="folder-name">Gesendet</span>
+        <span className="folder-name">{t("Gesendet")}</span>
       </button>
       <FolderTreeNav
         nodes={tree}

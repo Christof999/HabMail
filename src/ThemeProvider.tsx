@@ -1,3 +1,5 @@
+import { translateText } from './languageSession'
+import { t } from './i18n'
 import { ThemeCtx, useTheme, type ThemeMode } from './theme'
 import {
   useCallback,
@@ -60,7 +62,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({ theme, setTheme }), [theme, setTheme])
 
-  return <ThemeCtx.Provider value={value}>{children}</ThemeCtx.Provider>
+  return <ThemeCtx.Provider value={value}>{translateText(children)}</ThemeCtx.Provider>
 }
 
 export function ThemeAppearanceControl() {
@@ -69,29 +71,23 @@ export function ThemeAppearanceControl() {
     <div
       className="segmented theme-segmented"
       role="group"
-      aria-label="Erscheinungsbild"
+      aria-label={t("Erscheinungsbild")}
     >
       <button
         type="button"
         className={theme === 'system' ? 'active' : ''}
         onClick={() => setTheme('system')}
-      >
-        Auto
-      </button>
+      >{t("Auto")}</button>
       <button
         type="button"
         className={theme === 'light' ? 'active' : ''}
         onClick={() => setTheme('light')}
-      >
-        Hell
-      </button>
+      >{t("Hell")}</button>
       <button
         type="button"
         className={theme === 'dark' ? 'active' : ''}
         onClick={() => setTheme('dark')}
-      >
-        Dunkel
-      </button>
+      >{t("Dunkel")}</button>
     </div>
   )
 }

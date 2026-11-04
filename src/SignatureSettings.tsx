@@ -1,3 +1,6 @@
+import { tFormat, t } from './i18n'
+import { translateText } from './languageSession'
+
 import { useEffect, useState } from 'react'
 import type { User } from 'firebase/auth'
 import { onValue, ref, remove, set } from 'firebase/database'
@@ -137,7 +140,7 @@ export default function SignatureSettings({ user, ownerId, onClose }: Props) {
     setError(null)
     setNotice(null)
     if (!SIGNATURE_IMAGE_TYPES.includes(file.type)) {
-      setError(`„${file.name}" ist kein Bild, das sich in einer Mail zuverlässig anzeigen lässt (PNG, JPEG, GIF oder WebP).`)
+      setError(tFormat("„{0}\" ist kein Bild, das sich in einer Mail zuverlässig anzeigen lässt (PNG, JPEG, GIF oder WebP).", file.name))
       return
     }
 
@@ -174,23 +177,16 @@ export default function SignatureSettings({ user, ownerId, onClose }: Props) {
       onClick={onClose}
     >
       <div className="modal card modal-wide" onClick={(e) => e.stopPropagation()}>
-        <h3 id="signature-settings-title">Signaturen</h3>
-        <p className="muted small">
-          Je Postfach eine. Beim Schreiben wird sie automatisch unter den Text
-          gesetzt und wechselt mit, wenn du den Absender änderst. Im
-          Schreibfenster ist sie sichtbar und lässt sich dort noch anpassen.
-        </p>
+        <h3 id="signature-settings-title">{t("Signaturen")}</h3>
+        <p className="muted small">{t("Je Postfach eine. Beim Schreiben wird sie automatisch unter den Text gesetzt und wechselt mit, wenn du den Absender änderst. Im Schreibfenster ist sie sichtbar und lässt sich dort noch anpassen.")}</p>
 
-        {error ? <p className="mailbox-error">{error}</p> : null}
-        {notice ? <p className="muted small">{notice}</p> : null}
+        {error ? <p className="mailbox-error">{translateText(error)}</p> : null}
+        {notice ? <p className="muted small">{translateText(notice)}</p> : null}
 
         {loading ? (
-          <p className="muted small">Wird geladen …</p>
+          <p className="muted small">{t("Wird geladen …")}</p>
         ) : mailboxes.length === 0 ? (
-          <p className="muted small">
-            Noch kein Postfach hinterlegt — erst unter „Postfächer verwalten“
-            eines anlegen.
-          </p>
+          <p className="muted small">{t("Noch kein Postfach hinterlegt — erst unter „Postfächer verwalten“ eines anlegen.")}</p>
         ) : (
           <ul className="mailbox-list">
             {mailboxes.map((box) => {
@@ -209,16 +205,16 @@ export default function SignatureSettings({ user, ownerId, onClose }: Props) {
               return (
               <li key={box.id} className="mailbox-item signature-item">
                 <div className="mailbox-item-head">
-                  <strong>{box.from || box.user || mailboxLabel(box.id)}</strong>
-                  {saved === box.id ? <span className="pill">gespeichert</span> : null}
+                  <strong>{translateText(box.from || box.user || mailboxLabel(box.id))}</strong>
+                  {saved === box.id ? <span className="pill">{t("gespeichert")}</span> : null}
                 </div>
                 <textarea
                   className="signature-text"
                   rows={5}
                   maxLength={MAX_SIGNATURE_CHARS}
                   value={signatur.text}
-                  placeholder={`Mit freundlichen Grüßen\n\n${box.from || mailboxLabel(box.id)}\nTelefon …`}
-                  aria-label={`Signatur für ${mailboxLabel(box.id)}`}
+                  placeholder={tFormat("Mit freundlichen Grüßen\n\n{0}\nTelefon …", box.from || mailboxLabel(box.id))}
+                  aria-label={tFormat("Signatur für {0}", mailboxLabel(box.id))}
                   onChange={(e) =>
                     setSignatures((s) => ({
                       ...s,
@@ -231,9 +227,7 @@ export default function SignatureSettings({ user, ownerId, onClose }: Props) {
                   onBlur={(e) => void save(box.id, { ...signatur, text: e.target.value })}
                 />
                 <span className="muted small">
-                  {signatur.text.length} von {MAX_SIGNATURE_CHARS} Zeichen · wird
-                  beim Verlassen des Feldes gespeichert
-                </span>
+                  {translateText(signatur.text.length)}{t(" von ")}{translateText(MAX_SIGNATURE_CHARS)}{t(" Zeichen · wird beim Verlassen des Feldes gespeichert")}</span>
 
                 {/*
                   Das Bild geht als eingebetteter Anhang mit, nicht als
@@ -251,37 +245,35 @@ export default function SignatureSettings({ user, ownerId, onClose }: Props) {
                         beantwortet, nicht beim Lesen zweier Wörter.
                       */}
                       <div className="signature-preview">
-                        {signatur.imagePlacement === 'above' ? bild : null}
+                        {translateText(signatur.imagePlacement === 'above' ? bild : null)}
                         <p className="signature-preview-text">
-                          {signatur.text.trim() === ''
-                            ? 'Dein Text und die Signatur stehen hier.'
-                            : `…\n${signatur.text.trim()}`}
+                          {translateText(signatur.text.trim() === ''
+                            ? t("Dein Text und die Signatur stehen hier.")
+                            : `…\n${signatur.text.trim()}`)}
                         </p>
-                        {signatur.imagePlacement === 'below' ? bild : null}
+                        {translateText(signatur.imagePlacement === 'below' ? bild : null)}
                       </div>
 
                       <div className="signature-layout">
                         <ChoiceRow
-                          label="Position"
+                          label={t("Position")}
                           value={signatur.imagePlacement}
                           options={PLACEMENTS}
                           onChange={(placement) => setLayout(box.id, { imagePlacement: placement })}
                         />
                         <ChoiceRow
-                          label="Ausrichtung"
+                          label={t("Ausrichtung")}
                           value={signatur.imageAlign}
                           options={ALIGNMENTS}
                           onChange={(align) => setLayout(box.id, { imageAlign: align })}
                         />
-                        <label className="folder-modal-label signature-width">
-                          Breite: {signatur.imageWidth} Pixel
-                          <input
+                        <label className="folder-modal-label signature-width">{t("Breite: ")}{translateText(signatur.imageWidth)}{t(" Pixel")}<input
                             type="range"
                             min={SIGNATURE_IMAGE_MIN_WIDTH}
                             max={SIGNATURE_IMAGE_MAX_WIDTH}
                             step={10}
                             value={signatur.imageWidth}
-                            aria-label={`Breite des Signaturbildes für ${mailboxLabel(box.id)} in Pixeln`}
+                            aria-label={tFormat("Breite des Signaturbildes für {0} in Pixeln", mailboxLabel(box.id))}
                             onChange={(e) =>
                               setLayout(box.id, { imageWidth: Number(e.target.value) }, false)
                             }
@@ -294,9 +286,7 @@ export default function SignatureSettings({ user, ownerId, onClose }: Props) {
                       </div>
 
                       <span className="muted small">
-                        {formatBytes(imageBytes(signatur))} · gespeichert bis 600 Pixel
-                        breit, damit es auch auf scharfen Bildschirmen scharf bleibt
-                      </span>
+                        {translateText(formatBytes(imageBytes(signatur)))}{t(" · gespeichert bis 600 Pixel breit, damit es auch auf scharfen Bildschirmen scharf bleibt")}</span>
                       <button
                         type="button"
                         className="ghost small-btn"
@@ -305,17 +295,15 @@ export default function SignatureSettings({ user, ownerId, onClose }: Props) {
                           setSignatures((s) => ({ ...s, [mailboxKey(box.id)]: ohne }))
                           void save(box.id, ohne)
                         }}
-                      >
-                        Bild entfernen
-                      </button>
+                      >{t("Bild entfernen")}</button>
                     </>
                   ) : (
                     <>
-                      <span className="account-section-label">Bild (z. B. Logo)</span>
+                      <span className="account-section-label">{t("Bild (z. B. Logo)")}</span>
                       <input
                         type="file"
                         accept={SIGNATURE_IMAGE_TYPES.join(',')}
-                        aria-label={`Signaturbild für ${mailboxLabel(box.id)}`}
+                        aria-label={tFormat("Signaturbild für {0}", mailboxLabel(box.id))}
                         disabled={working !== null}
                         onChange={(e) => {
                           const file = e.target.files?.[0]
@@ -324,10 +312,10 @@ export default function SignatureSettings({ user, ownerId, onClose }: Props) {
                         }}
                       />
                       <span className="muted small">
-                        {working === box.id
-                          ? 'Wird auf Mailgröße gebracht …'
+                        {translateText(working === box.id
+                          ? t("Wird auf Mailgröße gebracht …")
                           : 'PNG, JPEG, GIF oder WebP. Größere Bilder werden beim ' +
-                            'Hochladen selbständig verkleinert.'}
+                            'Hochladen selbständig verkleinert.')}
                       </span>
                     </>
                   )}
@@ -339,9 +327,7 @@ export default function SignatureSettings({ user, ownerId, onClose }: Props) {
         )}
 
         <div className="modal-actions">
-          <button type="button" onClick={onClose}>
-            Schließen
-          </button>
+          <button type="button" onClick={onClose}>{t("Schließen")}</button>
         </div>
       </div>
     </div>

@@ -1,3 +1,7 @@
+import { getLocale, tFormat, t } from './i18n'
+
+import { translateText } from './languageSession'
+
 import { useCallback, useEffect, useState } from 'react'
 import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
@@ -92,7 +96,7 @@ export default function NotificationSettings({ ownerId, onClose }: Props) {
     try {
       await enablePush(ownerId, scope)
       setThisDevice(true)
-      setNotice('Eingeschaltet. Dieses Gerät bekommt ab jetzt Meldungen.')
+      setNotice(t("Eingeschaltet. Dieses Gerät bekommt ab jetzt Meldungen."))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Einschalten fehlgeschlagen')
     } finally {
@@ -117,7 +121,7 @@ export default function NotificationSettings({ ownerId, onClose }: Props) {
     try {
       await disablePush(ownerId)
       setThisDevice(false)
-      setNotice('Dieses Gerät bekommt keine Meldungen mehr.')
+      setNotice(t("Dieses Gerät bekommt keine Meldungen mehr."))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ausschalten fehlgeschlagen')
     } finally {
@@ -154,66 +158,51 @@ export default function NotificationSettings({ ownerId, onClose }: Props) {
       onClick={onClose}
     >
       <div className="modal card modal-wide" onClick={(e) => e.stopPropagation()}>
-        <h3 id="notification-settings-title">Benachrichtigungen</h3>
-        <p className="muted small">
-          Meldet neue Mails aufs Telefon, auch wenn HabMail geschlossen ist.
-          Geschickt wird nach jedem Abruf — also höchstens alle fünf Minuten,
-          nicht in dem Moment, in dem die Mail beim Anbieter eintrifft.
-        </p>
+        <h3 id="notification-settings-title">{t("Benachrichtigungen")}</h3>
+        <p className="muted small">{t("Meldet neue Mails aufs Telefon, auch wenn HabMail geschlossen ist. Geschickt wird nach jedem Abruf — also höchstens alle fünf Minuten, nicht in dem Moment, in dem die Mail beim Anbieter eintrifft.")}</p>
 
-        {error ? <p className="mailbox-error">{error}</p> : null}
-        {notice ? <p className="muted small">{notice}</p> : null}
+        {error ? <p className="mailbox-error">{translateText(error)}</p> : null}
+        {notice ? <p className="muted small">{translateText(notice)}</p> : null}
 
         {missingKey ? (
-          <p className="mailbox-error">
-            Es ist kein VAPID-Schlüssel hinterlegt. Ohne{' '}
-            <code>VITE_FIREBASE_VAPID_KEY</code> in den Vercel-Variablen kann
-            kein Browser eine Kennung holen — der Schlüssel steht in der
-            Firebase-Konsole unter Projekteinstellungen → Cloud Messaging →
-            Web-Push-Zertifikate.
-          </p>
+          <p className="mailbox-error">{t("Es ist kein VAPID-Schlüssel hinterlegt. Ohne")}{' '}
+            <code>{t("VITE_FIREBASE_VAPID_KEY")}</code>{t(" in den Vercel-Variablen kann kein Browser eine Kennung holen — der Schlüssel steht in der Firebase-Konsole unter Projekteinstellungen → Cloud Messaging → Web-Push-Zertifikate.")}</p>
         ) : blocked !== null ? (
-          <p className="mailbox-error">{blocked}</p>
+          <p className="mailbox-error">{translateText(blocked)}</p>
         ) : permission === 'denied' ? (
-          <p className="mailbox-error">
-            Dieser Browser hat Benachrichtigungen für HabMail abgelehnt. Das
-            lässt sich nur dort wieder zurücknehmen — beim Schloss- oder
-            „aA"-Symbol neben der Adresse.
-          </p>
+          <p className="mailbox-error">{t("Dieser Browser hat Benachrichtigungen für HabMail abgelehnt. Das lässt sich nur dort wieder zurücknehmen — beim Schloss- oder „aA\"-Symbol neben der Adresse.")}</p>
         ) : null}
 
         <section className="push-block">
-          <span className="account-section-label">Dieses Gerät</span>
+          <span className="account-section-label">{t("Dieses Gerät")}</span>
           <div className="push-device-state">
             <span className={thisDevice ? 'pill' : 'pill pill-muted'}>
-              {thisDevice === null
-                ? 'wird geprüft …'
+              {translateText(thisDevice === null
+                ? t("wird geprüft …")
                 : thisDevice
-                  ? 'bekommt Meldungen'
-                  : 'bekommt keine Meldungen'}
+                  ? t("bekommt Meldungen")
+                  : t("bekommt keine Meldungen"))}
             </span>
             {thisDevice ? (
-              <button type="button" className="ghost" disabled={busy} onClick={() => void turnOff()}>
-                Auf diesem Gerät ausschalten
-              </button>
+              <button type="button" className="ghost" disabled={busy} onClick={() => void turnOff()}>{t("Auf diesem Gerät ausschalten")}</button>
             ) : (
               <button
                 type="button"
                 disabled={busy || missingKey || blocked !== null || permission === 'denied'}
                 onClick={() => void turnOn(settings.scope)}
               >
-                {busy ? 'Einen Moment …' : 'Auf diesem Gerät einschalten'}
+                {translateText(busy ? t("Einen Moment …") : t("Auf diesem Gerät einschalten"))}
               </button>
             )}
           </div>
         </section>
 
         <section className="push-block">
-          <span className="account-section-label">Wovon du hören willst</span>
+          <span className="account-section-label">{t("Wovon du hören willst")}</span>
           {/* Gilt für alle Geräte zusammen: Es ist eine Frage an den Menschen,
               nicht an das Telefon in seiner Hand — und deshalb auch dann
               einstellbar, wenn genau dieses Gerät nichts bekommt. */}
-          <div className="choice-row" role="group" aria-label="Wovon du hören willst">
+          <div className="choice-row" role="group" aria-label={t("Wovon du hören willst")}>
             {SCOPES.map(([scope, label]) => (
               <button
                 key={scope}
@@ -223,52 +212,43 @@ export default function NotificationSettings({ ownerId, onClose }: Props) {
                 disabled={busy}
                 onClick={() => void changeScope(scope)}
               >
-                {label}
+                {translateText(label)}
               </button>
             ))}
           </div>
           <p className="muted small">
-            {SCOPES.find(([scope]) => scope === settings.scope)?.[2]}
+            {translateText(SCOPES.find(([scope]) => scope === settings.scope)?.[2])}
           </p>
         </section>
 
         {devices.length > 0 ? (
           <section className="push-block">
-            <span className="account-section-label">
-              Angemeldete Geräte ({devices.length})
+            <span className="account-section-label">{t("Angemeldete Geräte (")}{translateText(devices.length)})
             </span>
             <ul className="push-device-list">
               {devices.map((device) => (
                 <li key={device.token}>
-                  <strong>{device.label}</strong>
+                  <strong>{translateText(device.label)}</strong>
                   <span className="muted small">
-                    {device.createdAt > 0
-                      ? `seit ${new Date(device.createdAt).toLocaleDateString('de-DE')}`
-                      : ''}
+                    {translateText(device.createdAt > 0
+                      ? tFormat("seit {0}", new Date(device.createdAt).toLocaleDateString(getLocale()))
+                      : '')}
                   </span>
                 </li>
               ))}
             </ul>
-            <p className="muted small">
-              Abgelaufene Kennungen räumt der Server beim nächsten Versand von
-              selbst weg — ein Gerät, das hier steht und nichts bekommt,
-              verschwindet also nach der nächsten Mail.
-            </p>
+            <p className="muted small">{t("Abgelaufene Kennungen räumt der Server beim nächsten Versand von selbst weg — ein Gerät, das hier steht und nichts bekommt, verschwindet also nach der nächsten Mail.")}</p>
           </section>
         ) : null}
 
         <div className="modal-actions">
-          <button type="button" className="ghost" onClick={onClose}>
-            Schließen
-          </button>
+          <button type="button" className="ghost" onClick={onClose}>{t("Schließen")}</button>
           <button
             type="button"
             className="ghost"
             disabled={busy || devices.length === 0}
             onClick={() => void test()}
-          >
-            Probe schicken
-          </button>
+          >{t("Probe schicken")}</button>
         </div>
       </div>
     </div>

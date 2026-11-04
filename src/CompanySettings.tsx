@@ -1,3 +1,6 @@
+import { tFormat, t } from './i18n'
+import { translateText } from './languageSession'
+
 import { useEffect, useMemo, useState } from 'react'
 import { onValue, push, ref, remove, update } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
@@ -115,25 +118,14 @@ export default function CompanySettings({ uid, mailboxIds, onClose }: Props) {
       onClick={onClose}
     >
       <div className="modal card modal-wide" onClick={(e) => e.stopPropagation()}>
-        <h3 id="company-settings-title">Firmen</h3>
-        <p className="muted small">
-          Die Buchhaltung zeigt die Rechnungen je Firma getrennt. Zugeordnet
-          wird über das Postfach, in dem die Mail ankam — das ist verlässlich
-          und kostet nichts.
-        </p>
-        <p className="muted small">
-          Wer hier steht, gilt als eigene Firma: Rechnungen, die eine dieser
-          Firmen selbst ausgestellt hat, bleiben aus der Buchhaltung heraus.
-          Bezahlt werden sie vom Kunden — als offener Posten wären sie falsch.
-        </p>
+        <h3 id="company-settings-title">{t("Firmen")}</h3>
+        <p className="muted small">{t("Die Buchhaltung zeigt die Rechnungen je Firma getrennt. Zugeordnet wird über das Postfach, in dem die Mail ankam — das ist verlässlich und kostet nichts.")}</p>
+        <p className="muted small">{t("Wer hier steht, gilt als eigene Firma: Rechnungen, die eine dieser Firmen selbst ausgestellt hat, bleiben aus der Buchhaltung heraus. Bezahlt werden sie vom Kunden — als offener Posten wären sie falsch.")}</p>
 
-        {error ? <p className="mailbox-error">{error}</p> : null}
+        {error ? <p className="mailbox-error">{translateText(error)}</p> : null}
 
         {companies.length === 0 ? (
-          <p className="muted small">
-            Noch keine Firma angelegt. Ohne Firmen bleibt alles wie bisher in
-            einer Liste.
-          </p>
+          <p className="muted small">{t("Noch keine Firma angelegt. Ohne Firmen bleibt alles wie bisher in einer Liste.")}</p>
         ) : (
           <ul className="mailbox-list">
             {companies.map((company) => (
@@ -142,17 +134,14 @@ export default function CompanySettings({ uid, mailboxIds, onClose }: Props) {
                   type="text"
                   className="company-name"
                   value={company.name}
-                  aria-label="Name der Firma"
+                  aria-label={t("Name der Firma")}
                   onChange={(e) => void patch(company, { name: e.target.value.slice(0, 120) })}
                 />
 
                 <div className="company-field">
-                  <span className="account-section-label">Postfächer dieser Firma</span>
+                  <span className="account-section-label">{t("Postfächer dieser Firma")}</span>
                   {mailboxIds.length === 0 ? (
-                    <p className="muted small">
-                      Noch kein Postfach hinterlegt — erst unter „Postfächer
-                      verwalten“ eines anlegen.
-                    </p>
+                    <p className="muted small">{t("Noch kein Postfach hinterlegt — erst unter „Postfächer verwalten“ eines anlegen.")}</p>
                   ) : (
                     <div className="company-mailboxes">
                       {mailboxIds.map((id) => {
@@ -165,11 +154,11 @@ export default function CompanySettings({ uid, mailboxIds, onClose }: Props) {
                             type="button"
                             className={`category-chip${mine ? ' active' : ''}`}
                             disabled={busy}
-                            title={taken ? `Gehört derzeit zu ${owner.name}` : undefined}
+                            title={taken ? tFormat("Gehört derzeit zu {0}", owner.name) : undefined}
                             onClick={() => void toggleMailbox(company, id)}
                           >
-                            {id}
-                            {taken ? <span className="category-chip-count">{owner.name}</span> : null}
+                            {translateText(id)}
+                            {taken ? <span className="category-chip-count">{translateText(owner.name)}</span> : null}
                           </button>
                         )
                       })}
@@ -178,13 +167,11 @@ export default function CompanySettings({ uid, mailboxIds, onClose }: Props) {
                 </div>
 
                 <label className="company-field">
-                  <span className="account-section-label">
-                    Weitere Schreibweisen (mit Komma getrennt)
-                  </span>
+                  <span className="account-section-label">{t("Weitere Schreibweisen (mit Komma getrennt)")}</span>
                   <input
                     type="text"
                     value={company.matchTerms.join(', ')}
-                    placeholder="Lauffer Bau, Lauffer Bau GmbH &amp; Co. KG"
+                    placeholder={t("Lauffer Bau, Lauffer Bau GmbH &amp; Co. KG")}
                     onChange={(e) =>
                       void patch(company, {
                         matchTerms: e.target.value
@@ -195,22 +182,15 @@ export default function CompanySettings({ uid, mailboxIds, onClose }: Props) {
                       })
                     }
                   />
-                  <span className="muted small">
-                    Nötig, wenn ein Postfach Rechnungen mehrerer Firmen bekommt
-                    — dann entscheidet der Rechnungsempfänger im Beleg. Die
-                    Schreibweisen erkennen außerdem die eigenen Rechnungen
-                    dieser Firma wieder.
-                  </span>
+                  <span className="muted small">{t("Nötig, wenn ein Postfach Rechnungen mehrerer Firmen bekommt — dann entscheidet der Rechnungsempfänger im Beleg. Die Schreibweisen erkennen außerdem die eigenen Rechnungen dieser Firma wieder.")}</span>
                 </label>
 
                 <label className="company-field">
-                  <span className="account-section-label">
-                    Eigene Absenderadressen (mit Komma getrennt)
-                  </span>
+                  <span className="account-section-label">{t("Eigene Absenderadressen (mit Komma getrennt)")}</span>
                   <input
                     type="text"
                     value={company.ownSenders.join(', ')}
-                    placeholder="@lauffer-bau.de, buchhaltung@lauffer-bau.de"
+                    placeholder={t("@lauffer-bau.de, buchhaltung@lauffer-bau.de")}
                     onChange={(e) =>
                       void patch(company, {
                         ownSenders: e.target.value
@@ -221,11 +201,7 @@ export default function CompanySettings({ uid, mailboxIds, onClose }: Props) {
                       })
                     }
                   />
-                  <span className="muted small">
-                    Ein führendes @ steht für die ganze Domain. Kommt eine
-                    Rechnung von hier und nennt keinen anderen Aussteller, ist
-                    es eine eigene Ausgangsrechnung.
-                  </span>
+                  <span className="muted small">{t("Ein führendes @ steht für die ganze Domain. Kommt eine Rechnung von hier und nennt keinen anderen Aussteller, ist es eine eigene Ausgangsrechnung.")}</span>
                 </label>
 
                 <div className="mailbox-item-actions">
@@ -235,9 +211,7 @@ export default function CompanySettings({ uid, mailboxIds, onClose }: Props) {
                         type="button"
                         className="ghost"
                         onClick={() => setConfirmRemove(null)}
-                      >
-                        Abbrechen
-                      </button>
+                      >{t("Abbrechen")}</button>
                       <button
                         type="button"
                         className="btn-danger"
@@ -250,9 +224,7 @@ export default function CompanySettings({ uid, mailboxIds, onClose }: Props) {
                             setConfirmRemove(null)
                           })
                         }
-                      >
-                        Wirklich löschen
-                      </button>
+                      >{t("Wirklich löschen")}</button>
                     </>
                   ) : (
                     <button
@@ -260,9 +232,7 @@ export default function CompanySettings({ uid, mailboxIds, onClose }: Props) {
                       className="ghost"
                       disabled={busy}
                       onClick={() => setConfirmRemove(company.id)}
-                    >
-                      Firma löschen
-                    </button>
+                    >{t("Firma löschen")}</button>
                   )}
                 </div>
               </li>
@@ -270,12 +240,10 @@ export default function CompanySettings({ uid, mailboxIds, onClose }: Props) {
           </ul>
         )}
 
-        <label className="folder-modal-label">
-          Neue Firma
-          <input
+        <label className="folder-modal-label">{t("Neue Firma")}<input
             type="text"
             value={newName}
-            placeholder="z. B. Lauffer Bau GmbH"
+            placeholder={t("z. B. Lauffer Bau GmbH")}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') void addCompany()
@@ -284,19 +252,11 @@ export default function CompanySettings({ uid, mailboxIds, onClose }: Props) {
         </label>
 
         <div className="modal-actions">
-          <button type="button" className="ghost" onClick={onClose}>
-            Schließen
-          </button>
-          <button type="button" disabled={busy || newName.trim() === ''} onClick={() => void addCompany()}>
-            Firma anlegen
-          </button>
+          <button type="button" className="ghost" onClick={onClose}>{t("Schließen")}</button>
+          <button type="button" disabled={busy || newName.trim() === ''} onClick={() => void addCompany()}>{t("Firma anlegen")}</button>
         </div>
 
-        <p className="muted small">
-          Rechnungen werden beim Anzeigen zugeordnet, nicht beim Ablegen. Eine
-          Umbenennung oder ein umgehängtes Postfach wirkt sofort auf den
-          gesamten Bestand — nichts muss nachgezogen werden.
-        </p>
+        <p className="muted small">{t("Rechnungen werden beim Anzeigen zugeordnet, nicht beim Ablegen. Eine Umbenennung oder ein umgehängtes Postfach wirkt sofort auf den gesamten Bestand — nichts muss nachgezogen werden.")}</p>
       </div>
     </div>
   )

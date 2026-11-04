@@ -1,3 +1,5 @@
+import { translateText } from './languageSession'
+import { t } from './i18n'
 import { useMemo, useState } from 'react'
 import { flattenFolderOptions, type FolderTreeNode } from './mailFolders'
 import { SvgCheck, SvgFolder, SvgInbox } from './icons'
@@ -59,18 +61,18 @@ export function MoveToFolderSheet({
       onClick={() => !busy && onClose()}
     >
       <div className="modal card move-sheet" onClick={(e) => e.stopPropagation()}>
-        <h3 id="move-thread-title">Verschieben nach</h3>
-        <p className="muted small move-sheet-subject">{subject || '(Ohne Betreff)'}</p>
+        <h3 id="move-thread-title">{t("Verschieben nach")}</h3>
+        <p className="muted small move-sheet-subject">{translateText(subject || '(Ohne Betreff)')}</p>
 
-        {error !== null ? <p className="error" role="alert">{error}</p> : null}
+        {error !== null ? <p className="error" role="alert">{translateText(error)}</p> : null}
 
         {showFilter ? (
           <input
             type="search"
             className="move-sheet-filter"
             value={filter}
-            placeholder="Ordner suchen …"
-            aria-label="Ordner suchen"
+            placeholder={t("Ordner suchen …")}
+            aria-label={t("Ordner suchen")}
             onChange={(e) => setFilter(e.target.value)}
           />
         ) : null}
@@ -86,7 +88,7 @@ export function MoveToFolderSheet({
               onClick={() => onMove(null)}
             >
               <SvgInbox />
-              <span className="move-sheet-name">Posteingang</span>
+              <span className="move-sheet-name">{t("Posteingang")}</span>
               {currentFolderId === null ? <SvgCheck className="move-sheet-check" /> : null}
             </button>
           </li>
@@ -101,7 +103,7 @@ export function MoveToFolderSheet({
                 onClick={() => onMove(option.id)}
               >
                 <SvgFolder />
-                <span className="move-sheet-name">{option.label.replace(/^(· )+/, '')}</span>
+                <span className="move-sheet-name">{translateText(option.label.replace(/^(· )+/, ''))}</span>
                 {option.id === currentFolderId ? (
                   <SvgCheck className="move-sheet-check" />
                 ) : null}
@@ -111,17 +113,14 @@ export function MoveToFolderSheet({
         </ul>
 
         {options.length === 0 ? (
-          <p className="muted small">
-            Es gibt noch keine Ordner. Über „+ Ordner" in der Ordnerleiste
-            lässt sich einer anlegen.
-          </p>
+          <p className="muted small">{t("Es gibt noch keine Ordner. Über „+ Ordner\" in der Ordnerleiste lässt sich einer anlegen.")}</p>
         ) : visible.length === 0 ? (
-          <p className="muted small">Kein Ordner mit „{filter.trim()}".</p>
+          <p className="muted small">{t("Kein Ordner mit „")}{translateText(filter.trim())}".</p>
         ) : null}
 
         <div className="modal-actions">
           <button type="button" className="ghost" disabled={busy} onClick={onClose}>
-            {busy ? 'Wird verschoben …' : 'Abbrechen'}
+            {translateText(busy ? t("Wird verschoben …") : t("Abbrechen"))}
           </button>
         </div>
       </div>

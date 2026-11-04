@@ -1,3 +1,8 @@
+import { getLocale, tFormat, t } from './i18n'
+
+import MailTranslation from './MailTranslation'
+import { translateText } from './languageSession'
+
 import {
   useCallback,
   useEffect,
@@ -932,7 +937,7 @@ export default function App() {
   if (!authReady) {
     return (
       <div className="shell">
-        <p className="muted">Lade…</p>
+        <p className="muted">{t("Lade…")}</p>
       </div>
     )
   }
@@ -942,18 +947,15 @@ export default function App() {
       <div className="shell">
         <div className="app-brand app-brand--inline">
           <AppLogoMark className="app-logo--hero" />
-          <h1>HabMail</h1>
+          <h1>{t("HabMail")}</h1>
         </div>
-        <p className="error">{configError}</p>
-        <p className="muted">
-          Lokal: <code>.env</code> mit <code>VITE_FIREBASE_*</code> (siehe{' '}
-          <code>.env.example</code>). Auf <strong>Vercel</strong>: unter
-          Settings → Environment Variables dieselben Namen{' '}
-          <strong>exakt</strong> (Groß/Klein) anlegen, für{' '}
-          <strong>Production</strong> (und bei Preview-Deploys auch{' '}
-          <strong>Preview</strong>) aktivieren, dann{' '}
-          <strong>Redeploy</strong> auslösen. In den Build-Logs erscheint bei
-          fehlenden Keys eine Zeile <code>[habmail] Vercel-Build: …</code>.
+        <p className="error">{translateText(configError)}</p>
+        <p className="muted">{t("Lokal: ")}<code>{t(".env")}</code>{t(" mit ")}<code>{t("VITE_FIREBASE_*")}</code>{t(" (siehe")}{' '}
+          <code>{t(".env.example")}</code>{t("). Auf ")}<strong>{t("Vercel")}</strong>{t(": unter Settings → Environment Variables dieselben Namen")}{' '}
+          <strong>{t("exakt")}</strong>{t(" (Groß/Klein) anlegen, für")}{' '}
+          <strong>{t("Production")}</strong>{t(" (und bei Preview-Deploys auch")}{' '}
+          <strong>{t("Preview")}</strong>{t(") aktivieren, dann")}{' '}
+          <strong>{t("Redeploy")}</strong>{t(" auslösen. In den Build-Logs erscheint bei fehlenden Keys eine Zeile ")}<code>{t("[habmail] Vercel-Build: …")}</code>.
         </p>
       </div>
     )
@@ -970,11 +972,11 @@ export default function App() {
           <div className="app-brand">
             <AppLogoMark className="app-logo--hero" />
             <div className="app-brand-text">
-              <h1>{werkbankLogin ? 'Werkbank Post' : 'HabMail'}</h1>
+              <h1>{translateText(werkbankLogin ? t("Werkbank Post") : t("HabMail"))}</h1>
               <p className="muted">
-                {werkbankLogin
-                  ? 'Dasselbe Konto wie bei Zeit und Büro'
-                  : 'Anmeldung für Mitarbeitende'}
+                {translateText(werkbankLogin
+                  ? t("Dasselbe Konto wie bei Zeit und Büro")
+                  : t("Anmeldung für Mitarbeitende"))}
               </p>
             </div>
           </div>
@@ -987,9 +989,7 @@ export default function App() {
           name="habmail-login"
           data-testid="login-form"
         >
-          <label htmlFor="login-email">
-            E-Mail
-            <input
+          <label htmlFor="login-email">{t("E-Mail")}<input
               id="login-email"
               name="email"
               type="email"
@@ -997,13 +997,11 @@ export default function App() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              aria-label="E-Mail"
+              aria-label={t("E-Mail")}
               data-testid="login-email"
             />
           </label>
-          <label htmlFor="login-password">
-            Passwort
-            <input
+          <label htmlFor="login-password">{t("Passwort")}<input
               id="login-password"
               name="password"
               type="password"
@@ -1011,17 +1009,17 @@ export default function App() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              aria-label="Passwort"
+              aria-label={t("Passwort")}
               data-testid="login-password"
             />
           </label>
           {loginError ? (
             <p className="error" role="alert" data-testid="login-error">
-              {loginError}
+              {translateText(loginError)}
             </p>
           ) : null}
           <button type="submit" disabled={busy} data-testid="login-submit">
-            {busy ? 'Bitte warten…' : 'Anmelden'}
+            {translateText(busy ? t("Bitte warten…") : t("Anmelden"))}
           </button>
         </form>
       </div>
@@ -1031,7 +1029,7 @@ export default function App() {
   if (!ownerId) {
     return (
       <div className="shell narrow">
-        <p className="muted">Konto wird gelesen…</p>
+        <p className="muted">{t("Konto wird gelesen…")}</p>
       </div>
     )
   }
@@ -1040,12 +1038,10 @@ export default function App() {
     return (
       <div className="shell narrow">
         <header className="top">
-          <h1>{werkbankLogin ? 'Werkbank Post' : 'HabMail'}</h1>
+          <h1>{translateText(werkbankLogin ? t("Werkbank Post") : t("HabMail"))}</h1>
         </header>
-        <p>{postBlocked}</p>
-        <button type="button" onClick={() => void signOut(getFirebaseAuth())}>
-          Abmelden
-        </button>
+        <p>{translateText(postBlocked)}</p>
+        <button type="button" onClick={() => void signOut(getFirebaseAuth())}>{t("Abmelden")}</button>
       </div>
     )
   }
@@ -1060,17 +1056,17 @@ export default function App() {
           ]
             .filter(Boolean)
             .join(' ')}
-          aria-label="Ordner"
+          aria-label={t("Ordner")}
           aria-hidden={isCompactLayout ? !folderDrawerOpen : undefined}
         >
           <div className="folder-sidebar-head">
-            <h2 className="folder-sidebar-title">Ordner</h2>
+            <h2 className="folder-sidebar-title">{t("Ordner")}</h2>
             <div className="folder-sidebar-head-actions">
               {isCompactLayout ? (
                 <button
                   type="button"
                   className="icon-btn folder-drawer-close"
-                  aria-label="Ordnerliste schließen"
+                  aria-label={t("Ordnerliste schließen")}
                   onClick={() => setFolderDrawerOpen(false)}
                 >
                   ×
@@ -1083,16 +1079,11 @@ export default function App() {
                 setFolderActionError(null)
                 setShowFolderModal(true)
               }}
-            >
-              + Ordner
-            </button>
+            >{t("+ Ordner")}</button>
             </div>
           </div>
           {isSearchActive ? (
-            <p className="muted small folder-search-hint">
-              Suche aktiv — es werden <strong>alle Ordner</strong> durchsucht;
-              die Liste ist nicht nach Ordner gefiltert.
-            </p>
+            <p className="muted small folder-search-hint">{t("Suche aktiv — es werden ")}<strong>{t("alle Ordner")}</strong>{t(" durchsucht; die Liste ist nicht nach Ordner gefiltert.")}</p>
           ) : null}
           {/*
             Auf dem Schirm ist das Ziehen der schnellste Weg und der Hinweis
@@ -1101,10 +1092,7 @@ export default function App() {
             den Ordner-Knopf an der Mail, und der braucht keine Erklärung.
           */}
           {!isCompactLayout ? (
-            <p className="muted small folder-dnd-hint">
-              Unterhaltung am <strong>linken Griff</strong> der Karte ziehen und
-              hier fallen lassen — oder den Ordner-Knopf an der Mail benutzen.
-            </p>
+            <p className="muted small folder-dnd-hint">{t("Unterhaltung am ")}<strong>{t("linken Griff")}</strong>{t(" der Karte ziehen und hier fallen lassen — oder den Ordner-Knopf an der Mail benutzen.")}</p>
           ) : null}
           <FolderNav
             tree={folderTree}
@@ -1146,7 +1134,7 @@ export default function App() {
           <button
             type="button"
             className="icon-btn bar-menu-btn"
-            aria-label="Ordner öffnen"
+            aria-label={t("Ordner öffnen")}
             aria-expanded={folderDrawerOpen}
             aria-controls="folder-drawer"
             onClick={() => setFolderDrawerOpen((o) => !o)}
@@ -1161,35 +1149,29 @@ export default function App() {
         <div className="bar-text">
           <div className="app-brand app-brand--bar">
             <AppLogoMark className="app-logo--bar" />
-            <h1>HabMail</h1>
+            <h1>{t("HabMail")}</h1>
           </div>
         </div>
         <div className="bar-trail">
           {/* Auf breiten Schirmen neben dem Titel, auf dem Handy darunter in
               voller Breite — dort ist es die meistbenutzte Schaltfläche. */}
-          <div className="segmented view-switch" role="group" aria-label="Ansicht">
+          <div className="segmented view-switch" role="group" aria-label={t("Ansicht")}>
             <button
               type="button"
               className={view === 'inbox' ? 'active' : ''}
               onClick={() => setView('inbox')}
-            >
-              Posteingang
-            </button>
+            >{t("Posteingang")}</button>
             <button
               type="button"
               className={view === 'accounting' ? 'active' : ''}
               onClick={() => setView('accounting')}
-            >
-              Buchhaltung
-            </button>
+            >{t("Buchhaltung")}</button>
             <button
               type="button"
               data-testid="view-calendar"
               className={view === 'calendar' ? 'active' : ''}
               onClick={() => setView('calendar')}
-            >
-              Kalender
-            </button>
+            >{t("Kalender")}</button>
           </div>
           {/* Neben dem Kontozeichen, weil hier alles Persönliche sitzt. Auf
               dem Handy nur das Zeichen — der Text hätte dort keinen Platz,
@@ -1197,14 +1179,14 @@ export default function App() {
           <button
             type="button"
             className="compose-btn"
-            aria-label="Neue E-Mail schreiben"
-            title="Neue E-Mail schreiben (n)"
+            aria-label={t("Neue E-Mail schreiben")}
+            title={t("Neue E-Mail schreiben (n)")}
             aria-keyshortcuts="n"
             data-testid="compose-new"
             onClick={() => openNewCompose()}
           >
             <span aria-hidden>✎</span>
-            <span className="compose-btn-label">Neue E-Mail</span>
+            <span className="compose-btn-label">{t("Neue E-Mail")}</span>
           </button>
           <AccountMenu
             email={user.email ?? ''}
@@ -1241,7 +1223,7 @@ export default function App() {
         <AccountingView rows={rows} uid={ownerId} />
       ) : (
       <div className={`app-body${isCompactLayout ? ' app-body--compact' : ''}`}>
-        {folderSidebar}
+        {translateText(folderSidebar)}
 
         <div className="app-main">
       {showSent && ownerId ? (
@@ -1257,22 +1239,18 @@ export default function App() {
         <div
           className="mode-switch segmented"
           role="group"
-          aria-label="Suchmodus"
+          aria-label={t("Suchmodus")}
         >
           <button
             type="button"
             className={searchMode === 'keywords' ? 'active' : ''}
             onClick={setModeKeywords}
-          >
-            Stichworte
-          </button>
+          >{t("Stichworte")}</button>
           <button
             type="button"
             className={searchMode === 'gemini' ? 'active' : ''}
             onClick={setModeGemini}
-          >
-            KI
-          </button>
+          >{t("KI")}</button>
         </div>
         <div className="search-row">
           <input
@@ -1285,7 +1263,7 @@ export default function App() {
             }
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label="Suche"
+            aria-label={t("Suche")}
             onKeyDown={(e) => {
               if (
                 searchMode === 'gemini' &&
@@ -1304,7 +1282,7 @@ export default function App() {
               disabled={geminiLoading || !query.trim()}
               onClick={() => void runGeminiSearch()}
             >
-              {geminiLoading ? 'Suche…' : 'KI suchen'}
+              {translateText(geminiLoading ? t("Suche…") : t("KI suchen"))}
             </button>
           ) : null}
         </div>
@@ -1313,16 +1291,14 @@ export default function App() {
           <div
             className="category-chips"
             role="group"
-            aria-label="Nach Kategorie filtern"
+            aria-label={t("Nach Kategorie filtern")}
           >
             <button
               type="button"
               className={`category-chip${categoryFilter === null ? ' active' : ''}`}
               aria-pressed={categoryFilter === null}
               onClick={() => setCategoryFilter(null)}
-            >
-              Alle
-            </button>
+            >{t("Alle")}</button>
             {EMAIL_CATEGORIES.filter(
               (id) => (categoryCounts.get(id) ?? 0) > 0 || categoryFilter === id,
             ).map((id) => (
@@ -1333,8 +1309,8 @@ export default function App() {
                 aria-pressed={categoryFilter === id}
                 onClick={() => setCategoryFilter(categoryFilter === id ? null : id)}
               >
-                {CATEGORY_LABELS[id]}
-                <span className="category-chip-count">{categoryCounts.get(id) ?? 0}</span>
+                {translateText(CATEGORY_LABELS[id])}
+                <span className="category-chip-count">{translateText(categoryCounts.get(id) ?? 0)}</span>
               </button>
             ))}
           </div>
@@ -1352,15 +1328,13 @@ export default function App() {
             versteckt gerade die Antwort. Erscheint erst ab zwei Postfächern.
           */}
           {knownMailboxIds.length > 1 ? (
-            <div className="mailbox-filter-row" role="group" aria-label="Postfach">
+            <div className="mailbox-filter-row" role="group" aria-label={t("Postfach")}>
               <button
                 type="button"
                 className={`category-chip${mailboxFilter === null ? ' active' : ''}`}
                 aria-pressed={mailboxFilter === null}
                 onClick={() => setMailboxFilter(null)}
-              >
-                Alle Postfächer
-              </button>
+              >{t("Alle Postfächer")}</button>
               {knownMailboxIds.map((id) => (
                 <button
                   key={id}
@@ -1369,8 +1343,8 @@ export default function App() {
                   aria-pressed={mailboxFilter === id}
                   onClick={() => setMailboxFilter(mailboxFilter === id ? null : id)}
                 >
-                  {mailboxLabel(id)}
-                  <span className="category-chip-count">{mailboxCounts.get(id) ?? 0}</span>
+                  {translateText(mailboxLabel(id))}
+                  <span className="category-chip-count">{translateText(mailboxCounts.get(id) ?? 0)}</span>
                 </button>
               ))}
             </div>
@@ -1384,17 +1358,15 @@ export default function App() {
               className="ghost small-btn"
               onClick={() => setShowSaveFilterForm((v) => !v)}
             >
-              {showSaveFilterForm ? 'Abbrechen' : 'Filter speichern'}
+              {translateText(showSaveFilterForm ? t("Abbrechen") : t("Filter speichern"))}
             </button>
             {filterFeedback ? (
-              <span className="muted small">{filterFeedback}</span>
+              <span className="muted small">{translateText(filterFeedback)}</span>
             ) : null}
           </div>
           {showSaveFilterForm ? (
             <div className="save-filter-form card">
-              <label className="save-filter-label">
-                Name
-                <input
+              <label className="save-filter-label">{t("Name")}<input
                   type="text"
                   value={saveFilterName}
                   onChange={(e) => setSaveFilterName(e.target.value)}
@@ -1402,25 +1374,22 @@ export default function App() {
                   maxLength={80}
                 />
               </label>
-              <p className="muted small save-filter-preview">
-                Übernimmt:{' '}
-                <strong>{searchMode === 'gemini' ? 'KI' : 'Stichworte'}</strong>{' '}
-                — „{query.trim().slice(0, 120)}
-                {query.trim().length > 120 ? '…' : ''}“
+              <p className="muted small save-filter-preview">{t("Übernimmt:")}{' '}
+                <strong>{translateText(searchMode === 'gemini' ? t("KI") : t("Stichworte"))}</strong>{' '}
+                — „{translateText(query.trim().slice(0, 120))}
+                {translateText(query.trim().length > 120 ? '…' : '')}“
               </p>
               <button
                 type="button"
                 disabled={!query.trim()}
                 onClick={saveCurrentFilter}
-              >
-                Speichern
-              </button>
+              >{t("Speichern")}</button>
             </div>
           ) : null}
           {savedFilters.length > 0 ? (
             <div className="saved-filters-chips">
-              <span className="muted small chips-label">Gespeichert:</span>
-              <ul className="chips" aria-label="Gespeicherte Filter">
+              <span className="muted small chips-label">{t("Gespeichert:")}</span>
+              <ul className="chips" aria-label={t("Gespeicherte Filter")}>
                 {savedFilters.map((f) => (
                   <li key={f.id} className="chip-wrap">
                     <button
@@ -1430,14 +1399,14 @@ export default function App() {
                       onClick={() => void applySavedFilter(f)}
                     >
                       <span className="chip-mode">
-                        {f.mode === 'gemini' ? 'KI' : 'SW'}
+                        {translateText(f.mode === 'gemini' ? t("KI") : t("SW"))}
                       </span>
-                      {f.name}
+                      {translateText(f.name)}
                     </button>
                     <button
                       type="button"
                       className="chip-remove"
-                      aria-label={`Filter ${f.name} löschen`}
+                      aria-label={tFormat("Filter {0} löschen", f.name)}
                       onClick={() => deleteSavedFilter(f.id)}
                     >
                       ×
@@ -1449,36 +1418,32 @@ export default function App() {
           ) : null}
         </div>
 
-        {geminiError ? <p className="error">{geminiError}</p> : null}
+        {geminiError ? <p className="error">{translateText(geminiError)}</p> : null}
         {rtdbListenError ? (
-          <p className="error" role="alert">
-            Realtime Database: {rtdbListenError} — prüfe die{' '}
-            <strong>Security Rules</strong> und ob der Pfad stimmt.
-          </p>
+          <p className="error" role="alert">{t("Realtime Database: ")}{translateText(rtdbListenError)}{t(" — prüfe die")}{' '}
+            <strong>{t("Security Rules")}</strong>{t(" und ob der Pfad stimmt.")}</p>
         ) : null}
         {folderActionError ? (
           <p className="error" role="alert">
-            {folderActionError}
+            {translateText(folderActionError)}
           </p>
         ) : null}
         <span className="muted">
           {isSearchActive ? (
             <>
-              {displayThreads.length} Unterhaltung
-              {displayThreads.length === 1 ? '' : 'en'}
-              {threadListTotalMessages > displayThreads.length
-                ? ` · ${threadListTotalMessages} Nachrichten`
-                : null}
+              {translateText(displayThreads.length)}{t(" Unterhaltung")}{translateText(displayThreads.length === 1 ? '' : t("en"))}
+              {translateText(threadListTotalMessages > displayThreads.length
+                ? tFormat(" · {0} Nachrichten", threadListTotalMessages)
+                : null)}
               {' '}
-              <span className="muted">(alle Ordner)</span>
+              <span className="muted">{t("(alle Ordner)")}</span>
             </>
           ) : (
             <>
-              {browsedThreads.length} Unterhaltung
-              {browsedThreads.length === 1 ? '' : 'en'}
-              {browsedTotalMessages > browsedThreads.length
-                ? ` · ${browsedTotalMessages} Nachrichten`
-                : null}
+              {translateText(browsedThreads.length)}{t(" Unterhaltung")}{translateText(browsedThreads.length === 1 ? '' : t("en"))}
+              {translateText(browsedTotalMessages > browsedThreads.length
+                ? tFormat(" · {0} Nachrichten", browsedTotalMessages)
+                : null)}
             </>
           )}
         </span>
@@ -1500,8 +1465,8 @@ export default function App() {
               <div
                 className="email-drag-handle"
                 draggable={moveBusyKey !== liKey}
-                title="Zum Ordner ziehen"
-                aria-label="Unterhaltung zum Ordner ziehen (Drag and Drop)"
+                title={t("Zum Ordner ziehen")}
+                aria-label={t("Unterhaltung zum Ordner ziehen (Drag and Drop)")}
                 onDragStart={(e) => {
                   habmailThreadDragSessionActive = true
                   e.dataTransfer.effectAllowed = 'copyMove'
@@ -1551,36 +1516,28 @@ export default function App() {
       {browsedThreads.length === 0 && !rtdbListenError ? (
         <div className="empty-block muted">
           {searchMode === 'gemini' && geminiOrderedIds?.length === 0 ? (
-            <p>Keine Treffer laut KI.</p>
+            <p>{t("Keine Treffer laut KI.")}</p>
           ) : isSearchActive && displayThreads.length === 0 ? (
-            <p>Keine Treffer mit der aktuellen Suche.</p>
+            <p>{t("Keine Treffer mit der aktuellen Suche.")}</p>
           ) : rows.length === 0 ? (
             <>
               <p>
-                <strong>Noch keine Mails.</strong> Dein Bereich in der Datenbank:{' '}
-                <code>{emailsPath}</code>
+                <strong>{t("Noch keine Mails.")}</strong>{t(" Dein Bereich in der Datenbank:")}{' '}
+                <code>{translateText(emailsPath)}</code>
               </p>
               <ul className="hint-list">
+                <li>{t("Noch kein Postfach hinterlegt? Oben rechts über das Kontozeichen → ")}<strong>{t("Postfächer verwalten")}</strong>{t(" eines anlegen. Ohne IMAP-Server wird von dort nicht abgeholt.")}</li>
+                <li>{t("Abgeholt wird alle fünf Minuten. Nach dem Anlegen dauert der erste Durchlauf also einen Moment.")}</li>
                 <li>
-                  Noch kein Postfach hinterlegt? Oben rechts über das
-                  Kontozeichen → <strong>Postfächer verwalten</strong> eines
-                  anlegen. Ohne IMAP-Server wird von dort nicht abgeholt.
-                </li>
-                <li>
-                  Abgeholt wird alle fünf Minuten. Nach dem Anlegen dauert der
-                  erste Durchlauf also einen Moment.
-                </li>
-                <li>
-                  <strong>Regeln eingespielt?</strong> Ohne die aktuellen Regeln
-                  aus dem Repo darf niemand seinen eigenen Bereich lesen:{' '}
-                  <code>firebase deploy --only database</code>.
+                  <strong>{t("Regeln eingespielt?")}</strong>{t(" Ohne die aktuellen Regeln aus dem Repo darf niemand seinen eigenen Bereich lesen:")}{' '}
+                  <code>{t("firebase deploy --only database")}</code>.
                 </li>
               </ul>
             </>
           ) : !isSearchActive && rows.length > 0 ? (
-            <p>So leer hier …</p>
+            <p>{t("So leer hier …")}</p>
           ) : (
-            <p>Keine Einträge.</p>
+            <p>{t("Keine Einträge.")}</p>
           )}
         </div>
       ) : null}
@@ -1626,13 +1583,11 @@ export default function App() {
             className="modal card"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="rename-folder-title">Ordner umbenennen</h3>
+            <h3 id="rename-folder-title">{t("Ordner umbenennen")}</h3>
             <p className="muted small">
-              „{renameFolderTarget.name}“
+              „{translateText(renameFolderTarget.name)}“
             </p>
-            <label className="folder-modal-label">
-              Neuer Name
-              <input
+            <label className="folder-modal-label">{t("Neuer Name")}<input
                 type="text"
                 value={renameFolderInput}
                 onChange={(e) => setRenameFolderInput(e.target.value)}
@@ -1646,9 +1601,7 @@ export default function App() {
                 className="ghost"
                 disabled={folderOpsBusy}
                 onClick={() => setRenameFolderTarget(null)}
-              >
-                Abbrechen
-              </button>
+              >{t("Abbrechen")}</button>
               <button
                 type="button"
                 disabled={
@@ -1660,9 +1613,7 @@ export default function App() {
                     renameFolderInput,
                   )
                 }
-              >
-                Speichern
-              </button>
+              >{t("Speichern")}</button>
             </div>
           </div>
         </div>
@@ -1680,26 +1631,22 @@ export default function App() {
             className="modal card"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="delete-thread-title">Unterhaltung löschen?</h3>
+            <h3 id="delete-thread-title">{t("Unterhaltung löschen?")}</h3>
             <p className="muted small">
               <strong>
-                {threadDeleteTarget.membersDesc[0].subject || '(Ohne Betreff)'}
+                {translateText(threadDeleteTarget.membersDesc[0].subject || '(Ohne Betreff)')}
               </strong>{' '}
               —{' '}
-              {threadDeleteTarget.membersAsc.length === 1
-                ? 'Diese Nachricht wird'
-                : `Alle ${threadDeleteTarget.membersAsc.length} Nachrichten in diesem Verlauf werden`}{' '}
-              dauerhaft aus der Datenbank entfernt.
-            </p>
+              {translateText(threadDeleteTarget.membersAsc.length === 1
+                ? t("Diese Nachricht wird")
+                : tFormat("Alle {0} Nachrichten in diesem Verlauf werden", threadDeleteTarget.membersAsc.length))}{' '}{t("dauerhaft aus der Datenbank entfernt.")}</p>
             <div className="modal-actions">
               <button
                 type="button"
                 className="ghost"
                 disabled={deleteThreadBusy}
                 onClick={() => setThreadDeleteTarget(null)}
-              >
-                Abbrechen
-              </button>
+              >{t("Abbrechen")}</button>
               <button
                 type="button"
                 className="btn-danger"
@@ -1707,9 +1654,7 @@ export default function App() {
                 onClick={() =>
                   void deleteThreadFromDb(threadDeleteTarget)
                 }
-              >
-                Löschen
-              </button>
+              >{t("Löschen")}</button>
             </div>
           </div>
         </div>
@@ -1727,29 +1672,22 @@ export default function App() {
             className="modal card"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="delete-folder-title">Ordner löschen?</h3>
+            <h3 id="delete-folder-title">{t("Ordner löschen?")}</h3>
             <p className="muted small">
-              <strong>{deleteFolderTarget.name}</strong> wird entfernt — inklusive
-              aller <strong>Unterordner</strong>. E-Mails aus diesen Ordnern
-              werden in den <strong>Posteingang</strong> verschoben.
-            </p>
+              <strong>{translateText(deleteFolderTarget.name)}</strong>{t(" wird entfernt — inklusive aller ")}<strong>{t("Unterordner")}</strong>{t(". E-Mails aus diesen Ordnern werden in den ")}<strong>{t("Posteingang")}</strong>{t(" verschoben.")}</p>
             <div className="modal-actions">
               <button
                 type="button"
                 className="ghost"
                 disabled={folderOpsBusy}
                 onClick={() => setDeleteFolderTarget(null)}
-              >
-                Abbrechen
-              </button>
+              >{t("Abbrechen")}</button>
               <button
                 type="button"
                 className="btn-danger"
                 disabled={folderOpsBusy}
                 onClick={() => void deleteMailFolder(deleteFolderTarget.id)}
-              >
-                Löschen
-              </button>
+              >{t("Löschen")}</button>
             </div>
           </div>
         </div>
@@ -1767,35 +1705,29 @@ export default function App() {
             className="modal card"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="folder-modal-title">Neuer Ordner</h3>
-            <p className="muted small">
-              Ordner sind für alle angemeldeten Nutzer gleich (Realtime Database:
-              <code> mailFolders</code>).
+            <h3 id="folder-modal-title">{t("Neuer Ordner")}</h3>
+            <p className="muted small">{t("Ordner sind für alle angemeldeten Nutzer gleich (Realtime Database:")}<code>{t(" mailFolders")}</code>).
             </p>
-            <label className="folder-modal-label">
-              Name
-              <input
+            <label className="folder-modal-label">{t("Name")}<input
                 type="text"
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
                 maxLength={120}
                 autoFocus
-                placeholder="z. B. Rechnungen"
+                placeholder={t("z. B. Rechnungen")}
               />
             </label>
-            <label className="folder-modal-label">
-              Übergeordnet
-              <select
+            <label className="folder-modal-label">{t("Übergeordnet")}<select
                 value={newFolderParentId ?? ''}
                 onChange={(e) =>
                   setNewFolderParentId(e.target.value || null)
                 }
               >
-                <option value="">(Oberste Ebene)</option>
+                <option value="">{t("(Oberste Ebene)")}</option>
                 {flattenFolderOptions(folderTree).map((opt) =>
                   opt.id ? (
                     <option key={opt.id} value={opt.id}>
-                      {opt.label}
+                      {translateText(opt.label)}
                     </option>
                   ) : null,
                 )}
@@ -1806,16 +1738,12 @@ export default function App() {
                 type="button"
                 className="ghost"
                 onClick={() => setShowFolderModal(false)}
-              >
-                Abbrechen
-              </button>
+              >{t("Abbrechen")}</button>
               <button
                 type="button"
                 disabled={!newFolderName.trim()}
                 onClick={() => void createMailFolder()}
-              >
-                Anlegen
-              </button>
+              >{t("Anlegen")}</button>
             </div>
           </div>
         </div>
@@ -1859,7 +1787,7 @@ export default function App() {
 function formatAmount(amountCents: number, currency?: string): string {
   const value = amountCents / 100
   try {
-    return new Intl.NumberFormat('de-DE', {
+    return new Intl.NumberFormat(getLocale(), {
       style: 'currency',
       currency: currency || 'EUR',
     }).format(value)
@@ -1888,10 +1816,7 @@ function AttachmentMissingDataHint({ row }: { row: EmailRow }) {
 
   return (
     <p className="muted small attachment-nodata">
-      <strong>Anhang vorhanden, aber nicht gespeichert.</strong> Zu dieser Mail
-      liegen keine Anhangdaten in der Datenbank. Zum Öffnen bleibt der Weg über
-      das Postfach selbst.
-    </p>
+      <strong>{t("Anhang vorhanden, aber nicht gespeichert.")}</strong>{t(" Zu dieser Mail liegen keine Anhangdaten in der Datenbank. Zum Öffnen bleibt der Weg über das Postfach selbst.")}</p>
   )
 }
 
@@ -1993,8 +1918,8 @@ function EmailCard({
       <button
         type="button"
         className="email-card-dismiss"
-        title="Unterhaltung löschen"
-        aria-label="Unterhaltung löschen"
+        title={t("Unterhaltung löschen")}
+        aria-label={t("Unterhaltung löschen")}
         onClick={(e) => {
           e.stopPropagation()
           onRequestDelete()
@@ -2004,46 +1929,45 @@ function EmailCard({
       </button>
       <div className="email-head">
         <div className="email-head-body">
-          <h2>{head.subject || '(Ohne Betreff)'}</h2>
+          <h2>{translateText(head.subject || '(Ohne Betreff)')}</h2>
           <p className="meta">
-            <span className="email-from-line">{fromLine}</span>
+            <span className="email-from-line">{translateText(fromLine)}</span>
             {multi ? (
-              <span className="pill pill-thread" title="Zusammengehörige Nachrichten">
-                {thread.membersAsc.length} im Verlauf
-              </span>
+              <span className="pill pill-thread" title={t("Zusammengehörige Nachrichten")}>
+                {translateText(thread.membersAsc.length)}{t(" im Verlauf")}</span>
             ) : null}
-            <span className="pill">{head.category || '—'}</span>
+            <span className="pill">{translateText(head.category || '—')}</span>
             {head.priority ? (
-              <span className="pill pill-prio">{head.priority}</span>
+              <span className="pill pill-prio">{translateText(head.priority)}</span>
             ) : null}
             {head.mailboxId ? (
-              <span className="pill pill-muted" title={`Empfangen über ${head.mailboxId}`}>
-                {mailboxLabel(head.mailboxId)}
+              <span className="pill pill-muted" title={tFormat("Empfangen über {0}", head.mailboxId)}>
+                {translateText(mailboxLabel(head.mailboxId))}
               </span>
             ) : null}
             {head.invoice?.amountCents !== undefined ? (
-              <span className="pill" title="Betrag laut Rechnung">
-                {formatAmount(head.invoice.amountCents, head.invoice.currency)}
+              <span className="pill" title={t("Betrag laut Rechnung")}>
+                {translateText(formatAmount(head.invoice.amountCents, head.invoice.currency))}
               </span>
             ) : null}
             <span className={`status status-${norm(head.status)}`}>
-              {head.status}
+              {translateText(head.status)}
             </span>
             {head.hasAttachment ? (
               <span className="muted">
-                {attCountHead > 0
-                  ? `${attCountHead} Anhang/Anhänge`
-                  : 'Mit Anhang'}
+                {translateText(attCountHead > 0
+                  ? tFormat("{0} Anhang/Anhänge", attCountHead)
+                  : t("Mit Anhang"))}
               </span>
             ) : null}
           </p>
         </div>
-        <div className="email-toolbar" role="toolbar" aria-label="E-Mail-Aktionen">
+        <div className="email-toolbar" role="toolbar" aria-label={t("E-Mail-Aktionen")}>
           <button
             type="button"
             className="email-icon-btn"
-            title="Antworten"
-            aria-label="Antworten"
+            title={t("Antworten")}
+            aria-label={t("Antworten")}
             onClick={() => {
               onMarkInteracted()
               onReply()
@@ -2054,8 +1978,8 @@ function EmailCard({
           <button
             type="button"
             className="email-icon-btn"
-            title="Weiterleiten"
-            aria-label="Weiterleiten"
+            title={t("Weiterleiten")}
+            aria-label={t("Weiterleiten")}
             onClick={() => {
               onMarkInteracted()
               onForward()
@@ -2066,8 +1990,8 @@ function EmailCard({
           <button
             type="button"
             className="email-icon-btn"
-            title="In einen Ordner verschieben"
-            aria-label="In einen Ordner verschieben"
+            title={t("In einen Ordner verschieben")}
+            aria-label={t("In einen Ordner verschieben")}
             onClick={() => onRequestMove()}
           >
             <SvgMoveToFolder />
@@ -2075,8 +1999,8 @@ function EmailCard({
           <button
             type="button"
             className="email-icon-btn"
-            title="Als ungelesen markieren"
-            aria-label="Als ungelesen markieren"
+            title={t("Als ungelesen markieren")}
+            aria-label={t("Als ungelesen markieren")}
             onClick={() => onMarkUnread()}
           >
             <SvgMarkUnread />
@@ -2099,18 +2023,16 @@ function EmailCard({
         }
         onClick={toggleDetails}
       >
-        <span className="summary">{head.summary || '—'}</span>
+        <span className="summary">{translateText(head.summary || '—')}</span>
       </button>
       {/* Woher die Zusammenfassung stammt. Ohne das bleibt es Vertrauenssache,
           ob sie den Beleg kennt oder nur den Mailtext — und genau das ist die
           Frage, wenn im Text bloß „anbei unsere Rechnung" steht. */}
       {head.hasAttachment && head.attachmentsAnalyzed !== undefined ? (
         <p className="muted small summary-source">
-          {head.attachmentsAnalyzed > 0
-            ? `Zusammenfassung samt ${head.attachmentsAnalyzed} Anhang${
-                head.attachmentsAnalyzed === 1 ? '' : 'ängen'
-              }`
-            : 'Zusammenfassung nur aus dem Mailtext — kein Anhang war lesbar.'}
+          {translateText(head.attachmentsAnalyzed > 0
+            ? tFormat("Zusammenfassung samt {0} Anhang{1}", head.attachmentsAnalyzed, head.attachmentsAnalyzed === 1 ? '' : 'ängen')
+            : t("Zusammenfassung nur aus dem Mailtext — kein Anhang war lesbar."))}
         </p>
       ) : null}
       <MailAppointments
@@ -2118,12 +2040,10 @@ function EmailCard({
         events={calendarEvents}
         onOpen={(eventId, draft) => onOpenCalendar(draft, eventId)}
       />
-      <p className="muted small">
-        Zuletzt: {head.receivedAt || '—'}
+      <p className="muted small">{t("Zuletzt: ")}{translateText(head.receivedAt || '—')}
         {multi ? (
           <>
-            {' '}
-            · älteste: {thread.membersAsc[0]?.receivedAt || '—'}
+            {' '}{t("· älteste: ")}{translateText(thread.membersAsc[0]?.receivedAt || '—')}
           </>
         ) : null}
       </p>
@@ -2131,38 +2051,36 @@ function EmailCard({
         <div className="body-block">
           {multi ? (
             <>
-              <h3>Verlauf ({thread.membersAsc.length} Nachrichten)</h3>
-              <p className="muted small thread-hint">
-                Zusammengefasst nach gleichem Kernthema im Betreff (ohne Re:/Fwd:/AW:
-                usw.).
-              </p>
+              <h3>{t("Verlauf (")}{translateText(thread.membersAsc.length)}{t(" Nachrichten)")}</h3>
+              <p className="muted small thread-hint">{t("Zusammengefasst nach gleichem Kernthema im Betreff (ohne Re:/Fwd:/AW: usw.).")}</p>
               <ol className="thread-timeline">
                 {thread.membersAsc.map((r) => {
                   const fl = fromLineForRow(r)
                   return (
                     <li key={r.id} className="thread-msg">
                       <div className="thread-msg-head">
-                        <strong className="email-from-line">{fl}</strong>
+                        <strong className="email-from-line">{translateText(fl)}</strong>
                         <span className="muted small">
-                          {r.receivedAt || '—'}
+                          {translateText(r.receivedAt || '—')}
                         </span>
                       </div>
                       {r.subject && r.subject !== head.subject ? (
                         <p className="thread-msg-subject muted small">
-                          {r.subject}
+                          {translateText(r.subject)}
                         </p>
                       ) : null}
                       {r.summary ? (
-                        <p className="thread-msg-summary small">{r.summary}</p>
+                        <p className="thread-msg-summary small">{translateText(r.summary)}</p>
                       ) : null}
+                      <MailTranslation key={r.id} subject={r.subject} text={r.originalBody || ''} />
                       <pre className="body thread-body">
-                        {r.originalBody || '—'}
+                        {translateText(r.originalBody || '—')}
                       </pre>
                       <AttachmentMissingDataHint row={r} />
                       <AttachmentList
                         attachments={r.attachments ?? []}
                         idPrefix={r.id}
-                        heading="Anhänge"
+                        heading={t("Anhänge")}
                         titleTag="h4"
                       />
                     </li>
@@ -2172,13 +2090,14 @@ function EmailCard({
             </>
           ) : (
             <>
-              <h3>Originaltext</h3>
-              <pre className="body">{head.originalBody || '—'}</pre>
+              <MailTranslation subject={head.subject} text={head.originalBody || ''} />
+              <h3>{t("Originaltext")}</h3>
+              <pre className="body">{translateText(head.originalBody || '—')}</pre>
               <AttachmentMissingDataHint row={head} />
               <AttachmentList
                 attachments={head.attachments ?? []}
                 idPrefix={head.id}
-                heading="Anhänge"
+                heading={t("Anhänge")}
                 titleTag="h3"
               />
             </>

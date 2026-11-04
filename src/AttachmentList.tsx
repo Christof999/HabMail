@@ -1,3 +1,6 @@
+import { tFormat, t } from './i18n'
+import { translateText } from './languageSession'
+
 import { useEffect, useState } from 'react'
 import type { EmailAttachment } from './types'
 import {
@@ -73,10 +76,10 @@ function AttachmentPreview({
         type="button"
         className="attachment-preview"
         onClick={onOpen}
-        aria-label={`${attachmentName(attachment)} öffnen`}
+        aria-label={tFormat("{0} öffnen", attachmentName(attachment))}
       >
         <img src={image} alt="" />
-        {kind === 'pdf' ? <span className="attachment-preview-badge">PDF</span> : null}
+        {kind === 'pdf' ? <span className="attachment-preview-badge">{t("PDF")}</span> : null}
       </button>
     )
   }
@@ -87,9 +90,7 @@ function AttachmentPreview({
         type="button"
         className="attachment-preview attachment-preview-ask"
         onClick={() => setWanted(true)}
-      >
-        Vorschau laden
-      </button>
+      >{t("Vorschau laden")}</button>
     )
   }
 
@@ -132,7 +133,7 @@ export function AttachmentList({
 
   return (
     <div className="atts thread-atts">
-      <TitleTag className="attachment-list-title">{heading}</TitleTag>
+      <TitleTag className="attachment-list-title">{translateText(heading)}</TitleTag>
       <ul className="attachment-list">
         {attachments.map((a, i) => {
           const name = attachmentName(a)
@@ -145,14 +146,14 @@ export function AttachmentList({
                 <AttachmentPreview attachment={a} onOpen={() => void run(i, openAttachment)} />
               ) : null}
               <span className="attachment-meta">
-                <strong>{name}</strong>
+                <strong>{translateText(name)}</strong>
                 <span className="muted small">
-                  {attachmentMimeType(a)}
-                  {size === '' ? '' : ` · ${size}`}
+                  {translateText(attachmentMimeType(a))}
+                  {translateText(size === '' ? '' : ` · ${size}`)}
                 </span>
                 {failed?.index === i ? (
                   <span className="error small" role="alert">
-                    {failed.message}
+                    {translateText(failed.message)}
                   </span>
                 ) : null}
               </span>
@@ -167,7 +168,7 @@ export function AttachmentList({
                       disabled={busy !== null}
                       onClick={() => void run(i, openAttachment)}
                     >
-                      {busy === i ? 'Lädt…' : 'Öffnen'}
+                      {translateText(busy === i ? t("Lädt…") : t("Öffnen"))}
                     </button>
                   ) : null}
                   <button
@@ -175,12 +176,10 @@ export function AttachmentList({
                     className="ghost small-btn"
                     disabled={busy !== null}
                     onClick={() => void run(i, downloadAttachment)}
-                  >
-                    Speichern
-                  </button>
+                  >{t("Speichern")}</button>
                 </div>
               ) : (
-                <span className="muted small attachment-missing">{missing}</span>
+                <span className="muted small attachment-missing">{translateText(missing)}</span>
               )}
             </li>
           )

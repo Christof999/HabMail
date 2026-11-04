@@ -1,3 +1,4 @@
+import { translateText } from './languageSession'
 /**
  * Eine Reihe Knöpfe, von denen einer gedrückt ist.
  *
@@ -21,7 +22,7 @@ export function ChoiceRow<T extends string>({
 }) {
   return (
     <div className="choice-row-group">
-      <span className="account-section-label">{label}</span>
+      <span className="account-section-label">{translateText(label)}</span>
       <div className="choice-row" role="group" aria-label={label}>
         {options.map(([option, text]) => (
           <button
@@ -31,7 +32,7 @@ export function ChoiceRow<T extends string>({
             aria-pressed={option === value}
             onClick={() => onChange(option)}
           >
-            {text}
+            {translateText(text)}
           </button>
         ))}
       </div>

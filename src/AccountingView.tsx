@@ -1,3 +1,6 @@
+import { tFormat, t } from './i18n'
+import { translateText } from './languageSession'
+
 import { useEffect, useMemo, useState } from 'react'
 import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
@@ -322,30 +325,24 @@ export default function AccountingView({ rows, uid }: Props) {
     return (
       <div className="accounting">
         <div className="card">
-        <h2>Buchhaltung</h2>
-        <p className="muted">
-          Noch keine Rechnungen. Sobald eine Mail als <strong>Rechnung</strong> oder{' '}
-          <strong>Mahnung</strong> einsortiert wird, taucht sie hier auf — nach
-          Monat gruppiert.
-        </p>
+        <h2>{t("Buchhaltung")}</h2>
+        <p className="muted">{t("Noch keine Rechnungen. Sobald eine Mail als ")}<strong>{t("Rechnung")}</strong>{t(" oder")}{' '}
+          <strong>{t("Mahnung")}</strong>{t(" einsortiert wird, taucht sie hier auf — nach Monat gruppiert.")}</p>
         {/* Auch hier erreichbar: sind Rechnungen als „Sonstiges“ gelandet,
             weil die KI nur den Mailtext sah, ist diese Liste leer — und
             genau dann wird der Knopf gebraucht. */}
-        <p className="muted small">
-          Liegen Rechnungen als PDF im Posteingang, ohne hier aufzutauchen, hilft
-          ein zweiter Durchgang: früher gingen die Anhänge nicht an die KI.
-        </p>
-        {error ? <p className="mailbox-error">{error}</p> : null}
-        {reanalyzed ? <p className="muted small">{reanalyzed}</p> : null}
+        <p className="muted small">{t("Liegen Rechnungen als PDF im Posteingang, ohne hier aufzutauchen, hilft ein zweiter Durchgang: früher gingen die Anhänge nicht an die KI.")}</p>
+        {error ? <p className="mailbox-error">{translateText(error)}</p> : null}
+        {reanalyzed ? <p className="muted small">{translateText(reanalyzed)}</p> : null}
         <button
           type="button"
           className="ghost"
           disabled={reanalyzing !== null}
           onClick={() => void reanalyze()}
         >
-          {reanalyzing === null
-            ? 'Mails neu auswerten'
-            : `Werte aus … ${reanalyzing.checked} geprüft`}
+          {translateText(reanalyzing === null
+            ? t("Mails neu auswerten")
+            : tFormat("Werte aus … {0} geprüft", reanalyzing.checked))}
         </button>
         </div>
         {/* Sind alle Rechnungen eigene, wäre „noch keine Rechnungen" irreführend. */}
@@ -363,33 +360,27 @@ export default function AccountingView({ rows, uid }: Props) {
       */}
       <div className="accounting-head card">
         <div className="accounting-sum">
-          <span className="accounting-sum-label">Rechnungen {currentYear}</span>
-          <strong className="accounting-sum-value">{formatCents(yearTotal)}</strong>
+          <span className="accounting-sum-label">{t("Rechnungen ")}{translateText(currentYear)}</span>
+          <strong className="accounting-sum-value">{translateText(formatCents(yearTotal))}</strong>
           <span className="muted small">
-            {groups.length} Monat{groups.length === 1 ? '' : 'e'}
-            {openTotal > 0 ? ` · ${openTotal} offen` : ' · alles bezahlt'}
+            {translateText(groups.length)}{t(" Monat")}{translateText(groups.length === 1 ? '' : 'e')}
+            {translateText(openTotal > 0 ? tFormat(" · {0} offen", openTotal) : t(" · alles bezahlt"))}
           </span>
         </div>
         <div className="accounting-head-actions">
-          <button type="button" className="ghost" onClick={() => setShowCompanies(true)}>
-            Firmen
-          </button>
-          <button type="button" className="ghost" onClick={() => setShowBank(true)}>
-            Bankumsätze
-          </button>
+          <button type="button" className="ghost" onClick={() => setShowCompanies(true)}>{t("Firmen")}</button>
+          <button type="button" className="ghost" onClick={() => setShowBank(true)}>{t("Bankumsätze")}</button>
         </div>
       </div>
 
       {/* Erst ab zwei Firmen: bei einer einzigen wäre die Auswahl nur Ballast. */}
       {presentCompanies.length > 1 ? (
-        <div className="company-filter" role="group" aria-label="Firma">
+        <div className="company-filter" role="group" aria-label={t("Firma")}>
           <button
             type="button"
             className={`category-chip${companyFilter === null ? ' active' : ''}`}
             onClick={() => setCompanyFilter(null)}
-          >
-            Alle Firmen
-          </button>
+          >{t("Alle Firmen")}</button>
           {presentCompanies.map((company) => (
             <button
               key={company.id}
@@ -397,7 +388,7 @@ export default function AccountingView({ rows, uid }: Props) {
               className={`category-chip${companyFilter === company.id ? ' active' : ''}`}
               onClick={() => setCompanyFilter(companyFilter === company.id ? null : company.id)}
             >
-              {company.label}
+              {translateText(company.label)}
             </button>
           ))}
         </div>
@@ -408,25 +399,17 @@ export default function AccountingView({ rows, uid }: Props) {
         Ausgangsrechnung erkennen lässt — sie stünde hier als offener Posten.
       */}
       {companies.length === 0 ? (
-        <p className="muted small">
-          Noch keine Firma angelegt. Unter <strong>Firmen</strong> die eigene
-          eintragen: daran erkennt die Buchhaltung Rechnungen, die ihr selbst
-          ausgestellt habt — die gehören nicht hierher.
-        </p>
+        <p className="muted small">{t("Noch keine Firma angelegt. Unter ")}<strong>{t("Firmen")}</strong>{t(" die eigene eintragen: daran erkennt die Buchhaltung Rechnungen, die ihr selbst ausgestellt habt — die gehören nicht hierher.")}</p>
       ) : null}
 
-      {error ? <p className="mailbox-error">{error}</p> : null}
-      {reanalyzed ? <p className="muted small">{reanalyzed}</p> : null}
+      {error ? <p className="mailbox-error">{translateText(error)}</p> : null}
+      {reanalyzed ? <p className="muted small">{translateText(reanalyzed)}</p> : null}
 
-      {handedOver ? <p className="muted small">{handedOver}</p> : null}
+      {handedOver ? <p className="muted small">{translateText(handedOver)}</p> : null}
 
       <section className="card reanalyze-block">
         <p className="small">
-          <strong>Übergabe ans Rechnungsprogramm.</strong> Neue Rechnungen und
-          Mahnungen gehen beim Abholen von allein in die Buchhaltung des
-          Rechnungsprogramms. Der Bestand — alles, was vorher schon dalag —
-          wird hier nachgereicht.
-        </p>
+          <strong>{t("Übergabe ans Rechnungsprogramm.")}</strong>{t(" Neue Rechnungen und Mahnungen gehen beim Abholen von allein in die Buchhaltung des Rechnungsprogramms. Der Bestand — alles, was vorher schon dalag — wird hier nachgereicht.")}</p>
         <div className="mailbox-item-actions">
           <button
             type="button"
@@ -434,18 +417,13 @@ export default function AccountingView({ rows, uid }: Props) {
             disabled={handingOver !== null}
             onClick={() => void handOver()}
           >
-            {handingOver === null
-              ? 'Buchhaltung übergeben'
-              : `Übergebe … ${handingOver.checked} geprüft, ${handingOver.sent} übergeben`}
+            {translateText(handingOver === null
+              ? t("Buchhaltung übergeben")
+              : tFormat("Übergebe … {0} geprüft, {1} übergeben", handingOver.checked, handingOver.sent))}
           </button>
         </div>
         <HandoffRetries uid={uid} rows={rows} />
-        <p className="muted small">
-          Doppelt schicken schadet nicht: drüben entscheidet die Mail-Kennung,
-          es entsteht keine zweite Rechnung. Was dort bereits bearbeitet wurde
-          (Status, Freigabe, Notizen), bleibt unangetastet. Eigene
-          Ausgangsrechnungen gehen nicht mit hinüber.
-        </p>
+        <p className="muted small">{t("Doppelt schicken schadet nicht: drüben entscheidet die Mail-Kennung, es entsteht keine zweite Rechnung. Was dort bereits bearbeitet wurde (Status, Freigabe, Notizen), bleibt unangetastet. Eigene Ausgangsrechnungen gehen nicht mit hinüber.")}</p>
       </section>
 
       <OwnInvoiceBlock invoices={ownInvoices} />
@@ -454,12 +432,7 @@ export default function AccountingView({ rows, uid }: Props) {
         <section className="card reanalyze-block">
           <p className="small">
             <strong>
-              {missingAmounts} Rechnung{missingAmounts === 1 ? '' : 'en'} ohne Betrag.
-            </strong>{' '}
-            Steht der Betrag im angehängten PDF und nicht im Mailtext, hatte die
-            Auswertung ihn früher nicht gesehen — die Anhänge gingen nicht an die
-            KI. Das ist behoben; hier wird der Bestand nachgeholt.
-          </p>
+              {translateText(missingAmounts)}{t(" Rechnung")}{translateText(missingAmounts === 1 ? '' : t("en"))}{t(" ohne Betrag.")}</strong>{' '}{t("Steht der Betrag im angehängten PDF und nicht im Mailtext, hatte die Auswertung ihn früher nicht gesehen — die Anhänge gingen nicht an die KI. Das ist behoben; hier wird der Bestand nachgeholt.")}</p>
           <div className="mailbox-item-actions">
             <button
               type="button"
@@ -467,26 +440,19 @@ export default function AccountingView({ rows, uid }: Props) {
               disabled={reanalyzing !== null}
               onClick={() => void reanalyze()}
             >
-              {reanalyzing === null
-                ? 'Rechnungen neu auswerten'
-                : `Werte aus … ${reanalyzing.checked} geprüft, ${reanalyzing.amountsFound} Beträge gefunden`}
+              {translateText(reanalyzing === null
+                ? t("Rechnungen neu auswerten")
+                : tFormat("Werte aus … {0} geprüft, {1} Beträge gefunden", reanalyzing.checked, reanalyzing.amountsFound))}
             </button>
           </div>
-          <p className="muted small">
-            Läuft über alle Mails mit lesbarem Anhang und dauert je nach Menge
-            ein paar Minuten. Bereits erkannte Beträge und von Hand korrigierte
-            Werte bleiben unangetastet, ebenso zugeordnete Zahlungen.
-          </p>
+          <p className="muted small">{t("Läuft über alle Mails mit lesbarem Anhang und dauert je nach Menge ein paar Minuten. Bereits erkannte Beträge und von Hand korrigierte Werte bleiben unangetastet, ebenso zugeordnete Zahlungen.")}</p>
         </section>
       ) : null}
 
       {suggestions.length > 0 ? (
         <section className="card suggestion-block">
-          <h3>Zahlungen prüfen</h3>
-          <p className="muted small">
-            Zu diesen Umsätzen passt der Betrag, aber nicht eindeutig genug für
-            eine automatische Zuordnung. Bei Geld entscheidest lieber du.
-          </p>
+          <h3>{t("Zahlungen prüfen")}</h3>
+          <p className="muted small">{t("Zu diesen Umsätzen passt der Betrag, aber nicht eindeutig genug für eine automatische Zuordnung. Bei Geld entscheidest lieber du.")}</p>
           <ul className="suggestion-list">
             {suggestions.map((suggestion) => {
               const transaction = transactionById.get(suggestion.transactionId)
@@ -495,12 +461,11 @@ export default function AccountingView({ rows, uid }: Props) {
                 <li key={suggestion.transactionId} className="suggestion-row">
                   <div className="suggestion-tx">
                     <strong>
-                      {formatCents(Math.abs(transaction.amountCents), transaction.currency)}
-                    </strong>{' '}
-                    an {transaction.counterpartyName || 'unbekannt'} ·{' '}
-                    {formatDate(transaction.bookingDate)}
+                      {translateText(formatCents(Math.abs(transaction.amountCents), transaction.currency))}
+                    </strong>{' '}{t("an ")}{translateText(transaction.counterpartyName || 'unbekannt')} ·{' '}
+                    {translateText(formatDate(transaction.bookingDate))}
                     {transaction.reference ? (
-                      <span className="muted small"> · {transaction.reference.slice(0, 80)}</span>
+                      <span className="muted small"> · {translateText(transaction.reference.slice(0, 80))}</span>
                     ) : null}
                   </div>
                   <ul className="suggestion-candidates">
@@ -515,11 +480,11 @@ export default function AccountingView({ rows, uid }: Props) {
                               void acceptSuggestion(suggestion.transactionId, candidate.emailId)
                             }
                           >
-                            {invoice?.invoice?.vendor ?? invoice?.senderName ?? invoice?.sender ?? candidate.emailId}
-                            {invoice?.subject ? ` — ${invoice.subject.slice(0, 40)}` : ''}
+                            {translateText(invoice?.invoice?.vendor ?? invoice?.senderName ?? invoice?.sender ?? candidate.emailId)}
+                            {translateText(invoice?.subject ? ` — ${invoice.subject.slice(0, 40)}` : '')}
                           </button>
                           {candidate.reasons.length > 0 ? (
-                            <span className="muted small"> {candidate.reasons.join(', ')}</span>
+                            <span className="muted small"> {translateText(candidate.reasons.join(', '))}</span>
                           ) : null}
                         </li>
                       )
@@ -549,25 +514,21 @@ export default function AccountingView({ rows, uid }: Props) {
               onClick={() => toggle(group.period)}
             >
               <span className="month-caret" aria-hidden>
-                {isOpen ? '▾' : '▸'}
+                {translateText(isOpen ? '▾' : '▸')}
               </span>
-              <span className="month-label">{group.label}</span>
+              <span className="month-label">{translateText(group.label)}</span>
               <span className="month-total">
-                {formatCents(group.totalCents, group.currencies[0])}
+                {translateText(formatCents(group.totalCents, group.currencies[0]))}
               </span>
               <span className="month-sub muted small">
-                {group.entries.length} Rechnung{group.entries.length === 1 ? '' : 'en'}
+                {translateText(group.entries.length)}{t(" Rechnung")}{translateText(group.entries.length === 1 ? '' : t("en"))}
                 {' · '}
-                {group.openCount === 0 ? 'alles bezahlt' : `${group.openCount} offen`}
+                {translateText(group.openCount === 0 ? t("alles bezahlt") : tFormat("{0} offen", group.openCount))}
               </span>
             </button>
 
             {group.withoutAmount > 0 ? (
-              <p className="muted small month-warning">
-                Bei {group.withoutAmount} Rechnung{group.withoutAmount === 1 ? '' : 'en'} wurde
-                kein Betrag erkannt — {group.withoutAmount === 1 ? 'sie fehlt' : 'sie fehlen'} in
-                der Summe. Betrag antippen, um ihn nachzutragen.
-              </p>
+              <p className="muted small month-warning">{t("Bei ")}{translateText(group.withoutAmount)}{t(" Rechnung")}{translateText(group.withoutAmount === 1 ? '' : t("en"))}{t(" wurde kein Betrag erkannt — ")}{translateText(group.withoutAmount === 1 ? t("sie fehlt") : t("sie fehlen"))}{t(" in der Summe. Betrag antippen, um ihn nachzutragen.")}</p>
             ) : null}
 
             {isOpen ? (
@@ -582,14 +543,13 @@ export default function AccountingView({ rows, uid }: Props) {
                   group.companies.map((company) => (
                     <section key={company.id} className="company-group">
                       <div className="company-group-head">
-                        <strong>{company.label}</strong>
+                        <strong>{translateText(company.label)}</strong>
                         <span className="company-group-total">
-                          {formatCents(company.totalCents, company.currencies[0])}
+                          {translateText(formatCents(company.totalCents, company.currencies[0]))}
                         </span>
                         <span className="muted small">
-                          {company.entries.length} Rechnung
-                          {company.entries.length === 1 ? '' : 'en'}
-                          {company.openCount > 0 ? ` · ${company.openCount} offen` : ''}
+                          {translateText(company.entries.length)}{t(" Rechnung")}{translateText(company.entries.length === 1 ? '' : t("en"))}
+                          {translateText(company.openCount > 0 ? tFormat(" · {0} offen", company.openCount) : '')}
                         </span>
                       </div>
 
@@ -612,10 +572,9 @@ export default function AccountingView({ rows, uid }: Props) {
 
                       <div className="month-actions">
                         <span className="muted small">
-                          {company.printableAttachments} Anhang/Anhänge druckbar
-                          {company.missingAttachments > 0
-                            ? ` · ${company.missingAttachments} fehlt/fehlen (zu groß)`
-                            : ''}
+                          {translateText(company.printableAttachments)}{t(" Anhang/Anhänge druckbar")}{translateText(company.missingAttachments > 0
+                            ? tFormat(" · {0} fehlt/fehlen (zu groß)", company.missingAttachments)
+                            : '')}
                         </span>
                         <button
                           type="button"
@@ -623,14 +582,14 @@ export default function AccountingView({ rows, uid }: Props) {
                           disabled={busy}
                           onClick={() => void exportMonth(group, 'download', company)}
                         >
-                          {busy ? 'Erzeuge …' : 'Als PDF speichern'}
+                          {translateText(busy ? t("Erzeuge …") : t("Als PDF speichern"))}
                         </button>
                         <button
                           type="button"
                           disabled={busy}
                           onClick={() => void exportMonth(group, 'print', company)}
                         >
-                          {busy ? 'Erzeuge …' : `Rechnungen ${company.label} drucken`}
+                          {translateText(busy ? t("Erzeuge …") : tFormat("Rechnungen {0} drucken", company.label))}
                         </button>
                       </div>
                     </section>
@@ -656,10 +615,9 @@ export default function AccountingView({ rows, uid }: Props) {
 
                     <div className="month-actions">
                       <span className="muted small">
-                        {group.printableAttachments} Anhang/Anhänge druckbar
-                        {group.missingAttachments > 0
-                          ? ` · ${group.missingAttachments} fehlt/fehlen (zu groß)`
-                          : ''}
+                        {translateText(group.printableAttachments)}{t(" Anhang/Anhänge druckbar")}{translateText(group.missingAttachments > 0
+                          ? tFormat(" · {0} fehlt/fehlen (zu groß)", group.missingAttachments)
+                          : '')}
                       </span>
                       <button
                         type="button"
@@ -667,22 +625,21 @@ export default function AccountingView({ rows, uid }: Props) {
                         disabled={busy}
                         onClick={() => void exportMonth(group, 'download', group.companies[0])}
                       >
-                        {busy ? 'Erzeuge …' : 'Als PDF speichern'}
+                        {translateText(busy ? t("Erzeuge …") : t("Als PDF speichern"))}
                       </button>
                       <button
                         type="button"
                         disabled={busy}
                         onClick={() => void exportMonth(group, 'print', group.companies[0])}
                       >
-                        {busy ? 'Erzeuge …' : 'Alle Rechnungen drucken'}
+                        {translateText(busy ? t("Erzeuge …") : t("Alle Rechnungen drucken"))}
                       </button>
                     </div>
                   </>
                 )}
 
                 {lastPdf?.period === group.period && lastPdf.skipped.length > 0 ? (
-                  <p className="muted small month-warning">
-                    Nicht übernommen: {lastPdf.skipped.join('; ')}
+                  <p className="muted small month-warning">{t("Nicht übernommen: ")}{translateText(lastPdf.skipped.join('; '))}
                   </p>
                 ) : null}
               </>
@@ -691,10 +648,7 @@ export default function AccountingView({ rows, uid }: Props) {
         )
       })}
 
-      <p className="muted small accounting-foot">
-        Das PDF enthält vorne die Aufstellung und dahinter alle Belege — eine
-        Datei für den Steuerberater.
-      </p>
+      <p className="muted small accounting-foot">{t("Das PDF enthält vorne die Aufstellung und dahinter alle Belege — eine Datei für den Steuerberater.")}</p>
 
       {showBank ? <BankSettings uid={uid} onClose={() => setShowBank(false)} /> : null}
       {showCompanies ? (
@@ -744,15 +698,15 @@ function InvoiceRow({ entry, editing, onEdit, onCancel, onSave, onRelease }: Row
 
   return (
     <li className="invoice-row">
-      <span className="invoice-date">{formatDate(entry.date) || '—'}</span>
+      <span className="invoice-date">{translateText(formatDate(entry.date) || '—')}</span>
       <span className="invoice-vendor">
-        <span className="invoice-vendor-name">{entry.vendor}</span>
+        <span className="invoice-vendor-name">{translateText(entry.vendor)}</span>
         {/* Rechnungsnummer vor den Betreff, nicht hinter den Aussteller: hinten
             rutschte sie beim Umbruch auf eine eigene Zeile und fing dort mit
             einem Trennpunkt an. */}
         <span className="muted small invoice-subject">
-          {entry.invoiceNumber ? `${entry.invoiceNumber} · ` : ''}
-          {entry.row.subject}
+          {translateText(entry.invoiceNumber ? `${entry.invoiceNumber} · ` : '')}
+          {translateText(entry.row.subject)}
         </span>
       </span>
 
@@ -765,15 +719,14 @@ function InvoiceRow({ entry, editing, onEdit, onCancel, onSave, onRelease }: Row
         {entry.company.conflictWith !== undefined ? (
           <span
             className="pill pill-conflict"
-            title={`Zugeordnet über das Postfach. Die Rechnung selbst ist an ${entry.company.conflictWith.name} adressiert.`}
-          >
-            adressiert an {entry.company.conflictWith.name}
+            title={tFormat("Zugeordnet über das Postfach. Die Rechnung selbst ist an {0} adressiert.", entry.company.conflictWith.name)}
+          >{t("adressiert an ")}{translateText(entry.company.conflictWith.name)}
           </span>
         ) : null}
         {entry.printableAttachments > 0 || entry.missingAttachments > 0 ? (
-          <span className="invoice-attach" title="Belege im Anhang">
-            {entry.printableAttachments > 0 ? `📎 ${entry.printableAttachments}` : ''}
-            {entry.missingAttachments > 0 ? ' ⚠' : ''}
+          <span className="invoice-attach" title={t("Belege im Anhang")}>
+            {translateText(entry.printableAttachments > 0 ? `📎 ${entry.printableAttachments}` : '')}
+            {translateText(entry.missingAttachments > 0 ? ' ⚠' : '')}
           </span>
         ) : null}
 
@@ -786,11 +739,9 @@ function InvoiceRow({ entry, editing, onEdit, onCancel, onSave, onRelease }: Row
           <button
             type="button"
             className="ghost small-btn"
-            title="Zuordnung zur Zahlung wieder lösen"
+            title={t("Zuordnung zur Zahlung wieder lösen")}
             onClick={() => void onRelease(entry.row.invoice!.paidTxId!)}
-          >
-            lösen
-          </button>
+          >{t("lösen")}</button>
         ) : null}
       </span>
 
@@ -800,33 +751,29 @@ function InvoiceRow({ entry, editing, onEdit, onCancel, onSave, onRelease }: Row
             type="text"
             inputMode="decimal"
             value={amount}
-            aria-label="Betrag in Euro"
+            aria-label={t("Betrag in Euro")}
             placeholder="0,00"
             onChange={(e) => setAmount(e.target.value)}
           />
           <input
             type="month"
             value={period}
-            aria-label="Monat"
+            aria-label={t("Monat")}
             onChange={(e) => setPeriod(e.target.value)}
           />
-          <button type="button" className="ghost small-btn" onClick={onCancel}>
-            Abbrechen
-          </button>
-          <button type="button" className="small-btn" onClick={() => void save()}>
-            Speichern
-          </button>
+          <button type="button" className="ghost small-btn" onClick={onCancel}>{t("Abbrechen")}</button>
+          <button type="button" className="small-btn" onClick={() => void save()}>{t("Speichern")}</button>
         </span>
       ) : (
         <button
           type="button"
           className={`invoice-amount${entry.amountCents === undefined ? ' invoice-amount--missing' : ''}`}
           onClick={onEdit}
-          title="Betrag oder Monat korrigieren"
+          title={t("Betrag oder Monat korrigieren")}
         >
-          {entry.amountCents === undefined
-            ? 'Betrag fehlt'
-            : formatCents(entry.amountCents, entry.currency)}
+          {translateText(entry.amountCents === undefined
+            ? t("Betrag fehlt")
+            : formatCents(entry.amountCents, entry.currency))}
         </button>
       )}
     </li>
@@ -840,30 +787,20 @@ function OwnInvoiceBlock({ invoices }: { invoices: OwnInvoice[] }) {
     <section className="card reanalyze-block">
       <p className="small">
         <strong>
-          {invoices.length} eigene Rechnung{invoices.length === 1 ? '' : 'en'} nicht in der
-          Buchhaltung.
-        </strong>{' '}
-        Diese Rechnungen hat die eigene Firma selbst ausgestellt — bezahlt
-        werden sie vom Kunden. Sie zählen deshalb nicht als offener Posten,
-        gehen nicht in die Monatssumme ein und nicht in den Stapel für den
-        Steuerberater.
-      </p>
+          {translateText(invoices.length)}{t(" eigene Rechnung")}{translateText(invoices.length === 1 ? '' : t("en"))}{t(" nicht in der Buchhaltung.")}</strong>{' '}{t("Diese Rechnungen hat die eigene Firma selbst ausgestellt — bezahlt werden sie vom Kunden. Sie zählen deshalb nicht als offener Posten, gehen nicht in die Monatssumme ein und nicht in den Stapel für den Steuerberater.")}</p>
       <ul className="own-invoice-list">
         {invoices.slice(0, 10).map(({ row, reason }) => (
           <li key={row.id}>
-            <strong>{row.invoice?.vendor ?? row.senderName ?? row.sender}</strong>
-            {row.subject ? ` — ${row.subject.slice(0, 60)}` : ''}
-            <span className="muted small"> · {reason}</span>
+            <strong>{translateText(row.invoice?.vendor ?? row.senderName ?? row.sender)}</strong>
+            {translateText(row.subject ? ` — ${row.subject.slice(0, 60)}` : '')}
+            <span className="muted small"> · {translateText(reason)}</span>
           </li>
         ))}
       </ul>
       {invoices.length > 10 ? (
-        <p className="muted small">… und {invoices.length - 10} weitere.</p>
+        <p className="muted small">{t("… und ")}{translateText(invoices.length - 10)}{t(" weitere.")}</p>
       ) : null}
-      <p className="muted small">
-        Steht hier eine fremde Rechnung, die sehr wohl bezahlt werden muss, ist
-        der Firmenname zu weit gefasst — unter „Firmen" nachschärfen.
-      </p>
+      <p className="muted small">{t("Steht hier eine fremde Rechnung, die sehr wohl bezahlt werden muss, ist der Firmenname zu weit gefasst — unter „Firmen\" nachschärfen.")}</p>
     </section>
   )
 }

@@ -1,3 +1,5 @@
+import { translateText } from './languageSession'
+import { t } from './i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { User } from 'firebase/auth'
 
@@ -29,9 +31,9 @@ export default function MicrosoftConnectButton({ user, onConnected }: { user: Us
     } catch (e) { popup.current?.close(); setBusy(false); setMessage((e as Error).message) }
   }
   return <section className="mailbox-form">
-    <h3>Microsoft 365 / Outlook.com</h3>
-    <p className="muted small">Mit Ihrem Microsoft-Konto anmelden und das Postfach freigeben. Server und Port werden automatisch eingerichtet; ein Postfachpasswort geben Sie hier nicht ein.</p>
-    <button type="button" className="primary" onClick={() => void connect()} disabled={busy}>{busy ? 'Microsoft-Anmeldung läuft …' : 'Mit Microsoft verbinden'}</button>
-    {message && <p role="status" className="small">{message}</p>}
+    <h3>{t("Microsoft 365 / Outlook.com")}</h3>
+    <p className="muted small">{t("Mit Ihrem Microsoft-Konto anmelden und das Postfach freigeben. Server und Port werden automatisch eingerichtet; ein Postfachpasswort geben Sie hier nicht ein.")}</p>
+    <button type="button" className="primary" onClick={() => void connect()} disabled={busy}>{translateText(busy ? t("Microsoft-Anmeldung läuft …") : t("Mit Microsoft verbinden"))}</button>
+    {message && <p role="status" className="small">{translateText(message)}</p>}
   </section>
 }

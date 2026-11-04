@@ -1,3 +1,4 @@
+import { getLocale } from './i18n'
 /**
  * Feste Kategorien statt Freitext.
  *
@@ -98,7 +99,7 @@ export function periodLabel(period: string): string {
   const year = Number(match[1])
   const month = Number(match[2])
   if (month < 1 || month > 12) return period
-  const formatter = new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' })
+  const formatter = new Intl.DateTimeFormat(getLocale(), { month: 'long', year: 'numeric' })
   return formatter.format(new Date(year, month - 1, 1))
 }
 

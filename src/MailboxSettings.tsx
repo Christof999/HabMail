@@ -1,3 +1,7 @@
+import { getLocale, tFormat, t } from './i18n'
+
+import { translateText } from './languageSession'
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { User } from 'firebase/auth'
 import {
@@ -103,7 +107,7 @@ function OlderMailImport({ uid, folder = 'inbox' }: { uid: string; folder?: Impo
         const report = await importOlderMails({ since, allAttachments, folder })
         const failed = report.mailboxes.find((box) => box.error !== undefined)
         if (failed !== undefined) {
-          setError(`${failed.mailbox}: ${failed.error}`)
+          setError(tFormat("{0}: {1}", failed.mailbox, failed.error))
           break
         }
         if (!report.hasMore || stop.current) break
@@ -132,29 +136,18 @@ function OlderMailImport({ uid, folder = 'inbox' }: { uid: string; folder?: Impo
     <section className="older-import">
       {sent ? (
         <>
-          <h4>Gesendete Mails laden</h4>
-          <p className="muted small">
-            Holt den Gesendet-Ordner deiner Postfächer in den Ordner „Gesendet" —
-            auch, was du aus Outlook oder vom Handy verschickt hast. Neu Gesendetes
-            kommt von allein; hier gehst du zurück. Ohne KI, deshalb deutlich
-            schneller als beim Posteingang.
-          </p>
+          <h4>{t("Gesendete Mails laden")}</h4>
+          <p className="muted small">{t("Holt den Gesendet-Ordner deiner Postfächer in den Ordner „Gesendet\" — auch, was du aus Outlook oder vom Handy verschickt hast. Neu Gesendetes kommt von allein; hier gehst du zurück. Ohne KI, deshalb deutlich schneller als beim Posteingang.")}</p>
         </>
       ) : (
         <>
-          <h4>Weitere Mails laden</h4>
-          <p className="muted small">
-            Der letzte Monat kommt beim Anlegen von allein. Hier gehst du weiter
-            zurück. Der laufende Abruf neuer Mails bleibt davon unberührt, und für
-            den Altbestand gibt es keine Benachrichtigung.
-          </p>
+          <h4>{t("Weitere Mails laden")}</h4>
+          <p className="muted small">{t("Der letzte Monat kommt beim Anlegen von allein. Hier gehst du weiter zurück. Der laufende Abruf neuer Mails bleibt davon unberührt, und für den Altbestand gibt es keine Benachrichtigung.")}</p>
         </>
       )}
 
       <div className="older-import-row">
-        <label>
-          ab
-          <input
+        <label>{t("ab")}<input
             type="date"
             value={since}
             onChange={(e) => setSince(e.target.value)}
@@ -167,29 +160,28 @@ function OlderMailImport({ uid, folder = 'inbox' }: { uid: string; folder?: Impo
           disabled={counting || working}
           onClick={() => void look()}
         >
-          {counting ? 'Zähle …' : 'Nachsehen'}
+          {translateText(counting ? t("Zähle …") : t("Nachsehen"))}
         </button>
       </div>
 
       {count !== null ? (
         <div className="older-import-count">
           {remaining === 0 ? (
-            <p className="muted small">Nichts nachzuholen — aus diesem Zeitraum ist alles da.</p>
+            <p className="muted small">{t("Nichts nachzuholen — aus diesem Zeitraum ist alles da.")}</p>
           ) : (
             <>
               <p className="small">
-                <strong>{remaining}</strong> Mail{remaining === 1 ? '' : 's'} noch nicht in
-                HabMail, zusammen {formatBytes(count.remainingBytes)}.
+                <strong>{translateText(remaining)}</strong>{t(" Mail")}{translateText(remaining === 1 ? '' : 's')}{t(" noch nicht in HabMail, zusammen ")}{translateText(formatBytes(count.remainingBytes))}.
               </p>
               <ul className="poll-report">
                 {count.mailboxes.map((box) => (
                   <li key={box.mailbox}>
-                    <strong>{mailboxLabel(box.mailbox)}</strong>{' '}
+                    <strong>{translateText(mailboxLabel(box.mailbox))}</strong>{' '}
                     {box.error !== undefined ? (
-                      <span className="mailbox-error">{box.error}</span>
+                      <span className="mailbox-error">{translateText(box.error)}</span>
                     ) : (
                       <>
-                        {box.remaining} von {box.total} · {formatBytes(box.remainingBytes)}
+                        {translateText(box.remaining)}{t(" von ")}{translateText(box.total)} · {translateText(formatBytes(box.remainingBytes))}
                       </>
                     )}
                   </li>
@@ -202,12 +194,12 @@ function OlderMailImport({ uid, folder = 'inbox' }: { uid: string; folder?: Impo
                   onChange={(e) => setAllAttachments(e.target.checked)}
                   disabled={working || laufend}
                 />
-                {sent
-                  ? 'Anhänge mit übernehmen'
-                  : 'Alle Anhänge übernehmen, nicht nur die von Rechnungen und Mahnungen'}
+                {translateText(sent
+                  ? t("Anhänge mit übernehmen")
+                  : t("Alle Anhänge übernehmen, nicht nur die von Rechnungen und Mahnungen"))}
               </label>
               <p className="muted small">
-                {sent
+                {translateText(sent
                   ? allAttachments
                     ? 'Achtung: eigene Angebote, Rechnungen und Fotos aus dem ganzen ' +
                       'Zeitraum landen dann in der Datenbank.'
@@ -218,7 +210,7 @@ function OlderMailImport({ uid, folder = 'inbox' }: { uid: string; folder?: Impo
                     'Datenbank. HabMail lädt den Posteingang beim Öffnen am Stück — bei ' +
                     'einem ganzen Jahr macht sich das bemerkbar.'
                   : 'Bei allen anderen Mails wird der Anhang mit Namen und Größe vermerkt; ' +
-                    'die Datei bleibt im Postfach und lässt sich dort öffnen.'}
+                    'die Datei bleibt im Postfach und lässt sich dort öffnen.')}
               </p>
             </>
           )}
@@ -227,34 +219,29 @@ function OlderMailImport({ uid, folder = 'inbox' }: { uid: string; folder?: Impo
 
       {status !== null ? (
         <p className="small">
-          {laufend ? 'Läuft' : status.stopped === true ? 'Angehalten' : 'Zuletzt'}:{' '}
-          {status.stored ?? 0} übernommen, {status.skipped ?? 0} schon vorhanden
-          {(status.failed ?? 0) > 0 ? `, ${status.failed} fehlgeschlagen` : ''}
-          {(status.remaining ?? 0) > 0 ? ` · noch ${status.remaining} offen` : ''}
-          {laufend && !working
-            ? ' · läuft im Hintergrund weiter, auch ohne offenes Fenster'
-            : ''}
+          {translateText(laufend ? t("Läuft") : status.stopped === true ? t("Angehalten") : t("Zuletzt"))}:{' '}
+          {translateText(status.stored ?? 0)}{t(" übernommen, ")}{translateText(status.skipped ?? 0)}{t(" schon vorhanden")}{translateText((status.failed ?? 0) > 0 ? tFormat(", {0} fehlgeschlagen", status.failed) : '')}
+          {translateText((status.remaining ?? 0) > 0 ? tFormat(" · noch {0} offen", status.remaining) : '')}
+          {translateText(laufend && !working
+            ? t(" · läuft im Hintergrund weiter, auch ohne offenes Fenster")
+            : '')}
         </p>
       ) : null}
       {status?.error !== undefined ? (
-        <p className="mailbox-error small">{status.error}</p>
+        <p className="mailbox-error small">{translateText(status.error)}</p>
       ) : null}
-      {error !== null ? <p className="mailbox-error small">{error}</p> : null}
+      {error !== null ? <p className="mailbox-error small">{translateText(error)}</p> : null}
 
       <div className="older-import-row">
         {working || laufend ? (
-          <button type="button" className="ghost" onClick={() => void halt()}>
-            Anhalten
-          </button>
+          <button type="button" className="ghost" onClick={() => void halt()}>{t("Anhalten")}</button>
         ) : (
           <button type="button" disabled={remaining === 0} onClick={() => void start()}>
-            {remaining === 0 ? 'Nachholen' : `${remaining} Mails nachholen`}
+            {translateText(remaining === 0 ? t("Nachholen") : tFormat("{0} Mails nachholen", remaining))}
           </button>
         )}
         {laufend && !working ? (
-          <button type="button" className="ghost" onClick={() => void start()}>
-            Hier weitermachen
-          </button>
+          <button type="button" className="ghost" onClick={() => void start()}>{t("Hier weitermachen")}</button>
         ) : null}
       </div>
     </section>
@@ -291,14 +278,11 @@ function AutomaticPollStatus({ uid }: { uid: string }) {
 
   if (status === null) {
     return (
-      <p className="muted small">
-        Bisher ist kein Lauf verzeichnet. Nach dem nächsten Abholen steht hier,
-        wann es zuletzt lief.
-      </p>
+      <p className="muted small">{t("Bisher ist kein Lauf verzeichnet. Nach dem nächsten Abholen steht hier, wann es zuletzt lief.")}</p>
     )
   }
 
-  const when = new Date(status.at).toLocaleString('de-DE')
+  const when = new Date(status.at).toLocaleString(getLocale())
   const minutesAgo = Math.round((now - status.at) / 60_000)
   const automatic = status.trigger === 'geplant' || status.trigger === 'extern'
   // Der GitHub-Takt kommt oft verspätet; beim Cloud Scheduler sind fünf
@@ -312,21 +296,15 @@ function AutomaticPollStatus({ uid }: { uid: string }) {
         : 'von Hand'
 
   return (
-    <p className={!automatic || overdue ? 'mailbox-error' : 'muted small'}>
-      Zuletzt {label} abgeholt: {when}
-      {status.ok
-        ? `${status.stored ? ` · ${status.stored} neu` : ''}` +
-          `${status.sentStored ? ` · ${status.sentStored} gesendet` : ''}`
-        : ` · fehlgeschlagen${status.error ? `: ${status.error}` : ''}`}
-      {status.sentError ? ` · Gesendet: ${status.sentError}` : ''}
+    <p className={!automatic || overdue ? 'mailbox-error' : 'muted small'}>{t("Zuletzt ")}{translateText(label)}{t(" abgeholt: ")}{translateText(when)}
+      {translateText(status.ok
+        ? `${status.stored ? tFormat(" · {0} neu", status.stored) : ''}` +
+          `${status.sentStored ? tFormat(" · {0} gesendet", status.sentStored) : ''}`
+        : tFormat(" · fehlgeschlagen{0}", status.error ? `: ${status.error}` : ''))}
+      {translateText(status.sentError ? tFormat(" · Gesendet: {0}", status.sentError) : '')}
       {(!automatic || overdue) && status.ok ? (
         <>
-          {' '}
-          — von selbst kommt gerade nichts. Das liegt nicht an den Einstellungen
-          hier, sondern am Zeitplan: entweder fehlt der Cloud-Scheduler-Job in
-          Google Cloud, oder er scheitert. Der Ersatzweg ist der Workflow
-          „Mails abholen“ unter Actions, der keine Google-Rechte braucht.
-        </>
+          {' '}{t("— von selbst kommt gerade nichts. Das liegt nicht an den Einstellungen hier, sondern am Zeitplan: entweder fehlt der Cloud-Scheduler-Job in Google Cloud, oder er scheitert. Der Ersatzweg ist der Workflow „Mails abholen“ unter Actions, der keine Google-Rechte braucht.")}</>
       ) : null}
     </p>
   )
@@ -472,7 +450,7 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
       try {
         const token = await user.getIdToken()
         setMailboxes(await listMailboxes(token, verify))
-        if (verify) setNotice('Verbindungen geprüft.')
+        if (verify) setNotice(t("Verbindungen geprüft."))
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
       } finally {
@@ -546,7 +524,7 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
       setShowForm(false)
       if (created.imap === undefined) {
         setNotice(
-          `Postfach „${created.id}" angelegt. Ohne IMAP-Server werden von hier keine Mails abgeholt.`,
+          tFormat("Postfach „{0}\" angelegt. Ohne IMAP-Server werden von hier keine Mails abgeholt.", created.id),
         )
       } else {
         const since = monthAgo()
@@ -557,13 +535,13 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
         try {
           await importOlderMails({ since })
           setNotice(
-            `Postfach „${created.id}" angelegt. Die Mails seit ${since} werden geladen. Weitere Monate holst du unten nach.`,
+            tFormat("Postfach „{0}\" angelegt. Die Mails seit {1} werden geladen. Weitere Monate holst du unten nach.", created.id, since),
           )
         } catch (importError) {
           const detail =
             importError instanceof Error ? importError.message : 'Unbekannter Fehler'
           setNotice(
-            `Postfach „${created.id}" angelegt. Die Mails des letzten Monats ließen sich nicht starten: ${detail}`,
+            tFormat("Postfach „{0}\" angelegt. Die Mails des letzten Monats ließen sich nicht starten: {1}", created.id, detail),
           )
         }
       }
@@ -581,7 +559,7 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
     try {
       await deleteMailbox(await user.getIdToken(), id)
       setConfirmDelete(null)
-      setNotice(`Postfach „${id}" entfernt.`)
+      setNotice(tFormat("Postfach „{0}\" entfernt.", id))
       await load(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
@@ -700,7 +678,7 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
             `${fresh.imapReachable === true ? ', Abholen ebenfalls' : ''}.`,
         )
       } else {
-        setNotice(`Gespeichert. Zur Erreichbarkeit von „${name}" kam keine Antwort.`)
+        setNotice(tFormat("Gespeichert. Zur Erreichbarkeit von „{0}\" kam keine Antwort.", name))
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
@@ -723,7 +701,7 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
       const report = await pollNow({})
       setPollReport(report)
       if (report.error !== undefined) {
-        setError(`Der Email-Proxy meldet: ${report.error}`)
+        setError(tFormat("Der Email-Proxy meldet: {0}", report.error))
       } else if (report.mailboxes.length === 0) {
         setNotice(report.hint ?? 'Kein Postfach zum Abholen gefunden.')
       } else {
@@ -757,16 +735,11 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
       onClick={onClose}
     >
       <div className="modal card modal-wide" onClick={(e) => e.stopPropagation()}>
-        <h3 id="mailbox-settings-title">Postfächer</h3>
-        <p className="muted small">
-          Zugangsdaten liegen verschlüsselt im Email-Proxy, nicht in HabMail. Ein
-          Postfach mit IMAP-Server wird alle paar Minuten auf neue Mails geprüft.
-          Beim Anlegen werden die Mails des letzten Monats geladen. Wie viele
-          Postfächer möglich sind, hängt an der gebuchten Stufe: 2, 5 oder 15.
-        </p>
+        <h3 id="mailbox-settings-title">{t("Postfächer")}</h3>
+        <p className="muted small">{t("Zugangsdaten liegen verschlüsselt im Email-Proxy, nicht in HabMail. Ein Postfach mit IMAP-Server wird alle paar Minuten auf neue Mails geprüft. Beim Anlegen werden die Mails des letzten Monats geladen. Wie viele Postfächer möglich sind, hängt an der gebuchten Stufe: 2, 5 oder 15.")}</p>
 
-        {error ? <p className="mailbox-error">{error}</p> : null}
-        {notice ? <p className="muted small">{notice}</p> : null}
+        {error ? <p className="mailbox-error">{translateText(error)}</p> : null}
+        {notice ? <p className="muted small">{translateText(notice)}</p> : null}
 
         <AutomaticPollStatus uid={ownerId} />
 
@@ -778,16 +751,15 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
           <ul className="poll-report">
             {pollReport.mailboxes.map((m) => (
               <li key={m.mailbox}>
-                <strong>{m.mailbox}</strong>{' '}
+                <strong>{translateText(m.mailbox)}</strong>{' '}
                 {m.error !== undefined ? (
-                  <span className="mailbox-error">{m.error}</span>
+                  <span className="mailbox-error">{translateText(m.error)}</span>
                 ) : m.skipped !== undefined ? (
-                  <span className="mailbox-error">übersprungen: {m.skipped}</span>
+                  <span className="mailbox-error">{t("übersprungen: ")}{translateText(m.skipped)}</span>
                 ) : (
                   <>
-                    {m.fetched} geholt · {m.stored} neu · {m.duplicates} schon da
-                    {m.failed > 0 ? ` · ${m.failed} fehlgeschlagen` : ''}
-                    {m.hasMore ? ' · es liegt noch mehr bereit' : ''}
+                    {translateText(m.fetched)}{t(" geholt · ")}{translateText(m.stored)}{t(" neu · ")}{translateText(m.duplicates)}{t(" schon da")}{translateText(m.failed > 0 ? tFormat(" · {0} fehlgeschlagen", m.failed) : '')}
+                    {translateText(m.hasMore ? t(" · es liegt noch mehr bereit") : '')}
                   </>
                 )}
               </li>
@@ -796,9 +768,9 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
         ) : null}
 
         {loading ? (
-          <p className="muted small">Wird geladen …</p>
+          <p className="muted small">{t("Wird geladen …")}</p>
         ) : mailboxes.length === 0 ? (
-          <p className="muted small">Noch kein Postfach hinterlegt.</p>
+          <p className="muted small">{t("Noch kein Postfach hinterlegt.")}</p>
         ) : (
           <ul className="mailbox-list">
             {mailboxes.map((box) => (
@@ -807,47 +779,38 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
                   {/* Die Kennung des Proxys ist unlesbar; die Adresse ist das,
                       woran man das Postfach erkennt. Die Kennung bleibt als
                       Hinweistext, sie wird bei der Fehlersuche gebraucht. */}
-                  <strong title={box.id}>{box.from || mailboxLabel(box.id)}</strong>
-                  <span className="pill">{box.user}</span>
+                  <strong title={box.id}>{translateText(box.from || mailboxLabel(box.id))}</strong>
+                  <span className="pill">{translateText(box.user)}</span>
                   {box.imap ? (
-                    <span className="pill">empfängt</span>
+                    <span className="pill">{t("empfängt")}</span>
                   ) : (
-                    <span className="pill pill-muted">nur Versand</span>
+                    <span className="pill pill-muted">{t("nur Versand")}</span>
                   )}
                   {box.source === 'env' ? (
-                    <span className="pill pill-muted">fest konfiguriert</span>
+                    <span className="pill pill-muted">{t("fest konfiguriert")}</span>
                   ) : null}
                 </div>
-                <div className="muted small">
-                  Versand: {box.host}:{box.port}
-                  {box.imap ? ` · Empfang: ${box.imap.host}:${box.imap.port}/${box.imap.folder}` : ''}
+                <div className="muted small">{t("Versand: ")}{translateText(box.host)}:{translateText(box.port)}
+                  {translateText(box.imap ? tFormat(" · Empfang: {0}:{1}/{2}", box.imap.host, box.imap.port, box.imap.folder) : '')}
                 </div>
                 {box.reachable === false ? (
-                  <div className="mailbox-error small">
-                    Versand nicht erreichbar: {box.message ?? 'unbekannter Fehler'}
+                  <div className="mailbox-error small">{t("Versand nicht erreichbar: ")}{translateText(box.message ?? 'unbekannter Fehler')}
                   </div>
                 ) : null}
                 {box.imapReachable === false ? (
-                  <div className="mailbox-error small">
-                    Empfang nicht erreichbar: {box.imapMessage ?? 'unbekannter Fehler'}
+                  <div className="mailbox-error small">{t("Empfang nicht erreichbar: ")}{translateText(box.imapMessage ?? 'unbekannter Fehler')}
                   </div>
                 ) : null}
 
                 {editing === box.id && edit !== null ? (
                   <div className="mailbox-edit">
-                    <p className="muted small">
-                      Die Passwortfelder sind leer, weil der Proxy gespeicherte
-                      Passwörter nicht herausgibt — auch nicht an HabMail. Leer heißt
-                      hier: bleibt, wie es ist.
-                    </p>
+                    <p className="muted small">{t("Die Passwortfelder sind leer, weil der Proxy gespeicherte Passwörter nicht herausgibt — auch nicht an HabMail. Leer heißt hier: bleibt, wie es ist.")}</p>
 
-                    <label className="folder-modal-label">
-                      Neues Passwort für den Versand
-                      <input
+                    <label className="folder-modal-label">{t("Neues Passwort für den Versand")}<input
                         type="password"
                         value={edit.password}
                         autoComplete="new-password"
-                        placeholder="unverändert"
+                        placeholder={t("unverändert")}
                         onChange={(e) => setEditField({ password: e.target.value })}
                       />
                     </label>
@@ -858,25 +821,18 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
                           type="checkbox"
                           checked={edit.imapSame}
                           onChange={(e) => setEditField({ imapSame: e.target.checked })}
-                        />
-                        Gilt auch fürs Abholen
-                      </label>
+                        />{t("Gilt auch fürs Abholen")}</label>
                     ) : null}
                     {edit.imapSame && box.imap !== undefined ? (
-                      <p className="muted small">
-                        Steht für das Abholen ein eigenes Passwort im Proxy, nimm den
-                        Haken heraus — sonst wird es mitüberschrieben.
-                      </p>
+                      <p className="muted small">{t("Steht für das Abholen ein eigenes Passwort im Proxy, nimm den Haken heraus — sonst wird es mitüberschrieben.")}</p>
                     ) : null}
 
                     {edit.imapSame ? null : (
-                      <label className="folder-modal-label">
-                        Abweichendes Passwort fürs Abholen (IMAP)
-                        <input
+                      <label className="folder-modal-label">{t("Abweichendes Passwort fürs Abholen (IMAP)")}<input
                           type="password"
                           value={edit.imapPassword}
                           autoComplete="new-password"
-                          placeholder="unverändert"
+                          placeholder={t("unverändert")}
                           onChange={(e) => setEditField({ imapPassword: e.target.value })}
                         />
                       </label>
@@ -888,16 +844,14 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
                       aria-expanded={editAdvanced}
                       onClick={() => setEditAdvanced((v) => !v)}
                     >
-                      {editAdvanced
-                        ? 'Servereinstellungen ausblenden'
-                        : 'Servereinstellungen ändern'}
+                      {translateText(editAdvanced
+                        ? t("Servereinstellungen ausblenden")
+                        : t("Servereinstellungen ändern"))}
                     </button>
 
                     {editAdvanced ? (
                       <div className="mailbox-advanced">
-                        <label className="folder-modal-label">
-                          Benutzername für die Anmeldung
-                          <input
+                        <label className="folder-modal-label">{t("Benutzername für die Anmeldung")}<input
                             type="text"
                             value={edit.user}
                             autoComplete="off"
@@ -905,27 +859,21 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
                             onChange={(e) => setEditField({ user: e.target.value })}
                           />
                         </label>
-                        <label className="folder-modal-label">
-                          Absenderadresse
-                          <input
+                        <label className="folder-modal-label">{t("Absenderadresse")}<input
                             type="text"
                             value={edit.from}
-                            placeholder="buero@meine-firma.de"
+                            placeholder={t("buero@meine-firma.de")}
                             onChange={(e) => setEditField({ from: e.target.value })}
                           />
                         </label>
                         <div className="mailbox-form-row">
-                          <label className="folder-modal-label">
-                            SMTP-Server (Versand)
-                            <input
+                          <label className="folder-modal-label">{t("SMTP-Server (Versand)")}<input
                               type="text"
                               value={edit.host}
                               onChange={(e) => setEditField({ host: e.target.value })}
                             />
                           </label>
-                          <label className="folder-modal-label mailbox-port">
-                            Port
-                            <input
+                          <label className="folder-modal-label mailbox-port">{t("Port")}<input
                               type="text"
                               inputMode="numeric"
                               value={edit.port}
@@ -934,18 +882,14 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
                           </label>
                         </div>
                         <div className="mailbox-form-row">
-                          <label className="folder-modal-label">
-                            IMAP-Server (Empfang)
-                            <input
+                          <label className="folder-modal-label">{t("IMAP-Server (Empfang)")}<input
                               type="text"
                               value={edit.imapHost}
-                              placeholder="imap.ionos.de"
+                              placeholder={t("imap.ionos.de")}
                               onChange={(e) => setEditField({ imapHost: e.target.value })}
                             />
                           </label>
-                          <label className="folder-modal-label mailbox-port">
-                            Port
-                            <input
+                          <label className="folder-modal-label mailbox-port">{t("Port")}<input
                               type="text"
                               inputMode="numeric"
                               value={edit.imapPort}
@@ -953,29 +897,22 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
                             />
                           </label>
                         </div>
-                        <label className="folder-modal-label">
-                          IMAP-Ordner
-                          <input
+                        <label className="folder-modal-label">{t("IMAP-Ordner")}<input
                             type="text"
                             value={edit.imapFolder}
                             onChange={(e) => setEditField({ imapFolder: e.target.value })}
                           />
                         </label>
                         {box.imap === undefined ? (
-                          <p className="muted small">
-                            Ohne IMAP-Server kann über dieses Postfach nur verschickt
-                            werden.
-                          </p>
+                          <p className="muted small">{t("Ohne IMAP-Server kann über dieses Postfach nur verschickt werden.")}</p>
                         ) : null}
                       </div>
                     ) : null}
 
                     <div className="mailbox-item-actions">
-                      <button type="button" className="ghost" disabled={busy} onClick={cancelEdit}>
-                        Abbrechen
-                      </button>
+                      <button type="button" className="ghost" disabled={busy} onClick={cancelEdit}>{t("Abbrechen")}</button>
                       <button type="button" disabled={busy} onClick={() => void saveEdit(box)}>
-                        {busy ? 'Speichere und prüfe …' : 'Speichern und prüfen'}
+                        {translateText(busy ? t("Speichere und prüfe …") : t("Speichern und prüfen"))}
                       </button>
                     </div>
                   </div>
@@ -989,18 +926,14 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
                             className="ghost"
                             disabled={busy}
                             onClick={() => startEdit(box, true)}
-                          >
-                            Abholen einschalten
-                          </button>
+                          >{t("Abholen einschalten")}</button>
                         ) : null}
                         <button
                           type="button"
                           className="ghost"
                           disabled={busy}
                           onClick={() => startEdit(box)}
-                        >
-                          Bearbeiten
-                        </button>
+                        >{t("Bearbeiten")}</button>
                       </>
                     ) : null}
                     {box.source === 'registry' ? (
@@ -1010,17 +943,13 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
                             type="button"
                             className="ghost"
                             onClick={() => setConfirmDelete(null)}
-                          >
-                            Abbrechen
-                          </button>
+                          >{t("Abbrechen")}</button>
                           <button
                             type="button"
                             className="btn-danger"
                             disabled={busy}
                             onClick={() => void remove(box.id)}
-                          >
-                            Wirklich entfernen
-                          </button>
+                          >{t("Wirklich entfernen")}</button>
                         </>
                       ) : (
                         <button
@@ -1028,9 +957,7 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
                           className="ghost"
                           disabled={busy}
                           onClick={() => setConfirmDelete(box.id)}
-                        >
-                          Entfernen
-                        </button>
+                        >{t("Entfernen")}</button>
                       )
                     ) : null}
                   </div>
@@ -1043,42 +970,35 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
         <MicrosoftConnectButton user={user} onConnected={() => void load(true)} />
         {showForm ? (
           <div className="mailbox-form">
-            <label className="folder-modal-label">
-              Anbieter
-              <select
+            <label className="folder-modal-label">{t("Anbieter")}<select
                 value={form.provider}
                 onChange={(e) => applyPreset(e.target.value)}
               >
                 {MAIL_PROVIDER_PRESETS.map((preset) => (
                   <option key={preset.label} value={preset.label}>
-                    {preset.label}
+                    {translateText(preset.label)}
                   </option>
                 ))}
-                <option value="__custom__">Anderer Anbieter …</option>
+                <option value="__custom__">{t("Anderer Anbieter …")}</option>
               </select>
             </label>
-            <label className="folder-modal-label">
-              E-Mail-Adresse
-              <input
+            <label className="folder-modal-label">{t("E-Mail-Adresse")}<input
                 type="email"
                 value={form.user}
                 autoComplete="off"
-                placeholder="buero@meine-firma.de"
+                placeholder={t("buero@meine-firma.de")}
                 onChange={(e) => setForm((p) => ({ ...p, user: e.target.value }))}
               />
             </label>
-            <label className="folder-modal-label">
-              Passwort
-              <input
+            <label className="folder-modal-label">{t("Passwort")}<input
                 type="password"
                 value={form.password}
                 autoComplete="new-password"
                 onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
               />
             </label>
-            <p className="muted small">
-              Versand über <code>{form.host || '—'}</code>, Empfang über{' '}
-              <code>{form.imapHost || '—'}</code>.
+            <p className="muted small">{t("Versand über ")}<code>{translateText(form.host || '—')}</code>{t(", Empfang über")}{' '}
+              <code>{translateText(form.imapHost || '—')}</code>.
             </p>
 
             <button
@@ -1087,14 +1007,12 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
               aria-expanded={showAdvanced}
               onClick={() => setShowAdvanced((v) => !v)}
             >
-              {showAdvanced ? 'Servereinstellungen ausblenden' : 'Servereinstellungen ändern'}
+              {translateText(showAdvanced ? t("Servereinstellungen ausblenden") : t("Servereinstellungen ändern"))}
             </button>
 
             {showAdvanced ? (
               <div className="mailbox-advanced">
-                <label className="folder-modal-label">
-                  Kurzname
-                  <input
+                <label className="folder-modal-label">{t("Kurzname")}<input
                     type="text"
                     value={form.id}
                     placeholder={toId(form.user) || 'firma'}
@@ -1102,18 +1020,14 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
                   />
                 </label>
                 <div className="mailbox-form-row">
-                  <label className="folder-modal-label">
-                    SMTP-Server (Versand)
-                    <input
+                  <label className="folder-modal-label">{t("SMTP-Server (Versand)")}<input
                       type="text"
                       value={form.host}
-                      placeholder="smtp.ionos.de"
+                      placeholder={t("smtp.ionos.de")}
                       onChange={(e) => onHostChange(e.target.value)}
                     />
                   </label>
-                  <label className="folder-modal-label mailbox-port">
-                    Port
-                    <input
+                  <label className="folder-modal-label mailbox-port">{t("Port")}<input
                       type="text"
                       inputMode="numeric"
                       value={form.port}
@@ -1122,18 +1036,14 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
                   </label>
                 </div>
                 <div className="mailbox-form-row">
-                  <label className="folder-modal-label">
-                    IMAP-Server (Empfang)
-                    <input
+                  <label className="folder-modal-label">{t("IMAP-Server (Empfang)")}<input
                       type="text"
                       value={form.imapHost}
-                      placeholder="imap.ionos.de"
+                      placeholder={t("imap.ionos.de")}
                       onChange={(e) => setForm((p) => ({ ...p, imapHost: e.target.value }))}
                     />
                   </label>
-                  <label className="folder-modal-label mailbox-port">
-                    Port
-                    <input
+                  <label className="folder-modal-label mailbox-port">{t("Port")}<input
                       type="text"
                       inputMode="numeric"
                       value={form.imapPort}
@@ -1141,18 +1051,14 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
                     />
                   </label>
                 </div>
-                <label className="folder-modal-label">
-                  IMAP-Passwort (nur wenn es ein anderes ist)
-                  <input
+                <label className="folder-modal-label">{t("IMAP-Passwort (nur wenn es ein anderes ist)")}<input
                     type="password"
                     value={form.imapPassword}
                     autoComplete="new-password"
                     onChange={(e) => setForm((p) => ({ ...p, imapPassword: e.target.value }))}
                   />
                 </label>
-                <p className="muted small">
-                  Ohne IMAP-Server kann über dieses Postfach nur verschickt werden.
-                </p>
+                <p className="muted small">{t("Ohne IMAP-Server kann über dieses Postfach nur verschickt werden.")}</p>
               </div>
             ) : null}
 
@@ -1164,26 +1070,22 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
                   setShowForm(false)
                   setForm(EMPTY_FORM)
                 }}
-              >
-                Abbrechen
-              </button>
+              >{t("Abbrechen")}</button>
               <button type="button" disabled={busy || !formValid} onClick={() => void submit()}>
-                {busy ? 'Wird angelegt …' : 'Postfach anlegen'}
+                {translateText(busy ? t("Wird angelegt …") : t("Postfach anlegen"))}
               </button>
             </div>
           </div>
         ) : (
           <div className="modal-actions">
-            <button type="button" className="ghost" onClick={onClose}>
-              Schließen
-            </button>
+            <button type="button" className="ghost" onClick={onClose}>{t("Schließen")}</button>
             <button
               type="button"
               className="ghost"
               disabled={busy || loading}
               onClick={() => void load(true)}
             >
-              {busy ? 'Prüfe …' : 'Verbindungen prüfen'}
+              {translateText(busy ? t("Prüfe …") : t("Verbindungen prüfen"))}
             </button>
             <button
               type="button"
@@ -1191,11 +1093,9 @@ export default function MailboxSettings({ user, ownerId, onClose }: Props) {
               disabled={busy || loading}
               onClick={() => void fetchNow()}
             >
-              {busy ? 'Hole …' : 'Jetzt abholen'}
+              {translateText(busy ? t("Hole …") : t("Jetzt abholen"))}
             </button>
-            <button type="button" onClick={() => setShowForm(true)}>
-              Postfach hinzufügen
-            </button>
+            <button type="button" onClick={() => setShowForm(true)}>{t("Postfach hinzufügen")}</button>
           </div>
         )}
       </div>

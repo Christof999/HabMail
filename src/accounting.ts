@@ -1,3 +1,4 @@
+import { getLocale } from './i18n'
 import { ACCOUNTING_CATEGORIES, periodLabel } from './categories'
 import {
   companyId,
@@ -246,7 +247,7 @@ export function filterByCompany(groups: MonthGroup[], id: string | null): MonthG
 export function formatCents(amountCents: number, currency = 'EUR'): string {
   const value = amountCents / 100
   try {
-    return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(value)
+    return new Intl.NumberFormat(getLocale(), { style: 'currency', currency }).format(value)
   } catch {
     return `${value.toFixed(2)} ${currency}`.trim()
   }

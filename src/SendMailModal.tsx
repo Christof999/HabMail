@@ -1,3 +1,6 @@
+import { tFormat, t } from './i18n'
+import { translateText } from './languageSession'
+
 import type { User } from 'firebase/auth'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { onValue, ref } from 'firebase/database'
@@ -160,9 +163,7 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
          * scheiterte, ohne dass irgendwo stand, warum.
          */
         setError(
-          `Die Postfächer ließen sich nicht laden: ${
-            e instanceof Error ? e.message : 'unbekannter Fehler'
-          }. Ohne sie ist kein Absender wählbar.`,
+          tFormat("Die Postfächer ließen sich nicht laden: {0}. Ohne sie ist kein Absender wählbar.", e instanceof Error ? e.message : 'unbekannter Fehler'),
         )
       }
     })()
@@ -195,7 +196,7 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
     const next = [...attachments]
     for (const file of Array.from(files)) {
       if (next.length >= MAX_ATTACHMENTS) {
-        setError(`Höchstens ${MAX_ATTACHMENTS} Anhänge.`)
+        setError(tFormat("Höchstens {0} Anhänge.", MAX_ATTACHMENTS))
         break
       }
       const total = next.reduce((n, a) => n + a.bytes, 0)
@@ -298,22 +299,19 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
         data-compose-mode={active.mode}
       >
         <div className="modal-head">
-          <h2 id="send-mail-title">{title}</h2>
+          <h2 id="send-mail-title">{translateText(title)}</h2>
           <button
             type="button"
             className="ghost modal-close"
             onClick={onClose}
-            aria-label="Schließen"
+            aria-label={t("Schließen")}
             data-testid="send-mail-close"
           >
             ×
           </button>
         </div>
         <p className="muted small">
-          {active.mode === 'new' ? '' : 'Der Originaltext wird als Zitat angehängt. '}
-          Verschickt wird über das gewählte Postfach — dieselben Zugangsdaten wie
-          beim Empfangen, es ist nichts gesondert einzurichten.
-        </p>
+          {translateText(active.mode === 'new' ? '' : t("Der Originaltext wird als Zitat angehängt. "))}{t("Verschickt wird über das gewählte Postfach — dieselben Zugangsdaten wie beim Empfangen, es ist nichts gesondert einzurichten.")}</p>
         <form
           className="send-mail-form"
           onSubmit={(e) => void handleSubmit(e)}
@@ -325,19 +323,17 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
             Postfach steht der Absender nur da; erst ab zwei lohnt die Auswahl.
           */}
           {mailboxes.length > 1 ? (
-            <label>
-              Von
-              <select
+            <label>{t("Von")}<select
                 id="send-mail-from"
                 name="mailboxId"
                 value={fromId}
                 onChange={(e) => setFromId(e.target.value)}
-                aria-label="Absender-Postfach"
+                aria-label={t("Absender-Postfach")}
                 data-testid="send-mail-from"
               >
                 {mailboxes.map((box) => (
                   <option key={box.id} value={box.id}>
-                    {box.from || box.user || mailboxLabel(box.id)}
+                    {translateText(box.from || box.user || mailboxLabel(box.id))}
                   </option>
                 ))}
               </select>
@@ -346,25 +342,19 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
             <p className="muted small">
               {fromId === '' ? (
                 <>
-                  <strong>Kein Postfach hinterlegt</strong> — ohne eines lässt
-                  sich nichts verschicken. Unter „Postfächer verwalten“ eines
-                  anlegen.
-                </>
+                  <strong>{t("Kein Postfach hinterlegt")}</strong>{t(" — ohne eines lässt sich nichts verschicken. Unter „Postfächer verwalten“ eines anlegen.")}</>
               ) : (
-                <>
-                  Absender:{' '}
+                <>{t("Absender:")}{' '}
                   <strong>
-                    {mailboxes.find((m) => m.id === fromId)?.from ??
+                    {translateText(mailboxes.find((m) => m.id === fromId)?.from ??
                       mailboxes.find((m) => m.id === fromId)?.user ??
-                      mailboxLabel(fromId)}
+                      mailboxLabel(fromId))}
                   </strong>
                 </>
               )}
             </p>
           )}
-          <label>
-            An (Komma für mehrere)
-            <input
+          <label>{t("An (Komma für mehrere)")}<input
               id="send-mail-to"
               name="to"
               type="text"
@@ -372,14 +362,12 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
               onChange={(e) => setTo(e.target.value)}
               required
               autoComplete="email"
-              placeholder="empfaenger@example.com"
-              aria-label="Empfänger"
+              placeholder={t("empfaenger@example.com")}
+              aria-label={t("Empfänger")}
               data-testid="send-mail-to"
             />
           </label>
-          <label>
-            Betreff
-            <input
+          <label>{t("Betreff")}<input
               id="send-mail-subject"
               name="subject"
               type="text"
@@ -387,20 +375,18 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
               onChange={(e) => setSubject(e.target.value)}
               required
               maxLength={500}
-              aria-label="Betreff"
+              aria-label={t("Betreff")}
               data-testid="send-mail-subject"
             />
           </label>
-          <label>
-            Nachricht
-            <textarea
+          <label>{t("Nachricht")}<textarea
               id="send-mail-body"
               name="body"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={8}
-              placeholder="Dein Text…"
-              aria-label="Nachricht"
+              placeholder={t("Dein Text…")}
+              aria-label={t("Nachricht")}
               data-testid="send-mail-body"
             />
           </label>
@@ -409,46 +395,41 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
               mitgeht. */}
           {signature.imageBase64 !== '' ? (
             <div className="compose-signature-image">
-              <span className="account-section-label">Signaturbild</span>
+              <span className="account-section-label">{t("Signaturbild")}</span>
               {/* So breit und so ausgerichtet, wie es in der Mail steht — eine
                   Vorschau, die etwas anderes zeigt als das Ergebnis, ist
                   schlimmer als keine. */}
               <div className="signature-preview-image" style={{ textAlign: signature.imageAlign }}>
                 <img
                   src={signatureImageSrc(signature)}
-                  alt="Bild der Signatur"
+                  alt={t("Bild der Signatur")}
                   style={{ width: `${signature.imageWidth}px`, maxWidth: '100%' }}
                 />
               </div>
-              <span className="muted small">
-                Steht in der Mail{' '}
-                {signature.imagePlacement === 'above'
-                  ? 'über deinem Text'
-                  : 'unter deinem Text'}
-                , {signature.imageWidth} Pixel breit. Zu ändern unter
-                „Signaturen“.
-              </span>
+              <span className="muted small">{t("Steht in der Mail")}{' '}
+                {translateText(signature.imagePlacement === 'above'
+                  ? t("über deinem Text")
+                  : t("unter deinem Text"))}
+                , {translateText(signature.imageWidth)}{t(" Pixel breit. Zu ändern unter „Signaturen“.")}</span>
             </div>
           ) : null}
 
           <div className="compose-attachments">
-            <span className="account-section-label">Anhänge</span>
+            <span className="account-section-label">{t("Anhänge")}</span>
             {attachments.length > 0 ? (
               <ul className="compose-attachment-list">
                 {attachments.map((a, i) => (
                   <li key={`${a.filename}-${i}`}>
                     <span className="attachment-meta">
-                      <strong>{a.filename}</strong>
-                      <span className="muted small">{formatBytes(a.bytes)}</span>
+                      <strong>{translateText(a.filename)}</strong>
+                      <span className="muted small">{translateText(formatBytes(a.bytes))}</span>
                     </span>
                     <button
                       type="button"
                       className="ghost small-btn"
-                      aria-label={`${a.filename} entfernen`}
+                      aria-label={tFormat("{0} entfernen", a.filename)}
                       onClick={() => setAttachments((list) => list.filter((_, n) => n !== i))}
-                    >
-                      Entfernen
-                    </button>
+                    >{t("Entfernen")}</button>
                   </li>
                 ))}
               </ul>
@@ -459,21 +440,19 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
               name="attachments"
               type="file"
               multiple
-              aria-label="Anhänge wählen"
+              aria-label={t("Anhänge wählen")}
               data-testid="send-mail-attachments"
               onChange={(e) => {
                 if (e.target.files) void addFiles(e.target.files)
               }}
             />
-            <span className="muted small">
-              Bis zu {MAX_ATTACHMENTS} Dateien, zusammen{' '}
-              {MAX_ATTACHMENT_TOTAL_BYTES / 1024 / 1024} MB.
-            </span>
+            <span className="muted small">{t("Bis zu ")}{translateText(MAX_ATTACHMENTS)}{t(" Dateien, zusammen")}{' '}
+              {translateText(MAX_ATTACHMENT_TOTAL_BYTES / 1024 / 1024)}{t(" MB.")}</span>
           </div>
 
           {error ? (
             <p className="error" role="alert" data-testid="send-mail-error">
-              {error}
+              {translateText(error)}
             </p>
           ) : null}
           <div className="modal-actions">
@@ -482,9 +461,7 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
               className="ghost"
               onClick={onClose}
               data-testid="send-mail-cancel"
-            >
-              Abbrechen
-            </button>
+            >{t("Abbrechen")}</button>
             {/* Ohne Absender-Postfach lehnt der Server ohnehin ab. Das hier
                 zu sperren ist ehrlicher als ein Knopf, der ins Leere führt. */}
             <button
@@ -492,7 +469,7 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
               disabled={sending || fromId === ''}
               data-testid="send-mail-submit"
             >
-              {sending ? 'Sende…' : fromId === '' ? 'Kein Absender' : 'Senden'}
+              {translateText(sending ? t("Sende…") : fromId === '' ? t("Kein Absender") : t("Senden"))}
             </button>
           </div>
         </form>

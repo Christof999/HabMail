@@ -1,3 +1,4 @@
+import { getLocale } from './i18n'
 /**
  * Brücke für KI-Agenten (OpenClaw, Claude, Playwright-Bots …).
  *
@@ -186,7 +187,7 @@ function describeEvent(event: CalendarEvent) {
     start: new Date(event.start).toISOString(),
     end: new Date(event.end).toISOString(),
     allDay: event.allDay,
-    when: `${new Date(event.start).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}, ${formatWhen(event)}`,
+    when: `${new Date(event.start).toLocaleDateString(getLocale(), { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}, ${formatWhen(event)}`,
     ...(event.location ? { location: event.location } : {}),
     ...(event.notes ? { notes: event.notes } : {}),
     ...(reminders.length === 0 ? {} : { reminders }),

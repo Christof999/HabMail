@@ -1,3 +1,8 @@
+import { getLocale, tFormat, t } from './i18n'
+
+import MailTranslation from './MailTranslation'
+import { translateText } from './languageSession'
+
 import { useEffect, useMemo, useState } from 'react'
 import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
@@ -15,7 +20,7 @@ import type { EmailRow } from './types'
  */
 const PAGE_SIZE = 100
 
-const DATE_FORMAT = new Intl.DateTimeFormat('de-DE', {
+const DATE_FORMAT = new Intl.DateTimeFormat(getLocale(), {
   dateStyle: 'medium',
   timeStyle: 'short',
 })
@@ -26,7 +31,7 @@ function formatSentAt(iso: string): string {
 }
 
 function norm(value: string): string {
-  return value.toLocaleLowerCase('de-DE')
+  return value.toLocaleLowerCase(getLocale())
 }
 
 /** Alle Stichwörter müssen vorkommen — wie im Posteingang. */
@@ -131,12 +136,12 @@ export function SentView({
     <div className="sent-view">
       <section className="toolbar">
         <div className="sent-view-head">
-          <h2 className="sent-view-title">Gesendet</h2>
+          <h2 className="sent-view-title">{t("Gesendet")}</h2>
           {rows !== null ? (
             <span className="muted small">
-              {filtered.length === rows.length
-                ? `${rows.length} Mail${rows.length === 1 ? '' : 's'}`
-                : `${filtered.length} von ${rows.length}`}
+              {translateText(filtered.length === rows.length
+                ? tFormat("{0} Mail{1}", rows.length, rows.length === 1 ? '' : 's')
+                : tFormat("{0} von {1}", filtered.length, rows.length))}
             </span>
           ) : null}
         </div>
@@ -144,18 +149,18 @@ export function SentView({
           <input
             type="search"
             className="search"
-            placeholder="Empfänger, Betreff, Text oder Anhang…"
+            placeholder={t("Empfänger, Betreff, Text oder Anhang…")}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value)
               // Eine neue Suche beginnt wieder oben, nicht bei Seite drei der alten.
               setLimit(PAGE_SIZE)
             }}
-            aria-label="Gesendete Mails durchsuchen"
+            aria-label={t("Gesendete Mails durchsuchen")}
           />
         </div>
         {mailboxIds.length > 1 ? (
-          <div className="mailbox-filter-row" role="group" aria-label="Postfach">
+          <div className="mailbox-filter-row" role="group" aria-label={t("Postfach")}>
             <button
               type="button"
               className={`category-chip${mailboxFilter === null ? ' active' : ''}`}
@@ -164,9 +169,7 @@ export function SentView({
                 setMailboxFilter(null)
                 setLimit(PAGE_SIZE)
               }}
-            >
-              Alle Postfächer
-            </button>
+            >{t("Alle Postfächer")}</button>
             {mailboxIds.map((id) => (
               <button
                 key={id}
@@ -178,20 +181,19 @@ export function SentView({
                   setLimit(PAGE_SIZE)
                 }}
               >
-                {mailboxLabel(id)}
+                {translateText(mailboxLabel(id))}
               </button>
             ))}
           </div>
         ) : null}
         {error ? (
-          <p className="error" role="alert">
-            Realtime Database: {error} — sind die aktuellen Regeln eingespielt?{' '}
-            <code>firebase deploy --only database</code>
+          <p className="error" role="alert">{t("Realtime Database: ")}{translateText(error)}{t(" — sind die aktuellen Regeln eingespielt?")}{' '}
+            <code>{t("firebase deploy --only database")}</code>
           </p>
         ) : null}
       </section>
 
-      {rows === null ? <p className="muted sent-view-loading">Lade gesendete Mails…</p> : null}
+      {rows === null ? <p className="muted sent-view-loading">{t("Lade gesendete Mails…")}</p> : null}
 
       <ul className="list">
         {shown.map((row) => {
@@ -201,34 +203,32 @@ export function SentView({
               <article className="card email sent-card">
                 <div className="email-head">
                   <div className="email-head-body">
-                    <h2>{row.subject || '(Ohne Betreff)'}</h2>
+                    <h2>{translateText(row.subject || '(Ohne Betreff)')}</h2>
                     <p className="meta">
                       <span className="email-from-line">
-                        <span className="muted">An </span>
-                        {recipientsLabel(row)}
+                        <span className="muted">{t("An ")}</span>
+                        {translateText(recipientsLabel(row))}
                       </span>
                       {row.mailboxId ? (
-                        <span className="pill pill-muted" title={`Gesendet über ${row.mailboxId}`}>
-                          {mailboxLabel(row.mailboxId)}
+                        <span className="pill pill-muted" title={tFormat("Gesendet über {0}", row.mailboxId)}>
+                          {translateText(mailboxLabel(row.mailboxId))}
                         </span>
                       ) : null}
                       {row.hasAttachment ? (
                         <span className="muted">
-                          {row.attachments.length > 0
-                            ? `${row.attachments.length} Anhang/Anhänge`
-                            : 'Mit Anhang'}
+                          {translateText(row.attachments.length > 0
+                            ? tFormat("{0} Anhang/Anhänge", row.attachments.length)
+                            : t("Mit Anhang"))}
                         </span>
                       ) : null}
                     </p>
                   </div>
-                  <div className="email-toolbar" role="toolbar" aria-label="E-Mail-Aktionen">
+                  <div className="email-toolbar" role="toolbar" aria-label={t("E-Mail-Aktionen")}>
                     <button
                       type="button"
                       className="ghost small-btn"
                       onClick={() => onForward(asComposeRow(row))}
-                    >
-                      Weiterleiten
-                    </button>
+                    >{t("Weiterleiten")}</button>
                   </div>
                 </div>
                 <button
@@ -238,22 +238,21 @@ export function SentView({
                   onClick={() => setOpenId(open ? null : row.id)}
                 >
                   <span className="summary sent-card-preview">
-                    {row.originalBody.trim().split('\n')[0] || '—'}
+                    {translateText(row.originalBody.trim().split('\n')[0] || '—')}
                   </span>
                 </button>
-                <p className="muted small">{formatSentAt(row.sentAt)}</p>
+                <p className="muted small">{translateText(formatSentAt(row.sentAt))}</p>
                 {open ? (
                   <div className="body-block">
                     {row.cc.length > 0 ? (
-                      <p className="muted small">
-                        Kopie: {row.cc.map((a) => a.name || a.address).join(', ')}
+                      <p className="muted small">{t("Kopie: ")}{translateText(row.cc.map((a) => a.name || a.address).join(', '))}
                       </p>
                     ) : null}
-                    <pre className="body">{row.originalBody || '—'}</pre>
+                    <MailTranslation key={row.id} subject={row.subject} text={row.originalBody || ''} /><pre className="body">{translateText(row.originalBody || '—')}</pre>
                     <AttachmentList
                       attachments={row.attachments}
                       idPrefix={row.id}
-                      heading="Anhänge"
+                      heading={t("Anhänge")}
                       titleTag="h3"
                     />
                   </div>
@@ -266,37 +265,27 @@ export function SentView({
 
       {filtered.length > shown.length ? (
         <div className="sent-view-more">
-          <button type="button" className="ghost" onClick={() => setLimit((n) => n + PAGE_SIZE)}>
-            Weitere {Math.min(PAGE_SIZE, filtered.length - shown.length)} anzeigen
-          </button>
+          <button type="button" className="ghost" onClick={() => setLimit((n) => n + PAGE_SIZE)}>{t("Weitere ")}{translateText(Math.min(PAGE_SIZE, filtered.length - shown.length))}{t(" anzeigen")}</button>
         </div>
       ) : null}
 
       {rows !== null && rows.length === 0 && !error ? (
         <div className="empty-block muted">
           <p>
-            <strong>Noch keine gesendeten Mails.</strong>
+            <strong>{t("Noch keine gesendeten Mails.")}</strong>
           </p>
           <ul className="hint-list">
-            <li>Was du aus HabMail verschickst, steht ab jetzt sofort hier.</li>
-            <li>
-              Der Gesendet-Ordner deiner Postfächer wird alle fünf Minuten mit
-              abgeholt — auch, was du aus Outlook oder vom Handy schickst.
-            </li>
-            <li>
-              Ältere gesendete Mails holst du unter{' '}
-              <button type="button" className="link-btn" onClick={onOpenImport}>
-                Postfächer → Ältere Mails nachholen
-              </button>{' '}
-              mit „Gesendet" herein.
-            </li>
+            <li>{t("Was du aus HabMail verschickst, steht ab jetzt sofort hier.")}</li>
+            <li>{t("Der Gesendet-Ordner deiner Postfächer wird alle fünf Minuten mit abgeholt — auch, was du aus Outlook oder vom Handy schickst.")}</li>
+            <li>{t("Ältere gesendete Mails holst du unter")}{' '}
+              <button type="button" className="link-btn" onClick={onOpenImport}>{t("Postfächer → Ältere Mails nachholen")}</button>{' '}{t("mit „Gesendet\" herein.")}</li>
           </ul>
         </div>
       ) : null}
 
       {rows !== null && rows.length > 0 && filtered.length === 0 ? (
         <div className="empty-block muted">
-          <p>Keine Treffer mit der aktuellen Suche.</p>
+          <p>{t("Keine Treffer mit der aktuellen Suche.")}</p>
         </div>
       ) : null}
     </div>

@@ -1,3 +1,8 @@
+import { tFormat, t } from './i18n'
+import { LanguageSettings } from './LanguageSettings'
+import { translateText } from './languageSession'
+
+
 import { useEffect, useRef, useState } from 'react'
 import { ThemeAppearanceControl } from './ThemeProvider'
 
@@ -77,11 +82,11 @@ export default function AccountMenu({
         className="account-btn"
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`Konto ${email}`}
+        aria-label={tFormat("Konto {0}", email)}
         title={email}
         onClick={() => setOpen(true)}
       >
-        <span aria-hidden>{initial(email)}</span>
+        <span aria-hidden>{translateText(initial(email))}</span>
       </button>
 
       {open ? (
@@ -95,17 +100,17 @@ export default function AccountMenu({
           <div className="account-sheet card" onClick={(e) => e.stopPropagation()}>
             <div className="account-head">
               <span className="account-avatar" aria-hidden>
-                {initial(email)}
+                {translateText(initial(email))}
               </span>
               <span className="account-identity">
-                <strong id="account-menu-title">Angemeldet</strong>
-                <span className="muted small account-email">{email}</span>
+                <strong id="account-menu-title">{t("Angemeldet")}</strong>
+                <span className="muted small account-email">{translateText(email)}</span>
               </span>
               <button
                 ref={closeRef}
                 type="button"
                 className="icon-btn account-close"
-                aria-label="Schließen"
+                aria-label={t("Schließen")}
                 onClick={() => setOpen(false)}
               >
                 ✕
@@ -113,34 +118,23 @@ export default function AccountMenu({
             </div>
 
             <div className="account-section">
-              <span className="account-section-label">Erscheinungsbild</span>
-              <ThemeAppearanceControl />
+              <span className="account-section-label">{t("Erscheinungsbild")}</span>
+              <LanguageSettings /><ThemeAppearanceControl />
             </div>
 
             <div className="account-section account-actions">
               {canManageMailboxes ? (
-                <button type="button" onClick={() => choose(onOpenMailboxes)}>
-                  Postfächer verwalten
-                </button>
+                <button type="button" onClick={() => choose(onOpenMailboxes)}>{t("Postfächer verwalten")}</button>
               ) : null}
-              <button type="button" onClick={() => choose(onOpenSignatures)}>
-                Signaturen
-              </button>
-              <button type="button" onClick={() => choose(onOpenNotifications)}>
-                Benachrichtigungen
-              </button>
+              <button type="button" onClick={() => choose(onOpenSignatures)}>{t("Signaturen")}</button>
+              <button type="button" onClick={() => choose(onOpenNotifications)}>{t("Benachrichtigungen")}</button>
               {isAdmin ? (
-                <button type="button" onClick={() => choose(onOpenUsers)}>
-                  Benutzer verwalten
-                </button>
+                <button type="button" onClick={() => choose(onOpenUsers)}>{t("Benutzer verwalten")}</button>
               ) : null}
-              <button type="button" className="account-logout" onClick={() => choose(onLogout)}>
-                Abmelden
-              </button>
+              <button type="button" className="account-logout" onClick={() => choose(onLogout)}>{t("Abmelden")}</button>
             </div>
 
-            <p className="account-path muted">
-              Daten unter <code>{databasePath}</code>
+            <p className="account-path muted">{t("Daten unter ")}<code>{translateText(databasePath)}</code>
             </p>
           </div>
         </div>

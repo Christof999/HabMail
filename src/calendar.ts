@@ -1,3 +1,4 @@
+import { getLocale } from './i18n'
 /**
  * Der Kalender einer Person.
  *
@@ -265,9 +266,9 @@ export function overlapping(
 
 /* --------------------------------------------------------------- Anzeigen */
 
-const TIME = new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' })
-const DAY_LONG = new Intl.DateTimeFormat('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })
-const DAY_SHORT = new Intl.DateTimeFormat('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
+const TIME = new Intl.DateTimeFormat(getLocale(), { hour: '2-digit', minute: '2-digit' })
+const DAY_LONG = new Intl.DateTimeFormat(getLocale(), { weekday: 'long', day: 'numeric', month: 'long' })
+const DAY_SHORT = new Intl.DateTimeFormat(getLocale(), { weekday: 'short', day: '2-digit', month: '2-digit' })
 
 export function formatTime(ms: number): string {
   return TIME.format(new Date(ms))
