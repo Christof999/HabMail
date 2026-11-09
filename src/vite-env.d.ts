@@ -15,7 +15,7 @@ interface ImportMetaEnv {
    */
   readonly VITE_FIREBASE_VAPID_KEY?: string
   /** Optional: z.B. http://localhost:3000 bei vercel dev, sonst leer (gleiche Origin auf Vercel) */
-  readonly VITE_API_BASE_URL?: string
+  readonly VITE_API_ORIGIN?: string
 }
 
 interface ImportMeta {

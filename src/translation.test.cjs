@@ -4,7 +4,7 @@ const ts = require('typescript')
 const fs = require('node:fs')
 const vm = require('node:vm')
 const path = require('node:path')
-const compiled = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../api/_translation.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
+const compiled = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../server/_translation.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
 const scope = { exports: {} }
 vm.runInNewContext(compiled, scope)
 const { translationInput, translationResult } = scope.exports

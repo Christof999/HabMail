@@ -1,3 +1,4 @@
+import { apiUrl } from './backend'
 import { getLocale } from './i18n'
 /**
  * Brücke für KI-Agenten (OpenClaw, Claude, Playwright-Bots …).
@@ -298,10 +299,10 @@ export function createAgentApi(handlers: AgentHandlers) {
          * Nutzer. Ein Key ist nur für Agenten ohne Browser nötig.
          */
         httpFallback: {
-          url: '/api/send-mail',
+          url: apiUrl('/api/send-mail'),
           method: 'POST',
           auth: 'X-HabMail-Agent-Key: <key> — nur nötig ohne Browser',
-          manifest: 'GET /api/send-mail',
+          manifest: `GET ${apiUrl('/api/send-mail')}`,
           docs: 'AGENTS.md im Repository',
         },
       }

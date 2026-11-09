@@ -1,3 +1,4 @@
+import { apiUrl } from './backend'
 /**
  * Zugriff auf die Postfach-Verwaltung. Läuft immer über /api/mailboxes —
  * der Admin-Key des Email-Proxys bleibt auf dem Server.
@@ -44,11 +45,6 @@ export type MailboxInput = {
   imapUser?: string
   imapPassword?: string
   imapFolder?: string
-}
-
-function apiUrl(path: string): string {
-  const base = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
-  return `${base}${path}`
 }
 
 /**

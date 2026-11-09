@@ -1,3 +1,4 @@
+import { apiUrl } from './backend'
 /** `new` = frei verfasst, ohne Bezug auf eine vorhandene Mail. */
 export type SendMailComposeKind = 'reply' | 'forward' | 'new'
 
@@ -47,8 +48,7 @@ export function fwdSubject(subject: string): string {
 }
 
 export function sendMailApiUrl(): string {
-  const base = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
-  return `${base}/api/send-mail`
+  return apiUrl('/api/send-mail')
 }
 
 /** Was der Server tatsächlich benutzt hat — für die Rückmeldung im Formular. */

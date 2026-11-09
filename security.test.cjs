@@ -5,7 +5,7 @@ const { runInNewContext } = require('node:vm');
 const ts = require('typescript');
 const load = (name, require, fetch, env = {}) => {
   const module = { exports: {} };
-  runInNewContext(ts.transpileModule(readFileSync(`${__dirname}/api/${name}.ts`, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, {
+  runInNewContext(ts.transpileModule(readFileSync(`${__dirname}/server/${name}.ts`, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, {
     module, exports: module.exports, require, fetch, URL, AbortSignal, Buffer,
     process: { env: { FIREBASE_PROJECT_ID: 'test', VITE_FIREBASE_API_KEY: 'public-test-key', EMAILPROXY_URL: 'https://proxy.example.test', EMAILPROXY_KEY: 'dummy', ...env } }, console,
   });
@@ -45,6 +45,17 @@ test('Versand uebergibt ausschliesslich den geprueften Betrieb an den Proxy', as
   await handler({ ...req(), body: { to: 'customer@example.test', subject: 'Test', text: 'Test', mailboxId: 'inbox', onBehalfOf: 't:fremd' } }, response);
   assert.equal(response.code, 200);
   assert.equal(calls.find(call => call.url.endsWith('/api/send')).body.onBehalfOf, 't:firma');
+});
+test('oeffentliche Schnittstellenbeschreibung verrät keine Postfach- oder Empfaengerdaten', async () => {
+  const { mailbox, fetch } = fixture({});
+  const agent = { id: 'vertraulicher-agent', key: 'synthetic-test-agent-key-at-least-24', uid: 'u1', mailbox: 'vertrauliches-postfach', allowedTo: ['privat@example.test'] };
+  const handler = load('send-mail', name => name === './mailboxes.js' ? mailbox : require(name), fetch, { HABMAIL_AGENT_KEYS: JSON.stringify([agent]) }).default;
+  const response = { setHeader() {}, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+  await handler({ method: 'GET', headers: {} }, response);
+  assert.equal(response.code, 200);
+  assert.equal(response.body.auth.agent.configured, true);
+  const text = JSON.stringify(response.body);
+  for (const privateValue of [agent.id, agent.key, agent.mailbox, agent.allowedTo[0]]) assert.equal(text.includes(privateValue), false);
 });
 test('jede schreibbare Betriebsregel verweigert ro', () => {
   const rules = JSON.parse(readFileSync(`${__dirname}/database.rules.json`, 'utf8')).rules.tenants;

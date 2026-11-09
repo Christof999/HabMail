@@ -8,5 +8,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["api/**/*.ts"]
+  "include": ["server/**/*.ts"]
 }

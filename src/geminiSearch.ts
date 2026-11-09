@@ -1,3 +1,4 @@
+import { apiUrl } from './backend'
 import type { EmailRow } from './types'
 
 const MAX_ITEMS = 50
@@ -23,8 +24,7 @@ export function buildGeminiItems(rows: EmailRow[]): GeminiSlimItem[] {
 }
 
 export function geminiSearchApiUrl(): string {
-  const base = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
-  return `${base}/api/gemini-search`
+  return apiUrl('/api/gemini-search')
 }
 
 export async function requestGeminiSearch(

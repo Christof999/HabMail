@@ -365,11 +365,6 @@ function agentManifest() {
         header: 'X-HabMail-Agent-Key: <key>',
         alternative: 'Authorization: Bearer <key> (alles, was kein JWT ist)',
         configured: keys.length > 0,
-        agents: keys.map((k) => ({
-          id: k.id,
-          mailbox: k.mailbox || null,
-          allowedTo: k.allowedTo.length > 0 ? k.allowedTo : 'alle',
-        })),
       },
       user: { header: 'Authorization: Bearer <Firebase-ID-Token>' },
     },

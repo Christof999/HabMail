@@ -1,3 +1,4 @@
+import { apiUrl } from './backend'
 import { translateText } from './languageSession'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { getFirebaseAuth } from './firebase'
@@ -18,7 +19,7 @@ function Translation({ text, subject }: { text: string; subject: string }) {
       try {
         const user = getFirebaseAuth().currentUser
         if (!user) throw new Error('not_signed_in')
-        const response = await fetch('/api/translate', {
+        const response = await fetch(apiUrl('/api/translate'), {
           method: 'POST', signal: controller.signal,
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
           body: JSON.stringify({ text: subject ? `${subject}\n\n${text}` : text, language }),

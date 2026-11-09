@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import * as jose from 'jose'
 import { proxyConfig, requireFirebaseAuth, resolveSubject } from './mailboxes.js'
+import { getAuth } from 'firebase-admin/auth'
+import { createOAuthStart, consumeOAuthStart, oauthBrowserNonce, oauthPopupPage, oauthAppOrigin } from './_oauthStart.js'
 
 const COOKIE = '__Host-werkbank-microsoft'
 const SCOPES = 'openid profile email offline_access https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send'
@@ -13,7 +15,9 @@ function settings() {
   const clientSecret = process.env.MICROSOFT_CLIENT_SECRET?.trim()
   const redirectUri = process.env.MICROSOFT_REDIRECT_URI?.trim()
   if (!clientId || !clientSecret || !redirectUri || !redirectUri.startsWith('https://')) throw new Error('Die Microsoft-Anmeldung ist noch nicht eingerichtet. Bitte die Microsoft-App und Rücksprungadresse in der Administration hinterlegen.')
-  return { clientId, clientSecret, redirectUri, cookieKey: createHash('sha256').update(`werkbank-microsoft:${clientSecret}`).digest() }
+  const appOrigin = new URL(process.env.POST_APP_URL || '').origin
+  if (!appOrigin.startsWith('https://')) throw new Error('Die Post-Adresse fehlt.')
+  return { clientId, clientSecret, redirectUri, appOrigin, cookieKey: createHash('sha256').update(`werkbank-microsoft:${clientSecret}`).digest() }
 }
 
 function cookie(res: VercelResponse, value: string, maxAge = 600) {
@@ -36,26 +40,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try { config = settings() } catch (e) { return res.status(503).json({ error: (e as Error).message }) }
   const proxy = proxyConfig()
   if (!proxy) return res.status(503).json({ error: 'Der E-Mail-Proxy ist noch nicht verbunden.' })
+  let appOrigin: string
+  try { appOrigin = oauthAppOrigin(config.appOrigin, process.env.ALLOWED_ORIGINS, req.method === 'GET' && req.query.connect === '1' ? req.query.appOrigin : req.headers.origin) }
+  catch { return res.status(400).json({ error: 'Die App-Adresse ist nicht freigegeben.' }) }
+  if (req.method === 'GET' && req.query.connect === '1') {
+    const page = oauthPopupPage(appOrigin)
+    res.setHeader('Set-Cookie', page.cookie)
+    res.setHeader('Content-Security-Policy', page.csp)
+    return res.status(200).setHeader('Content-Type', 'text/html; charset=utf-8').send(page.html)
+  }
+  if (req.method === 'GET' && typeof req.query.start === 'string') {
+    try {
+      const start = await consumeOAuthStart('post', req.query.start, oauthBrowserNonce(req.headers.cookie))
+      cookie(res, start.flow)
+      return res.redirect(303, start.url)
+    } catch { return finish(res, false, 'Die Anmeldung ist abgelaufen. Bitte erneut beginnen.', config.appOrigin) }
+  }
   if (req.method === 'POST') {
     const auth = await requireFirebaseAuth(req)
     if (auth.ok === false) return res.status(auth.status).json(auth.body)
     const scope = resolveSubject(auth.uid, auth.payload)
     if (scope.ok === false) return res.status(scope.status).json(scope.body)
+    const browserNonce = req.body?.browserNonce
+    if (typeof browserNonce !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(browserNonce)) return res.status(400).json({ error: 'Bitte die Anmeldung im geöffneten Fenster beginnen.' })
     const state = randomBytes(32).toString('base64url'), nonce = randomBytes(32).toString('base64url'), verifier = randomBytes(32).toString('base64url')
-    const flow = await new jose.EncryptJWT({ subject: scope.subject, limit: scope.limit, state, nonce, verifier }).setProtectedHeader({ alg: 'dir', enc: 'A256GCM' }).setIssuedAt().setExpirationTime('10m').encrypt(config.cookieKey)
-    cookie(res, flow)
+    const flow = await new jose.EncryptJWT({ uid: auth.uid, subject: scope.subject, limit: scope.limit, state, nonce, verifier, browserNonce, appOrigin }).setProtectedHeader({ alg: 'dir', enc: 'A256GCM' }).setIssuedAt().setExpirationTime('10m').encrypt(config.cookieKey)
     const url = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize')
     url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: config.redirectUri, response_type: 'code', response_mode: 'query', scope: SCOPES, state, nonce, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', prompt: 'select_account' }).toString()
-    return res.status(200).json({ url: url.href })
+    const ticket = await createOAuthStart('post', flow, url.href, browserNonce)
+    const startUrl = new URL(config.redirectUri)
+    startUrl.search = new URLSearchParams({ start: ticket }).toString()
+    return res.status(200).json({ url: startUrl.href })
   }
   if (req.method !== 'GET') return res.status(405).json({ error: 'Nur GET und POST sind erlaubt.' })
-  const origin = new URL(config.redirectUri).origin
+  let origin = appOrigin
   try {
     const raw = String(req.headers.cookie ?? '').split(';').map(v => v.trim()).find(v => v.startsWith(`${COOKIE}=`))?.slice(COOKIE.length + 1)
     if (!raw) throw new Error('Die Anmeldung ist abgelaufen. Bitte erneut auf „Mit Microsoft verbinden“ klicken.')
     const { payload: flow } = await jose.jwtDecrypt(raw, config.cookieKey, { keyManagementAlgorithms: ['dir'], contentEncryptionAlgorithms: ['A256GCM'] })
+    if (typeof flow.browserNonce !== 'string' || !same(flow.browserNonce, oauthBrowserNonce(req.headers.cookie))) throw new Error('Die Anmeldung gehört nicht zu diesem Browser.')
+    origin = oauthAppOrigin(config.appOrigin, process.env.ALLOWED_ORIGINS, flow.appOrigin)
     if (typeof req.query.state !== 'string' || typeof flow.state !== 'string' || !same(req.query.state, flow.state) || typeof flow.verifier !== 'string' || typeof flow.subject !== 'string' || typeof flow.nonce !== 'string') throw new Error('Die Anmeldung gehört nicht zu diesem Browser. Bitte neu beginnen.')
     if (req.query.error) throw new Error('Die Microsoft-Anmeldung wurde abgebrochen oder nicht freigegeben.')
+    if (typeof flow.uid !== 'string') throw new Error('Die Anmeldung ist abgelaufen.')
+    const user = await getAuth().getUser(flow.uid)
+    const currentScope = resolveSubject(user.uid, user.customClaims ?? {})
+    if (user.disabled || user.customClaims?.ro === true || currentScope.ok === false || currentScope.subject !== flow.subject) throw new Error('Die Postfachberechtigung ist nicht mehr gültig.')
     if (typeof req.query.code !== 'string') throw new Error('Die Bestätigung von Microsoft fehlt.')
     const tokenResponse = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
       method: 'POST', signal: AbortSignal.timeout(15_000), body: new URLSearchParams({ client_id: config.clientId, client_secret: config.clientSecret, code: req.query.code, code_verifier: flow.verifier, redirect_uri: config.redirectUri, grant_type: 'authorization_code' }),
@@ -76,7 +106,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!listed.ok || !Array.isArray(existing.mailboxes)) throw new Error('Die verbundenen Postfächer konnten nicht geprüft werden. Bitte erneut versuchen.')
     const localId = `microsoft-${createHash('sha256').update(address).digest('hex').slice(0, 16)}`
     const previous = existing.mailboxes.find(m => m.id.endsWith(`-${localId}`))
-    if (!previous && typeof flow.limit === 'number' && existing.mailboxes.length >= flow.limit) throw new Error('Die gebuchte Anzahl an Postfächern ist erreicht. Bitte zuerst ein altes Postfach trennen oder die Stufe erweitern.')
+    if (!previous && typeof currentScope.limit === 'number' && existing.mailboxes.length >= currentScope.limit) throw new Error('Die gebuchte Anzahl an Postfächern ist erreicht. Bitte zuerst ein altes Postfach trennen oder die Stufe erweitern.')
     const saved = await fetch(`${proxy.url}/api/mailboxes`, {
       method: previous ? 'PATCH' : 'POST', headers, signal: AbortSignal.timeout(15_000), body: JSON.stringify({
         subject: flow.subject, id: previous?.id ?? localId, host: tid === '9188040d-6c67-4c5b-b112-36a304b66dad' ? 'smtp-mail.outlook.com' : 'smtp.office365.com', port: 587, secure: false, user: address, password: '', from: address,

@@ -10,7 +10,11 @@ const { test } = require('node:test');
 function load() {
   const sandbox = { module: { exports: {} }, process, Buffer, console, URL, URLSearchParams, AbortSignal, fetch: (...args) => global.fetch(...args) };
   sandbox.exports = sandbox.module.exports;
+  sandbox.browserNonce = 'b'.repeat(43);
+  sandbox.requireOAuth = { oauthAppOrigin: (primary, _configured, requested) => requested ?? primary, createOAuthStart: async (_s, flow, url, browserNonce) => { sandbox.start = {flow,url,browserNonce}; return 'test-ticket'; }, consumeOAuthStart: async () => sandbox.start, oauthBrowserNonce: cookie => cookie?.includes('__Host-werkbank-oauth-browser=') ? sandbox.browserNonce : '', oauthPopupPage: () => ({html:'popup',cookie:'cookie',csp:'none'}) };
   sandbox.require = id => {
+    if (id === './_oauthStart.js') return sandbox.requireOAuth;
+    if (id === 'firebase-admin/auth') return {getAuth:()=>({getUser:async()=>({uid:'office',customClaims:{},disabled:false})})};
     if (id === './mailboxes.js') return { requireFirebaseAuth: async () => ({ ok: true, uid: 'office', payload: {} }), resolveSubject: () => ({ ok: true, subject: 't:firma', limit: 2 }), proxyConfig: () => ({ url: 'https://proxy.example.invalid', apiKey: 'test-proxy-key' }) };
     if (id === 'jose') return { ...jose, createRemoteJWKSet: () => ({}), jwtVerify: async (_token, _keys, options) => {
       assert.equal(options.audience, 'test-client');
@@ -20,7 +24,7 @@ function load() {
     } };
     return require(id);
   };
-  const source = fs.readFileSync(path.join(__dirname, '../api/microsoft.ts'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../server/microsoft.ts'), 'utf8');
   vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, sandbox);
   return { handler: sandbox.module.exports.default, sandbox };
 }
@@ -29,16 +33,16 @@ function response() { return { code: 0, headers: {}, setHeader(k, v) { this.head
 test('Microsoft-Anmeldung bindet Browser, Betrieb, PKCE und Nonce und gibt keine Token an den Browser zurück', async () => {
   const before = { ...process.env }, originalFetch = global.fetch;
   try {
-    process.env.MICROSOFT_CLIENT_ID = 'test-client'; process.env.MICROSOFT_CLIENT_SECRET = 'test-client-secret'; process.env.MICROSOFT_REDIRECT_URI = 'https://post.example.invalid/api/microsoft';
+    process.env.POST_APP_URL = 'https://post.example.invalid'; process.env.MICROSOFT_CLIENT_ID = 'test-client'; process.env.MICROSOFT_CLIENT_SECRET = 'test-client-secret'; process.env.MICROSOFT_REDIRECT_URI = 'https://post.example.invalid/api/microsoft';
     const { handler, sandbox } = load();
-    const start = response(); await handler({ method: 'POST', headers: {}, body: { subject: 't:fremd' } }, start);
+    const start = response(); await handler({ method: 'POST', headers: {}, body: { subject: 't:fremd', browserNonce: sandbox.browserNonce } }, start);
     assert.equal(start.code, 200);
-    const url = new URL(start.data.url);
+    assert.equal(start.headers['Set-Cookie'], undefined); const url = new URL(sandbox.start.url);
     assert.equal(url.hostname, 'login.microsoftonline.com'); assert.equal(url.searchParams.get('code_challenge_method'), 'S256');
     assert.equal(url.searchParams.has('client_secret'), false);
-    assert.match(start.headers['Set-Cookie'], /Secure; HttpOnly; SameSite=Lax/);
-    const cookie = start.headers['Set-Cookie'].split(';')[0];
-    const encrypted = cookie.slice(cookie.indexOf('=') + 1);
+
+    const encrypted = sandbox.start.flow;
+    const cookie = '__Host-werkbank-microsoft=' + encrypted + '; __Host-werkbank-oauth-browser=' + sandbox.browserNonce;
     const { payload: flow } = await jose.jwtDecrypt(encrypted, createHash('sha256').update('werkbank-microsoft:test-client-secret').digest());
     assert.equal(flow.subject, 't:firma');
     assert.equal(createHash('sha256').update(flow.verifier).digest('base64url'), url.searchParams.get('code_challenge'));
