@@ -444,7 +444,7 @@ async function askGemini(prompt, files, signal) {
   );
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
+    throw new Error(`HTTP ${response.status}`);
   }
   const data = await response.json();
   return data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -503,7 +503,7 @@ async function askOpenAI(prompt, files, signal) {
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
+    throw new Error(`HTTP ${response.status}`);
   }
   const data = await response.json();
   // Vor der eigentlichen Antwort können Denkschritte stehen — gesucht ist der
@@ -568,7 +568,7 @@ async function categorizeMessage(message) {
       attachmentsAnalyzed: used.length,
     };
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = error instanceof Error && /^HTTP [0-9]{3}$/.test(error.message) ? error.message : "Auswertung fehlgeschlagen";
     return fallbackAnalysis(message, `${chosen.name} fehlgeschlagen: ${reason}`);
   } finally {
     clearTimeout(timer);

@@ -192,7 +192,7 @@ Regeln:
         text = (await model.generateContent(prompt)).response.text()
       }
     } catch (e) {
-      console.error('ai_search_error', e)
+      console.error('ai_search_error')
       const msg = e instanceof Error ? e.message : String(e)
       return res.status(502).json({
         error: 'ai_failed',
@@ -212,7 +212,7 @@ Regeln:
         ? parsed.ids.map((x) => String(x)).filter((id) => allowed.has(id))
         : []
     } catch {
-      console.error('ai_search_parse', text.slice(0, 800))
+      console.error('ai_search_parse')
       return res.status(502).json({ error: 'ai_parse_failed' })
     }
 
@@ -225,7 +225,7 @@ Regeln:
 
     return res.status(200).json({ ids })
   } catch (e) {
-    console.error('gemini_search_unhandled', e)
+    console.error('gemini_search_unhandled')
     return res.status(500).json({
       error: 'internal',
       hint: e instanceof Error ? e.message.slice(0, 200) : 'unknown',

@@ -30,6 +30,8 @@ test('Betriebsregeln im Realtime-Database-Emulator', { timeout: 60000 }, async t
     owner: { sub: 'owner', t: 'firma', r: 'owner', m: { p: 2 } },
     readonly: { sub: 'readonly', t: 'firma', r: 'office', m: { p: 2 }, ro: true },
     field: { sub: 'field', t: 'firma', r: 'field', m: { p: 2 } },
+    payroll: { sub: 'payroll', t: 'firma', r: 'payroll', m: { p: 3 } },
+    legacy: { sub: 'legacy' },
     foreign: { sub: 'foreign', t: 'andere-firma', r: 'owner', m: { p: 2 } },
     unbooked: { sub: 'unbooked', t: 'firma', r: 'owner', m: {} },
   };
@@ -71,6 +73,10 @@ test('Betriebsregeln im Realtime-Database-Emulator', { timeout: 60000 }, async t
     await seed(paths[0]);
     await t.test('Lesesperre erlaubt das Lesen des eigenen Betriebs', async () => assert.equal((await get(ref(databases.readonly, paths[0]))).exists(), true));
     await t.test('Fremde Betriebe dürfen keine Daten lesen', async () => assert.rejects(get(ref(databases.foreign, paths[0])), /Permission denied/i));
+    await seed('users/payroll/emails/test');
+    await t.test('Lohnzugang liest auch keinen alten persönlichen Posteingang', async () => assert.rejects(get(ref(databases.payroll, 'users/payroll/emails/test')), /Permission denied/i));
+    await seed('users/legacy/emails/test');
+    await t.test('Bestehender Einzelzugang liest weiterhin nur seinen eigenen Posteingang', async () => assert.equal((await get(ref(databases.legacy, 'users/legacy/emails/test'))).exists(), true));
   } finally {
     await Promise.all(apps.map(app => deleteApp(app)));
   }

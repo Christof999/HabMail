@@ -2,16 +2,16 @@
   "rules": {
     "users": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
+        ".read": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll'",
         "mailFolders": {
           "$folderId": {
-            ".write": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll'",
             ".validate": "!newData.exists() || (newData.hasChild('name') && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 120)"
           }
         },
         "companies": {
           "$companyId": {
-            ".write": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll'",
             ".validate": "!newData.exists() || (newData.hasChild('name') && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 120)",
             "name": {
               ".validate": "newData.isString() && newData.val().length <= 120"
@@ -33,7 +33,7 @@
         },
         "push": {
           "settings": {
-            ".write": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll'",
             "enabled": {
               ".validate": "newData.isBoolean()"
             },
@@ -46,7 +46,7 @@
           },
           "tokens": {
             "$token": {
-              ".write": "auth != null && auth.uid === $uid",
+              ".write": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll'",
               ".validate": "!newData.exists() || newData.hasChild('createdAt')",
               "createdAt": {
                 ".validate": "newData.isNumber()"
@@ -61,7 +61,7 @@
           },
           "web": {
             "$id": {
-              ".write": "auth != null && auth.uid === $uid",
+              ".write": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll'",
               ".validate": "!newData.exists() || (newData.hasChild('endpoint') && newData.hasChild('p256dh') && newData.hasChild('auth'))",
               "endpoint": {
                 ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 2000"
@@ -89,7 +89,7 @@
         },
         "signatures": {
           "$mailboxId": {
-            ".write": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll'",
             ".validate": "!newData.exists() || newData.isString() || (newData.hasChildren() && newData.child('text').isString())",
             "text": {
               ".validate": "newData.isString() && newData.val().length <= 2000"
@@ -116,7 +116,7 @@
         },
         "calendar": {
           "feedToken": {
-            ".write": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll'",
             ".validate": "!newData.exists() || (newData.isString() && newData.val().length >= 20 && newData.val().length <= 100)"
           },
           "events": {
@@ -124,7 +124,7 @@
               "start"
             ],
             "$eventId": {
-              ".write": "auth != null && auth.uid === $uid",
+              ".write": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll'",
               ".validate": "!newData.exists() || (newData.hasChildren(['title', 'start', 'end']) && newData.child('end').val() > newData.child('start').val())",
               "title": {
                 ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 200"
@@ -177,12 +177,12 @@
         "attachmentData": {
           "emails": {
             "$emailId": {
-              ".write": "auth != null && auth.uid === $uid && !newData.exists()"
+              ".write": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll' && !newData.exists()"
             }
           },
           "sentEmails": {
             "$emailId": {
-              ".write": "auth != null && auth.uid === $uid && !data.exists() && newData.exists()",
+              ".write": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll' && !data.exists() && newData.exists()",
               "$dataKey": {
                 ".validate": "newData.isString() && newData.val().length <= 4200000"
               }
@@ -191,25 +191,25 @@
         },
         "sentEmails": {
           "$emailId": {
-            ".write": "auth != null && auth.uid === $uid && !data.exists() && newData.exists()",
+            ".write": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll' && !data.exists() && newData.exists()",
             ".validate": "newData.hasChildren(['subject', 'sentAt', 'messageId']) && newData.child('subject').isString() && newData.child('subject').val().length <= 500 && newData.child('sentAt').isString() && newData.child('originalBody').isString() && newData.child('originalBody').val().length <= 120000"
           }
         },
         "emails": {
           "$emailId": {
-            ".write": "auth != null && auth.uid === $uid && !newData.exists()",
+            ".write": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll' && !newData.exists()",
             "folderId": {
-              ".write": "auth != null && auth.uid === $uid",
+              ".write": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll'",
               ".validate": "!newData.exists() || newData.isString() || newData.val() == null"
             },
             "userRead": {
-              ".write": "auth != null && auth.uid === $uid",
+              ".write": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll'",
               ".validate": "newData.isBoolean()"
             }
           }
         },
         "language": {
-          ".write": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll'",
           ".validate": "newData.val() === 'de' || newData.val() === 'en' || newData.val() === 'pl' || newData.val() === 'hr'"
         }
       }
@@ -387,7 +387,7 @@
     },
     "admins": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid"
+        ".read": "auth != null && auth.uid === $uid && auth.token.r !== 'payroll'"
       }
     },
     "userDirectory": {
