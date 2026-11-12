@@ -7,6 +7,8 @@ import { createOAuthStart, consumeOAuthStart, oauthBrowserNonce, oauthPopupPage,
 
 const COOKIE = '__Host-werkbank-microsoft'
 const SCOPES = 'openid profile email offline_access https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send'
+// Senden über Graph, weil Microsoft 365 SMTP-AUTH oft abschaltet; der Proxy holt sich den Graph-Zugang später selbst.
+const GRAPH_SEND = 'https://graph.microsoft.com/Mail.Send'
 const KEYS = jose.createRemoteJWKSet(new URL('https://login.microsoftonline.com/common/discovery/v2.0/keys'))
 const same = (a: string, b: string) => timingSafeEqual(createHash('sha256').update(a).digest(), createHash('sha256').update(b).digest())
 
@@ -66,7 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const state = randomBytes(32).toString('base64url'), nonce = randomBytes(32).toString('base64url'), verifier = randomBytes(32).toString('base64url')
     const flow = await new jose.EncryptJWT({ uid: auth.uid, subject: scope.subject, limit: scope.limit, state, nonce, verifier, browserNonce, appOrigin }).setProtectedHeader({ alg: 'dir', enc: 'A256GCM' }).setIssuedAt().setExpirationTime('10m').encrypt(config.cookieKey)
     const url = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize')
-    url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: config.redirectUri, response_type: 'code', response_mode: 'query', scope: SCOPES, state, nonce, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', prompt: 'select_account' }).toString()
+    url.search = new URLSearchParams({ client_id: config.clientId, redirect_uri: config.redirectUri, response_type: 'code', response_mode: 'query', scope: `${SCOPES} ${GRAPH_SEND}`, state, nonce, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', prompt: 'select_account' }).toString()
     const ticket = await createOAuthStart('post', flow, url.href, browserNonce)
     const startUrl = new URL(config.redirectUri)
     startUrl.search = new URLSearchParams({ start: ticket }).toString()
@@ -88,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (user.disabled || user.customClaims?.ro === true || currentScope.ok === false || currentScope.subject !== flow.subject) throw new Error('Die Postfachberechtigung ist nicht mehr gültig.')
     if (typeof req.query.code !== 'string') throw new Error('Die Bestätigung von Microsoft fehlt.')
     const tokenResponse = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
-      method: 'POST', signal: AbortSignal.timeout(15_000), body: new URLSearchParams({ client_id: config.clientId, client_secret: config.clientSecret, code: req.query.code, code_verifier: flow.verifier, redirect_uri: config.redirectUri, grant_type: 'authorization_code' }),
+      method: 'POST', signal: AbortSignal.timeout(15_000), body: new URLSearchParams({ client_id: config.clientId, client_secret: config.clientSecret, code: req.query.code, code_verifier: flow.verifier, redirect_uri: config.redirectUri, grant_type: 'authorization_code', scope: SCOPES }),
     })
     const tokens = await tokenResponse.json() as Record<string, unknown>
     if (!tokenResponse.ok || typeof tokens.id_token !== 'string' || typeof tokens.access_token !== 'string' || typeof tokens.refresh_token !== 'string' || typeof tokens.expires_in !== 'number' || tokens.expires_in <= 0) throw new Error('Microsoft hat die Postfachberechtigung nicht erteilt. Bitte die Freigabe durch Ihre Microsoft-Verwaltung prüfen.')
