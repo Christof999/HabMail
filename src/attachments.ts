@@ -200,7 +200,7 @@ function saveAs(url: string, name: string): void {
 }
 
 /**
- * Im neuen Tab anzeigen — PDFs und Bilder öffnet der Browser selbst.
+ * Im neuen Tab anzeigen — PDFs unabhängig vom eingebauten Browser-Viewer.
  *
  * Der Tab wird sofort geöffnet und erst danach gefüllt. Andersherum hielte ihn
  * der Browser für ein ungebetenes Fenster: zwischen dem Fingertipp und dem
@@ -210,14 +210,25 @@ function saveAs(url: string, name: string): void {
 export async function openAttachment(attachment: EmailAttachment): Promise<void> {
   const tab = window.open('', '_blank')
   try {
+    if (tab !== null) {
+      tab.opener = null
+      tab.document.title = attachmentName(attachment)
+      tab.document.body.textContent = 'Anhang wird geladen…'
+    }
     const data = await loadAttachmentData(attachment)
+    if (tab !== null && attachmentMimeType(attachment) === 'application/pdf') {
+      const { showPdf } = await import('./pdfViewer')
+      await showPdf(tab, new Blob([toBytes(data) as unknown as BlobPart], {
+        type: 'application/pdf',
+      }), attachmentName(attachment))
+      return
+    }
     withObjectUrl(attachment, data, (url) => {
       if (tab === null) {
         // Der Browser lässt kein neues Fenster zu — dann wenigstens speichern.
         saveAs(url, attachmentName(attachment))
         return
       }
-      tab.opener = null
       tab.location.href = url
     })
   } catch (error) {
