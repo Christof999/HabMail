@@ -24,7 +24,7 @@ test('Betriebsregeln im Realtime-Database-Emulator', { timeout: 60000 }, async t
     }
   }
   collect(rules[tenantKey], 'tenants/firma');
-  assert.equal(paths.length, 12);
+  assert.equal(paths.length, 13);
   const claims = {
     office: { sub: 'office', t: 'firma', r: 'office', m: { p: 2 } },
     owner: { sub: 'owner', t: 'firma', r: 'owner', m: { p: 2 } },
@@ -66,7 +66,7 @@ test('Betriebsregeln im Realtime-Database-Emulator', { timeout: 60000 }, async t
       await t.test(`Gesendet bleibt unveränderbar: ${path}`, async () => assert.rejects(set(ref(databases.office, path), sentMessage(path)), error => error.code === 'PERMISSION_DENIED'));
       await t.test(`Gesendet bleibt erhalten: ${path}`, async () => assert.rejects(remove(ref(databases.office, path)), error => error.code === 'PERMISSION_DENIED'));
     }
-    for (const path of paths.filter(path => path.endsWith('/emails/test'))) {
+    for (const path of paths.filter(path => path.endsWith('/emails/test') || path.endsWith('/mailHtml/test'))) {
       await seed(path, null);
       await t.test(`Eingangsdaten schreibt nur der Server: ${path}`, async () => assert.rejects(set(ref(databases.office, path), sentMessage(path)), error => error.code === 'PERMISSION_DENIED'));
     }
