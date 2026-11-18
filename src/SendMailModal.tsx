@@ -2,7 +2,7 @@ import { tFormat, t } from './i18n'
 import { translateText } from './languageSession'
 
 import type { User } from 'firebase/auth'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { onValue, ref } from 'firebase/database'
 import { getFirebaseDb } from './firebase'
 import { mailboxKey, userSignaturesPath } from './paths'
@@ -22,6 +22,7 @@ import {
   type SendMailComposeKind,
 } from './sendMailApi'
 import { recordSentMail } from './sentMail'
+import { splitMailText } from './mailText'
 
 /**
  * Was gerade geschrieben wird.
@@ -47,6 +48,18 @@ type Attached = {
   bytes: number
 }
 
+type Draft = { to: string; subject: string; body: string; signature: string }
+
+/*
+ * Entwürfe überleben das Schließen: Esc oder ein Klick daneben soll keinen
+ * halb geschriebenen Text kosten. Sie leben nur bis zum Neuladen der Seite.
+ */
+const drafts = new Map<string, Draft>()
+
+function draftKey(compose: ComposeState): string {
+  return compose.mode === 'new' ? 'new' : `${compose.mode}:${compose.row.id}`
+}
+
 /** Zusammen so viel wie /api/send-mail annimmt. */
 const MAX_ATTACHMENT_TOTAL_BYTES = 3 * 1024 * 1024
 const MAX_ATTACHMENTS = 10
@@ -66,9 +79,11 @@ type Props = {
   user: User
   ownerId: string
   onClose: () => void
+  /** Unter der Mail statt als Fenster darüber — die Mail bleibt im Blick. */
+  inline?: boolean
 }
 
-export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
+export function SendMailModal({ compose, user, ownerId, onClose, inline = false }: Props) {
   const [to, setTo] = useState('')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
@@ -81,6 +96,12 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
   const [signatures, setSignatures] = useState<Record<string, Signature>>({})
   const [attachments, setAttachments] = useState<Attached[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
+  const inlineBox = useRef<HTMLElement>(null)
+  const [restored, setRestored] = useState(false)
+  /** Zu welchem Entwurf die Felder gerade gehören. */
+  const [filledFor, setFilledFor] = useState('')
+  const signature = signatures[mailboxKey(fromId)] ?? EMPTY_SIGNATURE
+  const appliedSignature = useRef('')
 
   useEffect(
     () =>
@@ -90,33 +111,18 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
     [ownerId],
   )
 
-  /**
-   * Die Signatur des gewählten Postfachs im Text halten.
-   *
-   * Sie steht sichtbar im Feld statt unsichtbar beim Versand angehängt zu
-   * werden — man soll sehen, was rausgeht, und sie noch ändern können. Beim
-   * Wechsel des Absenders wird die alte ersetzt, nicht die neue angestapelt.
-   */
-  const signature = signatures[mailboxKey(fromId)] ?? EMPTY_SIGNATURE
-  const appliedSignature = useRef('')
-  useEffect(() => {
-    const next = signature.text.trim()
-    const previous = appliedSignature.current
-    if (next === previous) return
-
-    setBody((current) => {
-      const withoutOld =
-        previous === '' ? current : current.replace(`\n\n${previous}`, '').replace(previous, '')
-      return next === '' ? withoutOld : `${withoutOld.trimEnd()}\n\n${next}`
-    })
-    appliedSignature.current = next
-  }, [signature.text])
-
   useEffect(() => {
     if (!compose) return
     setError(null)
     setSending(false)
-    if (compose.mode === 'new') {
+    const draft = drafts.get(draftKey(compose))
+    setFilledFor(draftKey(compose))
+    setRestored(draft !== undefined)
+    if (draft !== undefined) {
+      setTo(draft.to)
+      setSubject(draft.subject)
+      setBody(draft.body)
+    } else if (compose.mode === 'new') {
       // Vorbelegung, wenn ein Agent das Fenster über window.habmail öffnet.
       setTo(compose.prefill?.to ?? '')
       setSubject(compose.prefill?.subject ?? '')
@@ -131,7 +137,7 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
       setBody('')
     }
     setAttachments([])
-    appliedSignature.current = ''
+    appliedSignature.current = draft?.signature ?? ''
     // Vorbelegt mit dem Postfach, in dem die Mail ankam: aus dem heraus zu
     // antworten ist fast immer richtig. Änderbar bleibt es trotzdem — wer
     // mehrere Firmen führt, braucht das gelegentlich. Bei einer neuen Mail
@@ -172,14 +178,60 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
     }
   }, [compose, user])
 
+  /**
+   * Die Signatur des gewählten Postfachs im Text halten.
+   *
+   * Sie steht sichtbar im Feld statt unsichtbar beim Versand angehängt zu
+   * werden — man soll sehen, was rausgeht, und sie noch ändern können. Beim
+   * Wechsel des Absenders wird die alte ersetzt, nicht die neue angestapelt.
+   */
+  useEffect(() => {
+    const next = signature.text.trim()
+    const previous = appliedSignature.current
+    if (next === previous) return
+
+    setBody((current) => {
+      const withoutOld =
+        previous === '' ? current : current.replace(`\n\n${previous}`, '').replace(previous, '')
+      return next === '' ? withoutOld : `${withoutOld.trimEnd()}\n\n${next}`
+    })
+    appliedSignature.current = next
+  }, [signature.text, compose])
+
+  const written = useRef<Draft & { key: string }>({ key: '', to: '', subject: '', body: '', signature: '' })
+  useEffect(() => {
+    written.current = { key: filledFor, to, subject, body, signature: appliedSignature.current }
+  })
+
+  // Gesichert wird beim Verlassen eines Entwurfs, egal wodurch: Schließen,
+  // Esc oder „Antworten" an einer anderen Mail. Nur Senden und Verwerfen nicht.
+  const finished = useRef(false)
   useEffect(() => {
     if (!compose) return
+    finished.current = false
+    return () => {
+      const { key, ...draft } = written.current
+      if (finished.current || key !== draftKey(compose)) return
+      const ownText = draft.body.replace(draft.signature, '').trim()
+      if (ownText !== '') drafts.set(draftKey(compose), draft)
+      else drafts.delete(draftKey(compose))
+    }
+  }, [compose])
+
+  const closeKeepingDraft = onClose
+
+  useEffect(() => {
+    if (!compose || inline) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') closeKeepingDraft()
     }
     globalThis.window.addEventListener('keydown', onKey)
     return () => globalThis.window.removeEventListener('keydown', onKey)
-  }, [compose, onClose])
+  }, [compose, inline, closeKeepingDraft])
+
+  useEffect(() => {
+    if (compose && inline) inlineBox.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [compose, inline])
 
   if (!compose) return null
 
@@ -217,6 +269,19 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
     setAttachments(next)
     // Zurücksetzen, damit dieselbe Datei erneut gewählt werden kann.
     if (fileInput.current !== null) fileInput.current.value = ''
+  }
+
+  function discardDraft() {
+    finished.current = true
+    drafts.delete(draftKey(active))
+    onClose()
+  }
+
+  function submitOnModEnter(e: ReactKeyboardEvent<HTMLFormElement>) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      e.currentTarget.requestSubmit()
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -274,6 +339,8 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
         text: result.text ?? body,
         attachments,
       })
+      finished.current = true
+      drafts.delete(draftKey(active))
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Versand fehlgeschlagen')
@@ -282,39 +349,32 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
     }
   }
 
-  return (
-    <div
-      className="modal-backdrop"
-      role="presentation"
-      onClick={(ev) => {
-        if (ev.target === ev.currentTarget) onClose()
-      }}
-    >
-      <div
-        className="modal-dialog card"
-        role="dialog"
-        aria-labelledby="send-mail-title"
-        aria-modal="true"
-        data-testid="send-mail-dialog"
-        data-compose-mode={active.mode}
-      >
+  const content = (
+    <>
         <div className="modal-head">
           <h2 id="send-mail-title">{translateText(title)}</h2>
           <button
             type="button"
             className="ghost modal-close"
-            onClick={onClose}
+            onClick={closeKeepingDraft}
             aria-label={t("Schließen")}
             data-testid="send-mail-close"
           >
             ×
           </button>
         </div>
-        <p className="muted small">
-          {translateText(active.mode === 'new' ? '' : t("Der Originaltext wird als Zitat angehängt. "))}{t("Verschickt wird über das gewählte Postfach — dieselben Zugangsdaten wie beim Empfangen, es ist nichts gesondert einzurichten.")}</p>
+        {restored ? (
+          <p className="muted small compose-restored">
+            {t('Dein Entwurf von eben ist wieder da.')}{' '}
+            <button type="button" className="link-btn" onClick={discardDraft}>
+              {t('Verwerfen')}
+            </button>
+          </p>
+        ) : null}
         <form
           className="send-mail-form"
           onSubmit={(e) => void handleSubmit(e)}
+          onKeyDown={submitOnModEnter}
           name="habmail-compose"
           data-testid="send-mail-form"
         >
@@ -362,6 +422,7 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
               onChange={(e) => setTo(e.target.value)}
               required
               autoComplete="email"
+              autoFocus={active.mode !== 'reply'}
               placeholder={t("empfaenger@example.com")}
               aria-label={t("Empfänger")}
               data-testid="send-mail-to"
@@ -384,12 +445,26 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
               name="body"
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              rows={8}
+              rows={12}
+              autoFocus={active.mode === 'reply'}
               placeholder={t("Dein Text…")}
               aria-label={t("Nachricht")}
               data-testid="send-mail-body"
             />
           </label>
+          {active.mode === 'new' || inline ? null : (
+            <details className="compose-original">
+              <summary>
+                {tFormat(
+                  'Ursprüngliche Nachricht von {0} — wird darunter zitiert',
+                  active.row.senderName || active.row.sender || '—',
+                )}
+              </summary>
+              <div className="compose-original-text">
+                {translateText(splitMailText(active.row.originalBody || '').main || '—')}
+              </div>
+            </details>
+          )}
           {/* Das Bild steht nicht im Textfeld — dort ließe es sich nicht
               darstellen. Deshalb hier die Vorschau, damit man weiß, was
               mitgeht. */}
@@ -456,12 +531,13 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
             </p>
           ) : null}
           <div className="modal-actions">
+            <span className="muted small compose-shortcut">{t('Strg+Enter sendet')}</span>
             <button
               type="button"
               className="ghost"
-              onClick={onClose}
+              onClick={discardDraft}
               data-testid="send-mail-cancel"
-            >{t("Abbrechen")}</button>
+            >{t("Verwerfen")}</button>
             {/* Ohne Absender-Postfach lehnt der Server ohnehin ab. Das hier
                 zu sperren ist ehrlicher als ein Knopf, der ins Leere führt. */}
             <button
@@ -473,6 +549,43 @@ export function SendMailModal({ compose, user, ownerId, onClose }: Props) {
             </button>
           </div>
         </form>
+    </>
+  )
+
+  if (inline) {
+    return (
+      <section
+        ref={inlineBox}
+        className="compose-inline"
+        aria-labelledby="send-mail-title"
+        data-testid="send-mail-dialog"
+        data-compose-mode={active.mode}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') closeKeepingDraft()
+        }}
+      >
+        {content}
+      </section>
+    )
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={(ev) => {
+        if (ev.target === ev.currentTarget) closeKeepingDraft()
+      }}
+    >
+      <div
+        className="modal-dialog card"
+        role="dialog"
+        aria-labelledby="send-mail-title"
+        aria-modal="true"
+        data-testid="send-mail-dialog"
+        data-compose-mode={active.mode}
+      >
+        {content}
       </div>
     </div>
   )

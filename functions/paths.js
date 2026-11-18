@@ -33,6 +33,11 @@ function userAttachmentDataPath(uid, branch) {
   return `${userRootPath(uid)}/attachmentData/${branch}`;
 }
 
+/** Die HTML-Fassung eingehender Mails — erst beim Öffnen geladen, nicht mit dem Posteingang. */
+function userMailHtmlPath(uid) {
+  return `${userRootPath(uid)}/mailHtml`;
+}
+
 function userFoldersPath(uid) {
   return `${userRootPath(uid)}/mailFolders`;
 }
@@ -137,6 +142,7 @@ const USER_DIRECTORY_PATH = "userDirectory";
 const ADMINS_PATH = "admins";
 
 module.exports = {
+  userMailHtmlPath,
   userRootPath,
   userEmailsPath,
   userSentEmailsPath,

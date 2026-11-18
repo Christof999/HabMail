@@ -18,6 +18,8 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@ui-sdk/core": "^0.1.0-beta.10",
+    "@ui-sdk/react": "^0.1.0-beta.10",
     "firebase": "^12.11.0",
     "firebase-admin": "^13.10.0",
     "jose": "^6.2.2",

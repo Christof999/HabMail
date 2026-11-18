@@ -11,6 +11,7 @@ import {
   useState,
   type DragEvent,
   type FormEvent,
+  type ReactNode,
 } from 'react'
 import {
   onAuthStateChanged,
@@ -24,7 +25,7 @@ import {
   buildGeminiItems,
   requestGeminiSearch,
 } from './geminiSearch'
-import type { EmailRow } from './types'
+import type { EmailRow, SuggestedFolder } from './types'
 import {
   addSavedFilter,
   loadSavedFilters,
@@ -65,7 +66,16 @@ import { AttachmentList } from './AttachmentList'
 import { SentView } from './SentView'
 import { mailboxLabel } from './mailboxesApi'
 import { MoveToFolderSheet } from './MoveToFolderSheet'
-import { SvgMoveToFolder } from './icons'
+import { MailActions } from './MailActions'
+import { MailBody } from './MailBody'
+import {
+  Toast,
+  ToastAction,
+  ToastClose,
+  ToastRegion,
+  ToastTitle,
+  createToaster,
+} from '@ui-sdk/react/toast'
 import { FolderNav } from './FolderNav'
 import { folderRowMailDragLeave, MAIL_DROP_INBOX } from './folderDrop'
 import AccountMenu from './AccountMenu'
@@ -79,7 +89,7 @@ import MailAppointments from './MailAppointment'
 import { watchEvents, type CalendarEvent } from './calendar'
 import UserSettings from './UserSettings'
 import { whoAmI } from './usersApi'
-import { userAttachmentDataPath, userEmailsPath, userFoldersPath } from './paths'
+import { userAttachmentDataPath, userEmailsPath, userFoldersPath, userMailHtmlPath } from './paths'
 import { canManageMailboxes, dataOwnerId, postGate } from './owner'
 import {
   CATEGORY_LABELS,
@@ -227,10 +237,13 @@ export default function App() {
   const [mailDropHighlightId, setMailDropHighlightId] = useState<
     string | null
   >(null)
+  const [toaster] = useState(() => createToaster())
+  useEffect(() => () => toaster.dismiss(), [toaster])
   // Jeder Benutzer hat seinen eigenen Zweig; ohne Anmeldung gibt es keinen.
   const emailsPath = ownerId ? userEmailsPath(ownerId) : ''
   const attachmentsPath = ownerId ? userAttachmentDataPath(ownerId, 'emails') : ''
   const foldersPath = ownerId ? userFoldersPath(ownerId) : ''
+  const mailHtmlPath = ownerId ? userMailHtmlPath(ownerId) : ''
 
   const [categoryFilter, setCategoryFilter] = useState<EmailCategory | null>(null)
   const [mailboxFilter, setMailboxFilter] = useState<string | null>(null)
@@ -572,6 +585,17 @@ export default function App() {
     })
   }, [displayThreads, selectedFolderId, isSearchActive])
 
+  // Antworten und Weiterleiten stehen unter ihrer Mail, wenn die gerade in der
+  // Liste steht; sonst (z.B. aus „Gesendet") als Fenster.
+  const inlineComposeRowId =
+    compose !== null &&
+    compose.mode !== 'new' &&
+    view === 'inbox' &&
+    !showSent &&
+    browsedThreads.some((th) => th.membersAsc.some((r) => r.id === compose.row.id))
+      ? compose.row.id
+      : null
+
   const browsedTotalMessages = useMemo(
     () => browsedThreads.reduce((n, t) => n + t.membersAsc.length, 0),
     [browsedThreads],
@@ -730,6 +754,58 @@ export default function App() {
     }
   }
 
+  /** Den vorgeschlagenen Ordner finden — oder anlegen, falls er gelöscht wurde. */
+  async function ensureFolder(target: SuggestedFolder): Promise<string> {
+    if (folders.some((f) => f.id === target.id)) return target.id
+    const key = norm(target.name.trim())
+    const byName = folders.find((f) => norm(f.name.trim()) === key)
+    if (byName !== undefined) return byName.id
+    const created = await push(ref(getFirebaseDb(), foldersPath), {
+      name: target.name,
+      parentId: null,
+      createdAt: Date.now(),
+      createdBy: 'ki',
+    })
+    return created.key ?? ''
+  }
+
+  /** „Erledigt": gelesen und in den Ordner, den die KI vorgeschlagen hat. */
+  async function fileThread(thread: EmailThread) {
+    if (!user) return
+    const target = thread.membersDesc.find((r) => r.suggestedFolder)?.suggestedFolder
+    if (target === undefined) {
+      setFolderActionError(null)
+      setMoveTarget(thread)
+      return
+    }
+    setFolderActionError(null)
+    const db = getFirebaseDb()
+    const before: Record<string, unknown> = {}
+    const after: Record<string, unknown> = {}
+    try {
+      const folderId = await ensureFolder(target)
+      for (const r of thread.membersAsc) {
+        const folderPath = rtdbEmailFieldPath(emailsPath, r.id, 'folderId')
+        const readPath = rtdbEmailFieldPath(emailsPath, r.id, 'userRead')
+        before[folderPath] = r.folderId ?? null
+        before[readPath] = r.userRead === true
+        after[folderPath] = folderId
+        after[readPath] = true
+      }
+      await update(ref(db), after)
+    } catch (e) {
+      setFolderActionError(e instanceof Error ? e.message : 'Ablegen fehlgeschlagen')
+      return
+    }
+    toaster(tFormat('Abgelegt in „{0}"', target.name), {
+      duration: 6000,
+      action: {
+        label: t('Rückgängig'),
+        onAction: () => update(ref(db), before),
+      },
+    })
+  }
+
   async function createMailFolder() {
     if (!user) return
     const name = newFolderName.trim()
@@ -785,6 +861,7 @@ export default function App() {
       if (r.attachments?.some((a) => a.dataPath !== undefined)) {
         updates[`${attachmentsPath}/${r.id}`] = null
       }
+      if (r.hasHtml) updates[`${mailHtmlPath}/${r.id}`] = null
     }
     try {
       await update(ref(db), updates)
@@ -1499,6 +1576,10 @@ export default function App() {
                   setFolderActionError(null)
                   setMoveTarget(thread)
                 }}
+                onFile={() => void fileThread(thread)}
+                fileTarget={
+                  thread.membersDesc.find((r) => r.suggestedFolder)?.suggestedFolder ?? null
+                }
                 onReply={() =>
                   setCompose({ mode: 'reply', row: head })
                 }
@@ -1507,6 +1588,19 @@ export default function App() {
                 }
                 calendarEvents={calendarEvents}
                 onOpenCalendar={showCalendar}
+                mailHtmlPath={mailHtmlPath}
+                composer={
+                  user && ownerId && inlineComposeRowId !== null &&
+                  thread.membersAsc.some((r) => r.id === inlineComposeRowId) ? (
+                    <SendMailModal
+                      inline
+                      compose={compose}
+                      user={user}
+                      ownerId={ownerId}
+                      onClose={() => setCompose(null)}
+                    />
+                  ) : null
+                }
               />
             </li>
           )
@@ -1547,6 +1641,18 @@ export default function App() {
         </div>
       </div>
       )}
+
+      <ToastRegion toaster={toaster} className="toast-region">
+        {() => (
+          <Toast className="toast">
+            <ToastTitle className="toast-title" />
+            <ToastAction className="toast-action" />
+            <ToastClose className="toast-close" aria-label={t('Schließen')}>
+              ×
+            </ToastClose>
+          </Toast>
+        )}
+      </ToastRegion>
 
       {moveTarget ? (
         <MoveToFolderSheet
@@ -1774,7 +1880,7 @@ export default function App() {
       ) : null}
 
       <SendMailModal
-        compose={compose}
+        compose={inlineComposeRowId === null ? compose : null}
         user={user}
         ownerId={ownerId}
         onClose={() => setCompose(null)}
@@ -1820,61 +1926,6 @@ function AttachmentMissingDataHint({ row }: { row: EmailRow }) {
   )
 }
 
-function SvgReply({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className ?? 'email-action-svg'}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <polyline points="9 17 4 12 9 7" />
-      <path d="M20 17v-2a4 4 0 0 0-4-4H4" />
-    </svg>
-  )
-}
-
-function SvgForward({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className ?? 'email-action-svg'}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <polyline points="15 17 20 12 15 7" />
-      <path d="M4 18v-2a4 4 0 0 1 4-4h12" />
-    </svg>
-  )
-}
-
-function SvgMarkUnread({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className ?? 'email-action-svg'}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <rect x="2" y="4" width="20" height="16" rx="2" />
-      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-      <circle cx="19" cy="5" r="2.5" fill="currentColor" stroke="none" />
-    </svg>
-  )
-}
-
 function EmailCard({
   thread,
   unread,
@@ -1882,10 +1933,14 @@ function EmailCard({
   onMarkUnread,
   onRequestDelete,
   onRequestMove,
+  onFile,
+  fileTarget,
   onReply,
   onForward,
   calendarEvents,
   onOpenCalendar,
+  mailHtmlPath,
+  composer,
 }: {
   thread: EmailThread
   unread: boolean
@@ -1893,10 +1948,14 @@ function EmailCard({
   onMarkUnread: () => void
   onRequestDelete: () => void
   onRequestMove: () => void
+  onFile: () => void
+  fileTarget: SuggestedFolder | null
   onReply: () => void
   onForward: () => void
   calendarEvents: CalendarEvent[]
   onOpenCalendar: (draft: CalendarDraft, eventId?: string | null) => void
+  mailHtmlPath: string
+  composer: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const head = thread.membersDesc[0]
@@ -1915,18 +1974,6 @@ function EmailCard({
     <article
       className={`card email${unread ? ' email-unread' : ''}`}
     >
-      <button
-        type="button"
-        className="email-card-dismiss"
-        title={t("Unterhaltung löschen")}
-        aria-label={t("Unterhaltung löschen")}
-        onClick={(e) => {
-          e.stopPropagation()
-          onRequestDelete()
-        }}
-      >
-        ×
-      </button>
       <div className="email-head">
         <div className="email-head-body">
           <h2>{translateText(head.subject || '(Ohne Betreff)')}</h2>
@@ -1962,68 +2009,15 @@ function EmailCard({
             ) : null}
           </p>
         </div>
-        <div className="email-toolbar" role="toolbar" aria-label={t("E-Mail-Aktionen")}>
-          <button
-            type="button"
-            className="email-icon-btn"
-            title={t("Antworten")}
-            aria-label={t("Antworten")}
-            onClick={() => {
-              onMarkInteracted()
-              onReply()
-            }}
-          >
-            <SvgReply />
-          </button>
-          <button
-            type="button"
-            className="email-icon-btn"
-            title={t("Weiterleiten")}
-            aria-label={t("Weiterleiten")}
-            onClick={() => {
-              onMarkInteracted()
-              onForward()
-            }}
-          >
-            <SvgForward />
-          </button>
-          <button
-            type="button"
-            className="email-icon-btn"
-            title={t("In einen Ordner verschieben")}
-            aria-label={t("In einen Ordner verschieben")}
-            onClick={() => onRequestMove()}
-          >
-            <SvgMoveToFolder />
-          </button>
-          <button
-            type="button"
-            className="email-icon-btn"
-            title={t("Als ungelesen markieren")}
-            aria-label={t("Als ungelesen markieren")}
-            onClick={() => onMarkUnread()}
-          >
-            <SvgMarkUnread />
-          </button>
-        </div>
       </div>
       <button
         type="button"
         className="email-summary-toggle"
         aria-expanded={open}
-        title={
-          open
-            ? 'Erneut tippen, um Details zu schließen'
-            : 'Tippen, um Details (Volltext & Anhänge) anzuzeigen'
-        }
-        aria-label={
-          open
-            ? 'Zusammenfassung: Details ausblenden'
-            : 'Zusammenfassung: Details einblenden'
-        }
         onClick={toggleDetails}
       >
         <span className="summary">{translateText(head.summary || '—')}</span>
+        <span className="summary-more">{open ? t('Weniger anzeigen') : t('Ganze Mail lesen')}</span>
       </button>
       {/* Woher die Zusammenfassung stammt. Ohne das bleibt es Vertrauenssache,
           ob sie den Beleg kennt oder nur den Mailtext — und genau das ist die
@@ -2040,6 +2034,23 @@ function EmailCard({
         events={calendarEvents}
         onOpen={(eventId, draft) => onOpenCalendar(draft, eventId)}
       />
+      <MailActions
+        fileTarget={fileTarget}
+        filed={Boolean(head.folderId)}
+        onReply={() => {
+          onMarkInteracted()
+          onReply()
+        }}
+        onForward={() => {
+          onMarkInteracted()
+          onForward()
+        }}
+        onFile={onFile}
+        onMove={onRequestMove}
+        onMarkUnread={onMarkUnread}
+        onDelete={onRequestDelete}
+      />
+      {composer}
       <p className="muted small">{t("Zuletzt: ")}{translateText(head.receivedAt || '—')}
         {multi ? (
           <>
@@ -2073,9 +2084,7 @@ function EmailCard({
                         <p className="thread-msg-summary small">{translateText(r.summary)}</p>
                       ) : null}
                       <MailTranslation key={r.id} subject={r.subject} text={r.originalBody || ''} />
-                      <pre className="body thread-body">
-                        {translateText(r.originalBody || '—')}
-                      </pre>
+                      <MailBody row={r} htmlRoot={mailHtmlPath} />
                       <AttachmentMissingDataHint row={r} />
                       <AttachmentList
                         attachments={r.attachments ?? []}
@@ -2091,8 +2100,7 @@ function EmailCard({
           ) : (
             <>
               <MailTranslation subject={head.subject} text={head.originalBody || ''} />
-              <h3>{t("Originaltext")}</h3>
-              <pre className="body">{translateText(head.originalBody || '—')}</pre>
+              <MailBody row={head} htmlRoot={mailHtmlPath} />
               <AttachmentMissingDataHint row={head} />
               <AttachmentList
                 attachments={head.attachments ?? []}

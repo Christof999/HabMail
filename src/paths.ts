@@ -40,6 +40,11 @@ export function userAttachmentDataPath(uid: string, branch: 'emails' | 'sentEmai
   return `${userRootPath(uid)}/attachmentData/${branch}`
 }
 
+/** Die HTML-Fassung eingehender Mails — erst beim Öffnen geladen, nicht mit dem Posteingang. */
+export function userMailHtmlPath(uid: string): string {
+  return `${userRootPath(uid)}/mailHtml`
+}
+
 export function userFoldersPath(uid: string): string {
   return `${userRootPath(uid)}/mailFolders`
 }

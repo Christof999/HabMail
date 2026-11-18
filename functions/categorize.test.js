@@ -229,3 +229,17 @@ test("ohne Schlüssel ist nichts eingerichtet", async () => {
   const result = await categorizeMessage(MESSAGE);
   assert.match(result.reason, /weder OPENAI_API_KEY noch GEMINI_API_KEY/);
 });
+
+test("die KI bekommt die vorhandenen Ordner und schlägt einen davon vor", async () => {
+  setEnv({ OPENAI_API_KEY: "sk-test" });
+  const calls = stubFetch({
+    output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify({ ...ANALYSIS, folder: "  Muster\nGmbH " }) }] }],
+  });
+
+  const result = await categorizeMessage(MESSAGE, { folderNames: ["Telekom", "Baustelle Hauptstr. 3"] });
+
+  const prompt = calls[0].body.input[0].content[0].text;
+  assert.match(prompt, /- Telekom\n {3}- Baustelle Hauptstr\. 3/);
+  assert.ok(calls[0].body.text.format.schema.required.includes("folder"));
+  assert.equal(result.folder, "Muster GmbH");
+});

@@ -18,6 +18,7 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const { ACCOUNTING_CATEGORIES, CATEGORY_LABELS, periodFromDate } = require("./categories");
 const { ownerFromAuth } = require("./owner");
 const { attachmentContent, categorizeMessage, isConfigured } = require("./categorize");
+const { createFolderResolver } = require("./folders");
 const { updateIndexEntry } = require("./invoices");
 const { userEmailsPath } = require("./paths");
 const { withAttachmentData } = require("./attachmentData");
@@ -133,9 +134,11 @@ const reanalyzeInvoices = onCall(
 
     // Erst hier die Dateien nachladen — nur für die Mails, die wirklich noch
     // einmal zur KI gehen.
+    const folders = await createFolderResolver(uid);
+    const folderNames = folders.names();
     const analyses = await mapWithConcurrency(candidates, CONCURRENCY, ([key, record]) =>
       withAttachmentData(uid, "emails", key, record)
-        .then((full) => categorizeMessage(toMessage(full)))
+        .then((full) => categorizeMessage(toMessage(full), { folderNames }))
         .catch((error) => ({
           analyzed: false,
           reason: error instanceof Error ? error.message : String(error),
@@ -167,6 +170,8 @@ const reanalyzeInvoices = onCall(
         reanalyzedAt: Date.now(),
       };
       if (Object.keys(invoice).length > 0) updates.invoice = invoice;
+      const suggestedFolder = await folders.resolve(analysis.folder);
+      if (suggestedFolder !== undefined) updates.suggestedFolder = suggestedFolder;
 
       const period = periodFromDate(invoice.issuedOn ?? record.receivedAt);
       if (period !== undefined) updates.period = period;

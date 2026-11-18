@@ -91,6 +91,7 @@ test("poll forwards AI and attachment results only for newly stored mails", asyn
   const { pollMailbox } = load("poll.js", {
     "firebase-admin": {},
     "./categorize": { categorizeMessage: async () => analysis },
+    "./folders": { createFolderResolver: async () => ({ names: () => [], resolve: async () => undefined }) },
     "./emailproxy": {
       fetchMessages: async () => ({ messages: [{ uid: 1 }, { uid: 2 }], cursor: 2, uidValidity: 1 }),
       ackMessages: async () => { acked = true; },

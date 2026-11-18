@@ -10,6 +10,7 @@
 const admin = require("firebase-admin");
 
 const { categorizeMessage } = require("./categorize");
+const { createFolderResolver } = require("./folders");
 const { mapWithConcurrency } = require("./concurrency");
 const {
   ackMessages,
@@ -74,8 +75,10 @@ async function pollMailbox(mailbox) {
   // Vor der KI: was sie lesen kann, soll sie auch bei einer großen Datei sehen.
   await fillLargeAttachments(mailbox.id, messages);
 
+  const folders = await createFolderResolver(ownerUid);
+  const folderNames = folders.names();
   const analyses = await mapWithConcurrency(messages, ANALYSIS_CONCURRENCY, (message) =>
-    categorizeMessage(message),
+    categorizeMessage(message, { folderNames }),
   );
 
   // Was wirklich neu dazugekommen ist — nur darüber wird benachrichtigt.
@@ -91,6 +94,7 @@ async function pollMailbox(mailbox) {
     }
 
     try {
+      analysis.suggestedFolder = await folders.resolve(analysis.folder);
       const outcome = await storeMessage(ownerUid, mailbox.id, messages[i], analysis);
       if (outcome === "stored") {
         summary.stored += 1;

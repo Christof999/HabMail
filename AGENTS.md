@@ -93,8 +93,12 @@ Beschriftung, die sich ändern kann.
 | Abbrechen | `[data-testid="send-mail-cancel"]`, sonst `Escape` |
 | Fehlermeldung | `[data-testid="send-mail-error"]` (`role="alert"`) |
 
-Antworten und Weiterleiten hängen an den Knöpfen „Antworten" und
-„Weiterleiten" der jeweiligen Mail-Karte (`aria-label`).
+An jeder Mail-Karte steht eine Werkzeugleiste (`role="toolbar"`, Name
+„E-Mail-Aktionen"): „Antworten", „Weiterleiten" und „Erledigt"
+(`[data-testid="mail-file"]`, legt die Mail in den Ordner, den die KI
+vorgeschlagen hat). Verschieben, „ungelesen" und Löschen liegen im Menü
+„Weitere Aktionen". „Verwerfen" (`send-mail-cancel`) löscht einen Entwurf;
+Esc und × schließen nur und behalten ihn.
 
 Der Kalender:
 
@@ -279,3 +283,10 @@ Bei 5xx lohnt ein Retry, bei 4xx nicht.
 - **Vor dem ersten echten Versand `dryRun`.**
 - **`allowedTo` setzen**, wenn feststeht, wohin gesendet wird. Ein Key, der
   nur an eine Adresse senden darf, ist im Ernstfall harmlos.
+
+## Oberfläche bauen
+
+Bedienelemente (Menü, Werkzeugleiste, Dialog, Hinweise) kommen aus
+[ui-sdk](https://ui-sdk.dev). Vor dem Einsatz `node_modules/@ui-sdk/react/docs/llms.txt`
+lesen und dann nur die Seite der jeweiligen Komponente. Kein eigenes
+`role="menu"`/`"toolbar"`/`"dialog"` von Hand bauen.

@@ -1,5 +1,5 @@
 import { normalizeCategory, periodFromDate } from './categories'
-import type { EmailAttachment, EmailRow, InvoiceDetails, MailAppointment } from './types'
+import type { EmailAttachment, EmailRow, InvoiceDetails, MailAppointment, SuggestedFolder } from './types'
 
 function pickStr(o: Record<string, unknown>, keys: string[]): string {
   for (const k of keys) {
@@ -212,6 +212,13 @@ function firstDefinedAttachmentArray(
   return undefined
 }
 
+function parseSuggestedFolder(raw: unknown): SuggestedFolder | undefined {
+  if (raw === null || typeof raw !== 'object') return undefined
+  const { id, name } = raw as Record<string, unknown>
+  if (typeof id !== 'string' || typeof name !== 'string') return undefined
+  return id.trim() === '' || name.trim() === '' ? undefined : { id, name: name.trim() }
+}
+
 /** Unterstützt n8n (deutsch) und ältere Webhook-Felder (englisch). */
 export function normalizeEmailEntry(id: string, raw: unknown, attachmentRoot = ''): EmailRow {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
@@ -265,6 +272,7 @@ export function normalizeEmailEntry(id: string, raw: unknown, attachmentRoot = '
   const messageId = pickStr(o, ['messageId', 'message_id'])
   const invoice = parseInvoice(o.invoice ?? o.rechnung)
   const appointment = parseAppointment(o.appointment ?? o.termin)
+  const suggestedFolder = parseSuggestedFolder(o.suggestedFolder)
 
   // Kategorie kommt aus alten Datensätzen als Freitext; categoryId ist die
   // Fassung, nach der gefiltert und archiviert wird.
@@ -291,10 +299,12 @@ export function normalizeEmailEntry(id: string, raw: unknown, attachmentRoot = '
     status,
     priority: priority || undefined,
     hasAttachment,
+    ...(o.hasHtml === true ? { hasHtml: true } : {}),
     ...(attachmentsAnalyzed === undefined ? {} : { attachmentsAnalyzed }),
     ingestedAt,
     attachments,
     folderId: folderIdStr ? folderIdStr : undefined,
+    ...(suggestedFolder === undefined ? {} : { suggestedFolder }),
     userRead,
     mailboxId: mailboxId || undefined,
     messageId: messageId || undefined,

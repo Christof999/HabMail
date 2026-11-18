@@ -57,6 +57,8 @@ export type EmailRecord = {
   status: string
   priority?: string
   hasAttachment?: boolean
+  /** Es gibt eine HTML-Fassung; sie liegt getrennt unter mailHtml. */
+  hasHtml?: boolean
   /**
    * Wie viele Anhänge die KI beim Auswerten gelesen hat. 0 oder fehlend
    * heißt: die Zusammenfassung kennt nur den Mailtext.
@@ -81,7 +83,11 @@ export type EmailRecord = {
    * der KI. Die Oberfläche trägt ihn auf Wunsch in den Kalender ein.
    */
   appointment?: MailAppointment
+  /** Ordner, den die KI vorschlägt; „Erledigt" legt die Mail dort ab. */
+  suggestedFolder?: SuggestedFolder
 }
+
+export type SuggestedFolder = { id: string; name: string }
 
 /**
  * Ein Termin aus einer Mail. Zeiten in Millisekunden, ganztägig von

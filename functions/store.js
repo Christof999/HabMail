@@ -10,7 +10,7 @@
 const { createHash } = require("node:crypto");
 const admin = require("firebase-admin");
 const { CATEGORY_LABELS, periodFromDate } = require("./categories");
-const { userEmailsPath, userSentEmailsPath } = require("./paths");
+const { userEmailsPath, userMailHtmlPath, userSentEmailsPath } = require("./paths");
 const { updateIndexEntry } = require("./invoices");
 const { forwardInvoice } = require("./rechnungsprogramm");
 const { splitAttachments, writeAttachmentData } = require("./attachmentData");
@@ -75,6 +75,10 @@ function senderFields(message) {
   };
 }
 
+function hasHtml(message) {
+  return typeof message.html === "string" && message.html.trim() !== "";
+}
+
 /** Aus Nachricht plus KI-Auswertung wird der Datensatz, den die App liest. */
 function buildRecord(mailboxId, message, analysis) {
   const { sender, senderName } = senderFields(message);
@@ -96,6 +100,7 @@ function buildRecord(mailboxId, message, analysis) {
     mailboxId,
     ingestedAt: Date.now(),
   };
+  if (hasHtml(message)) record.hasHtml = true;
 
   if (senderName !== "") record.senderName = senderName;
   if (attachments.length > 0) record.attachments = attachments;
@@ -117,6 +122,7 @@ function buildRecord(mailboxId, message, analysis) {
   }
   if (period !== undefined) record.period = period;
   if (analysis.invoice !== undefined) record.invoice = analysis.invoice;
+  if (analysis.suggestedFolder !== undefined) record.suggestedFolder = analysis.suggestedFolder;
   /*
    * Ein Termin, den die Oberfläche an der Mail zum Eintragen anbietet. Eine
    * echte Einladung geht vor dem, was die KI aus dem Text liest: sie ist die
@@ -148,6 +154,11 @@ async function storeMessage(ownerUid, mailboxId, message, analysis) {
   // dazwischen eine Mail da, deren Anhänge auf nichts zeigen — und weil sie
   // dann schon existiert, käme der Inhalt auch beim nächsten Lauf nicht nach.
   await writeAttachmentData(ownerUid, "emails", key, data);
+  // Getrennt vom Datensatz: der Posteingang lädt alle Mails auf einmal, die
+  // HTML-Fassung braucht es erst beim Öffnen einer einzelnen.
+  if (hasHtml(message)) {
+    await admin.database().ref(`${userMailHtmlPath(ownerUid)}/${key}`).set(message.html);
+  }
   const result = await ref.transaction((current) =>
     current === null ? record : undefined,
   );
