@@ -109,7 +109,9 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with: { persist-credentials: false }
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with: { node-version: '22', cache: npm }
+        # npm 11 aus Node 24: das npm 10 von Node 22 liest die glob-Überschreibung
+        # in package.json anders und hält das Lockfile dann für veraltet.
+        with: { node-version: '24', cache: npm }
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with: { distribution: temurin, java-version: '21' }
       - run: npm ci --ignore-scripts
@@ -126,7 +128,7 @@ jobs:
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: '22'
+          node-version: '24'
 
       - run: npm ci --ignore-scripts
 
