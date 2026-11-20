@@ -9,6 +9,8 @@ export function apiUrl(path: string): string {
   const env: unknown = import.meta.env
   const configured = env && typeof env === 'object' && 'VITE_API_ORIGIN' in env && typeof env.VITE_API_ORIGIN === 'string' ? env.VITE_API_ORIGIN.trim() : ''
   const local = typeof window === 'undefined' || ['localhost', '127.0.0.1'].includes(window.location.hostname)
+  // HabMail hat kein Google-Backend und nutzt die eigenen Vercel-Funktionen (api/).
+  if (configured === 'self') return path
   if (!configured) {
     if (local) return path
     throw new Error('Das direkte Google-Backend ist noch nicht eingerichtet.')
